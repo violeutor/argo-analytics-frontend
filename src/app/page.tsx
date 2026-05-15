@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { fetchCompanies, searchCompanyFull } from "@/lib/api";
 import type { FullSearchResponse, BuyerScore, SupplyChainItem } from "@/lib/api";
 import type { Company, DealRating, MFRSignal, SRRCategory } from "@/types";
@@ -523,7 +524,7 @@ function WatchlistView({ companies }: { companies: Company[] }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#0D0D0F" }}>
-                {["Unternehmen", "Kategorie", "Potenzial", "Risiko", "IPO", "Pfad", "Proxy", "Funding", "Signal"].map((h) => (
+                {["Unternehmen", "Kategorie", "Kerntechnologie", "Potenzial", "Risiko", "IPO-Potenzial", "Inv.-Pfad", "Proxy-Ticker", "Funding-Stand", "Letzte Entwicklung", ""].map((h) => (
                   <th key={h} style={{
                     padding: "8px 12px", textAlign: "left",
                     fontFamily: C.mono, fontSize: 10, fontWeight: 600,
@@ -590,18 +591,32 @@ function WatchlistView({ companies }: { companies: Company[] }) {
                   <td style={{ padding: "9px 12px", color: C.text2, fontSize: 11, whiteSpace: "nowrap" }}>
                     {c.funding_last_round ?? "—"}
                   </td>
-                  <td style={{ padding: "9px 12px", color: C.amber, fontSize: 11, maxWidth: 160 }}>
+                  <td style={{ padding: "9px 12px", color: C.amber, fontSize: 11, maxWidth: 180 }}>
                     {c.last_signal ? (
                       <span title={c.last_signal}>
-                        {c.last_signal.length > 40 ? c.last_signal.slice(0, 40) + "…" : c.last_signal}
+                        {c.last_signal.length > 50 ? c.last_signal.slice(0, 50) + "…" : c.last_signal}
                       </span>
                     ) : "—"}
+                  </td>
+                  <td style={{ padding: "9px 12px" }}>
+                    <button
+                      onClick={() => window.location.href = `/company/${encodeURIComponent(c.name)}`}
+                      style={{
+                        background: "transparent", border: `1px solid ${C.border}`,
+                        borderRadius: 4, color: C.text3, fontSize: 10,
+                        padding: "3px 8px", cursor: "pointer",
+                        fontFamily: C.mono, whiteSpace: "nowrap",
+                        transition: "all 0.15s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text3; }}
+                    >Detail →</button>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: "2rem", textAlign: "center", color: C.text3, fontFamily: C.body }}>
+                  <td colSpan={11} style={{ padding: "2rem", textAlign: "center", color: C.text3, fontFamily: C.body }}>
                     Keine Einträge für die gewählten Filter.
                   </td>
                 </tr>
@@ -1048,6 +1063,57 @@ export default function Home() {
             {/* Results */}
             {result && !loading && (
               <div>
+                {/* ── Compact result row + Detail link ── */}
+                <div style={{
+                  background: C.bgCard, border: `1px solid ${C.borderMd}`,
+                  borderRadius: 10, padding: "14px 18px", marginBottom: 12,
+                  display: "flex", alignItems: "center", gap: 12,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: C.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
+                      {result.company_name}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.text2, marginTop: 2, display: "flex", gap: 10, alignItems: "center" }}>
+                      <span>{result.category}</span>
+                      {result.investment_path && <>
+                        <span style={{ color: C.text3 }}>·</span>
+                        <span style={{ color: result.investment_path === "IPO-direkt" ? C.teal : result.investment_path === "Käufer-Proxy" ? C.blue : C.text2 }}>{result.investment_path}</span>
+                      </>}
+                      {result.proxy_ticker && <>
+                        <span style={{ color: C.text3 }}>·</span>
+                        <span style={{ fontFamily: C.mono, color: C.teal, fontSize: 11 }}>{result.proxy_ticker}</span>
+                      </>}
+                      {result.ipo_potential && <>
+                        <span style={{ color: C.text3 }}>·</span>
+                        <span>IPO {result.ipo_potential}</span>
+                      </>}
+                    </div>
+                  </div>
+                  {result.buyer_scores?.[0] && (
+                    <span style={{
+                      fontFamily: C.mono, fontSize: 10, fontWeight: 700,
+                      padding: "2px 8px", borderRadius: 4,
+                      color: result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber,
+                      background: result.buyer_scores[0].rating.startsWith("A") ? C.tealDim : result.buyer_scores[0].rating.startsWith("B") ? C.blueDim : C.amberDim,
+                      border: `1px solid ${result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber}44`,
+                    }}>{result.buyer_scores[0].rating}</span>
+                  )}
+                  <button
+                    onClick={() => window.location.href = `/company/${encodeURIComponent(result.company_name)}`}
+                    style={{
+                      background: C.teal, border: "none", borderRadius: 6,
+                      color: "#000", fontFamily: C.mono, fontWeight: 700,
+                      fontSize: 11, padding: "7px 14px", cursor: "pointer",
+                      letterSpacing: "0.04em", whiteSpace: "nowrap",
+                      transition: "opacity 0.15s",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                  >
+                    Detail →
+                  </button>
+                </div>
+
                 {/* ── Company overview card ── */}
                 <div style={{
                   background: C.bgCard, border: `1px solid ${C.borderMd}`,
