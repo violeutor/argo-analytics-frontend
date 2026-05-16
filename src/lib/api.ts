@@ -9,7 +9,18 @@ import type {
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_KEY = process.env.API_KEY ?? "";
 const YAHOO_PROXY = "/api/market"; // Next.js API route (avoids CORS)
+
+// ── Shared headers ────────────────────────────────────────────────────────────
+
+function backendHeaders(extra?: Record<string, string>): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    "X-API-Key": API_KEY,
+    ...extra,
+  };
+}
 
 // ── Backend ───────────────────────────────────────────────────────────────────
 
@@ -20,13 +31,17 @@ export async function fetchCompanies(params?: {
   const url = new URL(`${API_BASE}/api/v1/companies`);
   if (params?.limit) url.searchParams.set("limit", String(params.limit));
   if (params?.source) url.searchParams.set("source", params.source);
-  const res = await fetch(url.toString(), { next: { revalidate: 60 } });
+  const res = await fetch(url.toString(), {
+    headers: backendHeaders(),
+    next: { revalidate: 60 },
+  });
   if (!res.ok) throw new Error(`companies fetch failed: ${res.status}`);
   return res.json();
 }
 
 export async function fetchBuyers(): Promise<Buyer[]> {
   const res = await fetch(`${API_BASE}/api/v1/buyers`, {
+    headers: backendHeaders(),
     next: { revalidate: 300 },
   });
   if (!res.ok) throw new Error(`buyers fetch failed: ${res.status}`);
@@ -45,7 +60,7 @@ export async function runAnalyze(payload: {
 }): Promise<AnalyzeResponse> {
   const res = await fetch(`${API_BASE}/api/v1/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`analyze failed: ${res.status}`);
@@ -60,7 +75,7 @@ export async function fetchMarketData(
   try {
     const res = await fetch(
       `${YAHOO_PROXY}?ticker=${encodeURIComponent(ticker)}`,
-      { next: { revalidate: 900 } } // 15 min cache
+      { next: { revalidate: 900 } } // 15 min cache — kein API-Key nötig, läuft über Next.js proxy
     );
     if (!res.ok) return null;
     return res.json();
@@ -308,9 +323,9 @@ export interface FullSearchResponse {
 export async function searchCompanyFull(query: string): Promise<FullSearchResponse> {
   const res = await fetch(`${API_BASE}/api/v1/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    headers: backendHeaders(),
     cache: "no-store",
+    body: JSON.stringify({ query }),
   });
   if (!res.ok) throw new Error(`search failed: ${res.status}`);
   return res.json();
