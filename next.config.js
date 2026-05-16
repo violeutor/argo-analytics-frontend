@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {serverActionsBodySizeLimit: '2mb',
+  experimental: {
     // App Router ist default in Next.js 14
   },
   // Yahoo Finance calls gehen über interne API route
@@ -15,9 +15,6 @@ const nextConfig = {
       },
     ];
   },
-// Serverless Functions Region
-export const config = {
-  runtime: 'edge',
-  regions: ['fra1'],};
+};
 
 module.exports = nextConfig;
