@@ -286,7 +286,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const name = decodeURIComponent(params.name as string);
+  const name = decodeURIComponent((params?.name ?? '') as string);
 
   const [data, setData] = useState<CompanyDetail | null>(null);
   const [loading, setLoading] = useState(true);
