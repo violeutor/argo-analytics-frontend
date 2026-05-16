@@ -876,7 +876,6 @@ export default function Home() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                border: "none",
                 padding: "6px 14px",
                 borderRadius: 6,
                 cursor: "pointer",
