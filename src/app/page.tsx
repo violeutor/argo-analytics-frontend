@@ -1,646 +1,730 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { fetchCompanies, searchCompanyFull } from "@/lib/api";
-import type { FullSearchResponse, BuyerScore, SupplyChainItem } from "@/lib/api";
-import type { Company, DealRating, MFRSignal, SRRCategory, SearchResult, InvestmentOpportunity } from "@/types";
+import { useState, useEffect, useCallback } from 'react';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-const C = {
-  bg: "#09090B",
-  bgCard: "#111113",
-  bgHover: "#18181B",
-  border: "rgba(255,255,255,0.07)",
-  borderMd: "rgba(255,255,255,0.12)",
-  teal: "#00D4A0",
-  tealDim: "rgba(0,212,160,0.12)",
-  tealBorder: "rgba(0,212,160,0.25)",
-  amber: "#F0A500",
-  amberDim: "rgba(240,165,0,0.1)",
-  red: "#F04545",
-  redDim: "rgba(240,69,69,0.1)",
-  blue: "#5B9CF6",
-  blueDim: "rgba(91,156,246,0.12)",
-  text1: "#FAFAF9",
-  text2: "#C4C4C2",
-  text3: "#71717A",
-  mono: "'DM Mono', 'Fira Code', 'Courier New', monospace",
-  display: "'Plus Jakarta Sans', 'Space Grotesk', system-ui, sans-serif",
-  body: "'DM Sans', system-ui, sans-serif",
+interface Company {
+  name: string;
+  category: string;
+  industry?: string;
+  potential: string;
+  risk: string;
+  ipo_potential: string;
+  investment_path: string;
+  proxy?: string;
+  rating?: string;
+  funding?: string;
+  last_signal?: string;
+  source?: string;
+}
+
+interface Buyer {
+  name: string;
+  ticker: string;
+  exchange: string;
+  market_cap?: number;
+}
+
+interface AnalysisResult {
+  company: Company;
+  buyers: BuyerResult[];
+}
+
+interface BuyerResult {
+  buyer: Buyer;
+  srr: number;
+  srr_category: string;
+  mfr: number;
+  mfr_signal: string;
+  tech_readiness: number;
+  rating: string;
+  deal_success_score: number;
+}
+
+interface MarketData {
+  price?: number;
+  market_cap?: number;
+  pe_ratio?: number;
+  week_52_high?: number;
+  week_52_low?: number;
+  revenue?: number;
+  ebitda?: number;
+  exchange?: string;
+  currency?: string;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const BACKEND_PROXY = '/api/backend';
+
+const RATING_COLOR: Record<string, string> = {
+  A: 'var(--teal)',
+  B: 'var(--blue)',
+  C: 'var(--amber)',
+  D: 'var(--red)',
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const RATING_LABEL: Record<string, string> = {
+  A: 'A · No-Brainer',
+  B: 'B · Solide',
+  C: 'C · Abwägen',
+  D: 'D · Uninteressant',
+};
 
-function fmt(n: number | null | undefined, decimals = 2, prefix = "") {
-  if (n === null || n === undefined) return "—";
-  return `${prefix}${n.toFixed(decimals)}`;
+const PATH_COLOR: Record<string, string> = {
+  'IPO-direkt': 'var(--blue)',
+  'Käufer-Proxy': 'var(--teal)',
+  'ETF-Proxy': 'var(--amber)',
+  'Enabler': 'var(--purple)',
+  'Beobachten': 'var(--t2)',
+  'Archiv': 'var(--red)',
+};
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+
+async function fetchCompanies(): Promise<Company[]> {
+  const res = await fetch(`${BACKEND_PROXY}/api/v1/companies`);
+  if (!res.ok) return [];
+  return res.json();
 }
 
-function fmtBn(n: number | null | undefined) {
-  if (n === null || n === undefined) return "—";
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}T`;
-  if (n >= 1) return `$${n.toFixed(1)}B`;
-  return `$${(n * 1000).toFixed(0)}M`;
+async function fetchMarketData(ticker: string): Promise<MarketData | null> {
+  try {
+    const res = await fetch(`/api/market?ticker=${ticker}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
-function ratingColor(r: DealRating | null) {
-  if (!r) return C.text3;
-  if (r.startsWith("A")) return C.teal;
-  if (r.startsWith("B")) return C.blue;
-  if (r.startsWith("C")) return C.amber;
-  return C.red;
-}
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-function ratingBg(r: DealRating | null) {
-  if (!r) return "transparent";
-  if (r.startsWith("A")) return C.tealDim;
-  if (r.startsWith("B")) return C.blueDim;
-  if (r.startsWith("C")) return C.amberDim;
-  return C.redDim;
-}
-
-function mfrColor(s: MFRSignal | string | null) {
-  if (s === "Feasible") return C.teal;
-  if (s === "Watch") return C.amber;
-  if (s === "Overstretch") return C.red;
-  return C.text3;
-}
-
-function srrColor(c: SRRCategory | string | null) {
-  if (!c) return C.text3;
-  if (c.includes("++")) return C.teal;
-  if (c === "Transformational") return C.blue;
-  if (c === "High Strategic") return C.amber;
-  return C.text3;
-}
-
-function potentialColor(p: string | null) {
-  if (p === "Hoch") return C.teal;
-  if (p === "Mittel-hoch") return C.amber;
-  return C.text2;
-}
-
-function ipoProb(prob: number | null) {
-  if (prob === null) return { label: "—", color: C.text3 };
-  const pct = Math.round(prob * 100);
-  if (prob >= 0.7) return { label: `${pct}%`, color: C.teal };
-  if (prob >= 0.4) return { label: `${pct}%`, color: C.amber };
-  return { label: `${pct}%`, color: C.text2 };
-}
-
-// ── Gauge bar ─────────────────────────────────────────────────────────────────
-
-function ScoreBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
-      <div style={{
-        height: "100%",
-        width: `${Math.min(value * 100, 100)}%`,
-        background: color,
-        borderRadius: 2,
-        transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)",
-      }} />
-    </div>
-  );
-}
-
-// ── Badge ─────────────────────────────────────────────────────────────────────
-
-function Badge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
-  return (
-    <span style={{
-      display: "inline-block",
-      padding: "2px 8px",
-      borderRadius: 4,
-      fontSize: 11,
-      fontWeight: 600,
-      fontFamily: C.mono,
-      color,
-      background: bg,
-      border: `1px solid ${border}`,
-      letterSpacing: "0.04em",
-    }}>{label}</span>
-  );
-}
-
-function RatingBadge({ rating }: { rating: DealRating | null }) {
-  if (!rating) return <span style={{ color: C.text3, fontFamily: C.mono, fontSize: 12 }}>—</span>;
-  return (
-    <Badge
-      label={rating}
-      color={ratingColor(rating)}
-      bg={ratingBg(rating)}
-      border={ratingColor(rating) + "44"}
-    />
-  );
-}
-
-// ── Metric tile ───────────────────────────────────────────────────────────────
-
-function MetricTile({
-  label,
-  value,
-  sub,
-  color,
-  bar,
+function Badge({
+  children,
+  color = 'gray',
+  large = false,
 }: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-  bar?: number;
+  children: React.ReactNode;
+  color?: 'teal' | 'blue' | 'amber' | 'red' | 'purple' | 'gray';
+  large?: boolean;
 }) {
-  return (
-    <div style={{
-      background: C.bgCard,
-      border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: "12px 14px",
-    }}>
-      <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.mono, color: color ?? C.text1, lineHeight: 1 }}>
-        {value}
-      </div>
-      {sub && <div style={{ fontSize: 11, color: C.text2, marginTop: 3 }}>{sub}</div>}
-      {bar !== undefined && <ScoreBar value={bar} color={color ?? C.teal} />}
-    </div>
-  );
-}
-
-// ── Section header ────────────────────────────────────────────────────────────
-
-function SectionHead({ title, count }: { title: string; count?: number }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-      <div style={{ width: 3, height: 16, background: C.teal, borderRadius: 2 }} />
-      <span style={{ fontFamily: C.display, fontSize: 13, fontWeight: 600, color: C.text1, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-        {title}
-      </span>
-      {count !== undefined && (
-        <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>({count})</span>
-      )}
-    </div>
-  );
-}
-
-// ── Company Card ─────────────────────────────────────────────────────────────
-
-function CompanyCard({ result }: { result: SearchResult }) {
-  const { company, ipo_probability, is_publicly_listed, public_ticker, market_data } = result;
-  const { label: ipoLabel, color: ipoColor } = ipoProb(ipo_probability);
-
-  return (
-    <div style={{
-      background: C.bgCard,
-      border: `1px solid ${C.borderMd}`,
-      borderRadius: 12,
-      padding: "20px 22px",
-      marginBottom: 16,
-    }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-        <div>
-          <div style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, color: C.text1, letterSpacing: "-0.02em" }}>
-            {company.name}
-          </div>
-          {(company as any).industry && (
-            <div style={{ fontSize: 11, color: C.teal, marginTop: 3, fontFamily: C.mono, letterSpacing: "0.04em" }}>
-              {(company as any).industry}
-            </div>
-          )}
-          <div style={{ fontSize: 12, color: C.text2, marginTop: 2, fontFamily: C.body }}>
-            {company.category}
-          </div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          {is_publicly_listed && public_ticker && (
-            <Badge label={public_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
-          )}
-          <Badge
-            label={company.investment_path ?? "—"}
-            color={C.text2}
-            bg="transparent"
-            border={C.border}
-          />
-        </div>
-      </div>
-
-      {/* Metrics grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 16 }}>
-        <MetricTile
-          label="Potenzial"
-          value={company.potential ?? "—"}
-          color={potentialColor(company.potential)}
-        />
-        <MetricTile
-          label="Risiko"
-          value={company.risk ?? "—"}
-          color={company.risk === "Hoch" ? C.red : C.text2}
-        />
-        <MetricTile
-          label="IPO-Potenzial"
-          value={company.ipo_potential ?? "—"}
-          sub={`Wahrscheinlichkeit: ${ipoLabel}`}
-          color={ipoColor}
-        />
-        <MetricTile
-          label="Funding (gesamt)"
-          value={company.funding_total_usd_mn ? `$${company.funding_total_usd_mn >= 1000 ? (company.funding_total_usd_mn / 1000).toFixed(1) + "B" : company.funding_total_usd_mn + "M"}` : "—"}
-          color={C.text1}
-        />
-        {market_data && (
-          <>
-            <MetricTile label="Kurs" value={fmt(market_data.price, 2, "$")} color={C.text1} />
-            <MetricTile label="Marktcap" value={fmtBn(market_data.market_cap_bn)} color={C.text1} />
-            <MetricTile label="KGV" value={fmt(market_data.pe_ratio, 1)} color={C.text2} />
-            <MetricTile label="52W Range" value={`${fmt(market_data.week_52_low, 0, "$")} – ${fmt(market_data.week_52_high, 0, "$")}`} color={C.text2} />
-          </>
-        )}
-      </div>
-
-      {/* Last signal */}
-      {company.last_signal && (
-        <div style={{
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          padding: "8px 12px",
-          background: C.amberDim,
-          border: `1px solid ${C.amber}22`,
-          borderRadius: 6,
-          fontSize: 12,
-        }}>
-          <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
-          <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>
-            {company.last_signal_date}
-          </span>
-          <span style={{ color: C.text2 }}>{company.last_signal}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Investment Opportunity Card ───────────────────────────────────────────────
-
-function OpportunityCard({ opp, rank }: { opp: InvestmentOpportunity; rank: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const md = opp.market_data;
-
-  const pathColors: Record<string, string> = {
-    "IPO-direkt": C.teal,
-    "Käufer-Proxy": C.blue,
-    "ETF-Proxy": C.amber,
-    Enabler: "#C084FC",
-    Beobachten: C.text3,
-    Archiv: C.red,
+  const styles: Record<string, React.CSSProperties> = {
+    teal: { background: 'var(--teal-bg)', color: 'var(--teal)', border: '1px solid rgba(0,212,160,0.2)' },
+    blue: { background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid rgba(59,110,240,0.2)' },
+    amber: { background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid rgba(240,165,0,0.2)' },
+    red: { background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid rgba(240,69,69,0.2)' },
+    purple: { background: 'var(--purple-bg)', color: 'var(--purple)', border: '1px solid rgba(155,110,240,0.2)' },
+    gray: { background: 'rgba(255,255,255,0.05)', color: 'var(--t2)', border: '1px solid var(--border)' },
   };
-  const pathColor = pathColors[opp.path] ?? C.text2;
-
   return (
-    <div style={{
-      background: C.bgCard,
-      border: `1px solid ${C.border}`,
-      borderRadius: 10,
-      marginBottom: 10,
-      overflow: "hidden",
-      transition: "border-color 0.15s",
-    }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = C.borderMd)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = C.border)}
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: large ? 12 : 11,
+        fontWeight: 500,
+        padding: large ? '5px 14px' : '3px 10px',
+        borderRadius: 99,
+        fontFamily: 'var(--font-m)',
+        letterSpacing: '.02em',
+        ...styles[color],
+      }}
     >
-      {/* Main row */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer" }}
-        onClick={() => setExpanded(!expanded)}
-      >
-        {/* Rank */}
-        <div style={{
-          width: 28, height: 28, borderRadius: "50%",
-          background: rank === 1 ? C.tealDim : "transparent",
-          border: `1px solid ${rank === 1 ? C.teal : C.border}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: C.mono, fontSize: 11, fontWeight: 700,
-          color: rank === 1 ? C.teal : C.text3,
-          flexShrink: 0,
-        }}>{rank}</div>
+      {children}
+    </span>
+  );
+}
 
-        {/* Path badge */}
-        <Badge label={opp.path} color={pathColor} bg="transparent" border={pathColor + "44"} />
+function RatingBadge({ rating, large = false }: { rating: string; large?: boolean }) {
+  const map: Record<string, 'teal' | 'blue' | 'amber' | 'red' | 'gray'> = {
+    A: 'teal', B: 'blue', C: 'amber', D: 'red',
+  };
+  if (!rating || rating === '—') return <Badge color="gray" large={large}>—</Badge>;
+  return <Badge color={map[rating] ?? 'gray'} large={large}>{RATING_LABEL[rating] ?? rating}</Badge>;
+}
 
-        {/* Title */}
-        <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.text1, flex: 1 }}>
-          {opp.title}
-        </span>
+function PathBadge({ path }: { path: string }) {
+  const map: Record<string, 'teal' | 'blue' | 'amber' | 'purple' | 'gray' | 'red'> = {
+    'IPO-direkt': 'blue',
+    'Käufer-Proxy': 'teal',
+    'ETF-Proxy': 'amber',
+    'Enabler': 'purple',
+    'Beobachten': 'gray',
+    'Archiv': 'red',
+  };
+  return <Badge color={map[path] ?? 'gray'}>{path}</Badge>;
+}
 
-        {/* Rating */}
-        {opp.rating && <RatingBadge rating={opp.rating} />}
+function PotentialBadge({ val }: { val: string }) {
+  if (val === 'Hoch') return <Badge color="teal">Hoch</Badge>;
+  if (val === 'Mittel-hoch') return <Badge color="amber">Mittel-hoch</Badge>;
+  return <Badge color="gray">{val}</Badge>;
+}
 
-        {/* Price */}
-        {md?.price && (
-          <span style={{ fontFamily: C.mono, fontSize: 13, color: C.text2 }}>
-            {fmt(md.price, 2, "$")}
-          </span>
-        )}
+function IpoBadge({ val }: { val: string }) {
+  if (val === 'Hoch') return <Badge color="teal">Hoch</Badge>;
+  if (val === 'Mittel-hoch') return <Badge color="amber">Mittel-hoch</Badge>;
+  if (val === 'IPO erfolgt') return <Badge color="blue">IPO erfolgt</Badge>;
+  if (val === 'Niedrig') return <Badge color="gray">Niedrig</Badge>;
+  return <Badge color="gray">{val}</Badge>;
+}
 
-        {/* Expand chevron */}
-        <span style={{ color: C.text3, fontSize: 12, transition: "transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
-      </div>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "14px 16px" }}>
-          {/* Scoring row */}
-          {(opp.srr !== null || opp.mfr !== null || opp.tech_readiness !== null) && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 14 }}>
-              {opp.srr !== null && (
-                <MetricTile
-                  label="SRR"
-                  value={`${fmt(opp.srr, 2)}x`}
-                  sub="Strategic Relevance"
-                  color={srrColor(opp.notes)}
-                  bar={Math.min(opp.srr / 5, 1)}
-                />
-              )}
-              {opp.mfr !== null && (
-                <MetricTile
-                  label="MFR"
-                  value={fmt(opp.mfr, 3)}
-                  sub={opp.mfr < 0.15 ? "Feasible" : opp.mfr < 0.5 ? "Watch" : "Overstretch"}
-                  color={opp.mfr < 0.15 ? C.teal : opp.mfr < 0.5 ? C.amber : C.red}
-                  bar={Math.max(0, 1 - opp.mfr / 0.5)}
-                />
-              )}
-              {opp.tech_readiness !== null && (
-                <MetricTile
-                  label="Tech Readiness"
-                  value={fmt(opp.tech_readiness, 2)}
-                  sub="/1.00"
-                  color={opp.tech_readiness >= 0.7 ? C.teal : opp.tech_readiness >= 0.5 ? C.amber : C.red}
-                  bar={opp.tech_readiness}
-                />
-              )}
-              {opp.deal_success_score !== null && (
-                <MetricTile
-                  label="Deal Success Score"
-                  value={fmt(opp.deal_success_score, 3)}
-                  sub="SRR × MFR × TR"
-                  color={opp.deal_success_score >= 0.4 ? C.teal : opp.deal_success_score >= 0.2 ? C.amber : C.red}
-                  bar={opp.deal_success_score}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Market data */}
-          {md && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 14 }}>
-              <MetricTile label="Marktcap" value={fmtBn(md.market_cap_bn)} />
-              {md.pe_ratio && <MetricTile label="KGV" value={fmt(md.pe_ratio, 1)} />}
-              {md.revenue_bn && <MetricTile label="Revenue" value={fmtBn(md.revenue_bn)} />}
-              {md.ebitda_bn && <MetricTile label="EBITDA" value={fmtBn(md.ebitda_bn)} />}
-              {md.debt_ebitda && <MetricTile label="Debt/EBITDA" value={fmt(md.debt_ebitda, 1) + "x"} />}
-              {md.week_52_high && md.week_52_low && (
-                <MetricTile label="52W Range" value={`${fmt(md.week_52_low, 0, "$")}–${fmt(md.week_52_high, 0, "$")}`} />
-              )}
-            </div>
-          )}
-
-          {/* Notes */}
-          {(opp.description || opp.notes) && (
-            <div style={{ fontSize: 12, color: C.text2, fontFamily: C.body, lineHeight: 1.6 }}>
-              {opp.description && <div>{opp.description}</div>}
-              {opp.notes && opp.notes !== opp.description && (
-                <div style={{ marginTop: 4, color: srrColor(opp.notes), fontFamily: C.mono, fontSize: 11 }}>
-                  {opp.notes}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+function ScoreBar({ value, color = 'var(--teal)' }: { value: number; color?: string }) {
+  return (
+    <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, marginTop: 8, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${Math.min(value * 100, 100)}%`, borderRadius: 99, background: color }} />
     </div>
   );
 }
 
-// ── Watchlist Table ───────────────────────────────────────────────────────────
+// ─── Subtab components ───────────────────────────────────────────────────────
 
-const PATH_COLORS: Record<string, string> = {
-  "IPO-direkt": C.teal,
-  "Käufer-Proxy": C.blue,
-  "ETF-Proxy": C.amber,
-  Enabler: "#C084FC",
-  Beobachten: C.text3,
-  Archiv: C.red,
-};
+function SubOverblick({ company }: { company: Company }) {
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div className="info-card">
+          <div className="info-card-title">Unternehmen</div>
+          <div className="info-row"><span className="info-key">Kategorie</span><span className="info-val">{company.category}</span></div>
+          <div className="info-row"><span className="info-key">Industrie</span><span className="info-val">{company.industry ?? '—'}</span></div>
+          <div className="info-row"><span className="info-key">Status</span><span className="info-val" style={{ color: 'var(--teal)' }}>Privat · Aktiv</span></div>
+          <div className="info-row"><span className="info-key">Pfad</span><span className="info-val">{company.investment_path}</span></div>
+          <div className="info-row"><span className="info-key">Quelle</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.source ?? 'Bestand'}</span></div>
+        </div>
+        <div className="info-card">
+          <div className="info-card-title">Markt & Positionierung</div>
+          <div className="info-row"><span className="info-key">Potenzial</span><span className="info-val">{company.potential}</span></div>
+          <div className="info-row"><span className="info-key">Risiko</span><span className="info-val">{company.risk}</span></div>
+          <div className="info-row"><span className="info-key">IPO-Potenzial</span><span className="info-val">{company.ipo_potential}</span></div>
+          <div className="info-row"><span className="info-key">Proxy</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.proxy ?? '—'}</span></div>
+          <div className="info-row"><span className="info-key">Funding</span><span className="info-val">{company.funding ?? '—'}</span></div>
+        </div>
+      </div>
+      <div className="news-card">
+        <div className="info-card-title">Letzte Entwicklungen</div>
+        {company.last_signal && company.last_signal !== '—' ? (
+          <div className="news-item">
+            <div className="news-title">{company.last_signal}</div>
+            <div className="news-src">Morning Briefing</div>
+          </div>
+        ) : (
+          <div style={{ padding: '8px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
+            Keine aktuellen Signale — Briefing-Integration aktiv
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-function WatchlistView({ companies }: { companies: Company[] }) {
-  const [filters, setFilters] = useState({
-    potential: "",
-    investment_path: "",
-    industry: "",
-    source: "",
-    search: "",
-  });
+function SubOwnership() {
+  return (
+    <div className="ownership-grid">
+      <div className="own-card">
+        <div className="own-title">Bekannte Investoren</div>
+        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
+          Crunchbase-Enrichment · Daten werden automatisch ergänzt
+        </div>
+      </div>
+      <div className="own-card">
+        <div className="own-title">Kapitalstruktur (geschätzt)</div>
+        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
+          Schätzung auf Basis bekannter Runden — folgt
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const industries = Array.from(new Set(companies.map((c) => (c as any).industry).filter(Boolean))).sort();
+function SubFundamentals({ company }: { company: Company }) {
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 12 }}>
+        <div className="fund-tile">
+          <div className="fund-tile-label">Funding Total</div>
+          <div className="fund-tile-val">{company.funding ?? '—'}</div>
+          <div className="fund-tile-sub">Gesamt über alle Runden</div>
+        </div>
+        <div className="fund-tile">
+          <div className="fund-tile-label">Letzte Runde</div>
+          <div className="fund-tile-val" style={{ fontSize: 14 }}>—</div>
+          <div className="fund-tile-sub">Aus Funding-Stand</div>
+        </div>
+        <div className="fund-tile">
+          <div className="fund-tile-label">Est. Valuation</div>
+          <div className="fund-tile-val" style={{ color: 'var(--teal)', fontSize: 14 }}>—</div>
+          <div className="fund-tile-sub">5× Multiplikator</div>
+        </div>
+        <div className="fund-tile">
+          <div className="fund-tile-label">MFR</div>
+          <div className="fund-tile-val" style={{ color: 'var(--teal)', fontSize: 14 }}>—</div>
+          <div className="fund-tile-sub">vs. Käufer</div>
+        </div>
+      </div>
+      <div className="funding-timeline">
+        <div className="tl-title">Funding-Timeline</div>
+        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
+          Vollständige Timeline folgt — Crunchbase-Enrichment aktiv
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubInvestitionspfad({ company, buyers }: { company: Company; buyers: BuyerResult[] }) {
+  const ratingColorMap: Record<string, string> = {
+    A: 'var(--teal)', B: 'var(--blue)', C: 'var(--amber)', D: 'var(--red)',
+  };
+
+  if (company.investment_path === 'Beobachten' || company.investment_path === 'Archiv') {
+    return (
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+        padding: '2rem', textAlign: 'center', color: 'var(--t2)', fontSize: 13,
+      }}>
+        <div style={{ fontSize: 28, marginBottom: 8 }}>◎</div>
+        <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--t1)' }}>{company.investment_path}</div>
+        <div>Kein klarer Kapitalmarktpfad erkennbar — auf Signal warten</div>
+      </div>
+    );
+  }
+
+  if (buyers.length === 0) {
+    return (
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+        padding: '2rem', textAlign: 'center', color: 'var(--t2)', fontSize: 13,
+      }}>
+        Scoring-Daten werden geladen…
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {buyers.map((b, i) => {
+        const ratingColor = ratingColorMap[b.rating] ?? 'var(--t2)';
+        const srrPct = Math.min((Math.log(1 + b.srr) / Math.log(11)) * 100, 100);
+        const mfrPct = b.mfr_signal === 'feasible' ? 90 : b.mfr_signal === 'watch' ? 60 : 30;
+        const borderColor = b.rating === 'A' ? 'rgba(0,212,160,0.2)' : b.rating === 'B' ? 'rgba(59,110,240,0.2)' : 'var(--border-md)';
+
+        return (
+          <div key={i} className="pfad-card" style={{ borderColor }}>
+            <div className="pfad-header">
+              <div>
+                <div className="pfad-title">
+                  {company.investment_path} · {b.buyer.ticker} · {b.buyer.exchange}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 3 }}>
+                  {b.buyer.name} · Marktcap: {b.buyer.market_cap ? `$${(b.buyer.market_cap / 1e9).toFixed(0)} Mrd.` : '—'}
+                </div>
+              </div>
+              <RatingBadge rating={b.rating} large />
+            </div>
+
+            <div className="scoring-grid">
+              <div className="score-tile">
+                <div className="score-tile-label">SRR — Strategic Relevance</div>
+                <div className="score-tile-val" style={{ color: 'var(--teal)' }}>{b.srr.toFixed(2)}×</div>
+                <div className="score-tile-desc">{b.srr_category}</div>
+                <ScoreBar value={srrPct / 100} color="var(--teal)" />
+              </div>
+              <div className="score-tile">
+                <div className="score-tile-label">MFR — M&A Feasibility</div>
+                <div className="score-tile-val" style={{ color: b.mfr_signal === 'feasible' ? 'var(--teal)' : b.mfr_signal === 'watch' ? 'var(--amber)' : 'var(--red)' }}>
+                  {b.mfr < 0.01 ? '<0.01×' : `${b.mfr.toFixed(2)}×`}
+                </div>
+                <div className="score-tile-desc">
+                  {b.mfr_signal === 'feasible' ? '🟢 Feasible' : b.mfr_signal === 'watch' ? '🟡 Watch' : '🔴 Overstretch'}
+                </div>
+                <ScoreBar value={mfrPct / 100} color={b.mfr_signal === 'feasible' ? 'var(--teal)' : b.mfr_signal === 'watch' ? 'var(--amber)' : 'var(--red)'} />
+              </div>
+              <div className="score-tile">
+                <div className="score-tile-label">Tech Readiness</div>
+                <div className="score-tile-val" style={{ color: 'var(--blue)' }}>{b.tech_readiness.toFixed(2)}</div>
+                <div className="score-tile-desc">{b.tech_readiness >= 0.7 ? 'Stark' : b.tech_readiness >= 0.5 ? 'Solide' : 'Früh'}</div>
+                <ScoreBar value={b.tech_readiness} color="var(--blue)" />
+              </div>
+            </div>
+
+            <div className="verdict" style={{
+              background: `${ratingColor}0F`,
+              borderColor: `${ratingColor}33`,
+            }}>
+              <span className="verdict-label">Gesamturteil</span>
+              <span className="verdict-val" style={{ color: ratingColor }}>
+                {RATING_LABEL[b.rating] ?? b.rating} — {b.srr_category} · {b.mfr_signal === 'feasible' ? 'Feasible' : b.mfr_signal === 'watch' ? 'Watch' : 'Overstretch'} · TR {b.tech_readiness.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Result State ────────────────────────────────────────────────────────────
+
+type SubTab = 'uberblick' | 'ownership' | 'fundamentals' | 'investitionspfad';
+
+function ResultState({
+  company,
+  buyers,
+  onBack,
+}: {
+  company: Company;
+  buyers: BuyerResult[];
+  onBack: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<SubTab>('uberblick');
+  const [starred, setStarred] = useState(false);
+
+  const initials = company.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
+  const ratingColor = company.rating && company.rating !== '—'
+    ? RATING_COLOR[company.rating] ?? 'var(--t2)'
+    : 'var(--t2)';
+
+  return (
+    <div className="result-wrap">
+      {/* Topbar */}
+      <div className="result-topbar">
+        <button className="btn-back" onClick={onBack}>← Zurück</button>
+        <span className="result-breadcrumb">ANALYSE · {company.name.toUpperCase()}</span>
+      </div>
+
+      {/* Company Header Card */}
+      <div className="company-header-card">
+        <div className="ch-top">
+          <div className="ch-left">
+            <div className="ch-icon">{initials}</div>
+            <div>
+              <div className="ch-name">
+                {company.name}
+                <span className="ch-ticker">
+                  {company.investment_path === 'IPO-direkt' || company.investment_path === 'Beobachten' && company.proxy ? company.proxy : 'Private'}
+                </span>
+              </div>
+              <div className="ch-cat">
+                {company.category} · {company.investment_path}
+                {company.funding ? ` · ${company.funding.split(';')[0].split('(')[0].trim()}` : ''}
+              </div>
+            </div>
+          </div>
+          <div className="ch-right">
+            <button
+              className={`star-btn${starred ? ' active' : ''}`}
+              onClick={() => setStarred(!starred)}
+              title="Zur Watchlist hinzufügen"
+            >
+              {starred ? '★' : '☆'}
+            </button>
+            {company.rating && company.rating !== '—' && (
+              <RatingBadge rating={company.rating} large />
+            )}
+          </div>
+        </div>
+
+        {/* Badges */}
+        <div className="ch-badges">
+          <Badge color="teal">Potenzial: {company.potential}</Badge>
+          <Badge color="gray">Risiko: {company.risk}</Badge>
+          <Badge color="blue">IPO: {company.ipo_potential}</Badge>
+          <Badge color="gray">{company.investment_path}</Badge>
+          {company.proxy && company.proxy !== '—' && (
+            <Badge color="amber">Proxy: {company.proxy}</Badge>
+          )}
+        </div>
+
+        {/* Meta Grid */}
+        <div className="ch-meta">
+          <div className="meta-item">
+            <div className="meta-label">Funding Total</div>
+            <div className="meta-val">{company.funding?.split(';')[0]?.split('Gesamt:')[0]?.trim() ?? '—'}</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-label">Letzte Runde</div>
+            <div className="meta-val">—</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-label">Kategorie</div>
+            <div className="meta-val">{company.category}</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-label">Industrie</div>
+            <div className="meta-val">{company.industry ?? '—'}</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-label">L. Signal</div>
+            <div className="meta-val" style={{ color: company.last_signal && company.last_signal !== '—' ? 'var(--t1)' : 'var(--t3)' }}>
+              {company.last_signal ?? '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Subtabs */}
+      <div className="subtabs">
+        {(['uberblick', 'ownership', 'fundamentals', 'investitionspfad'] as SubTab[]).map((tab) => (
+          <button
+            key={tab}
+            className={`subtab${activeTab === tab ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab === 'uberblick' ? 'Überblick'
+              : tab === 'ownership' ? 'Ownership'
+              : tab === 'fundamentals' ? 'Fundamentals'
+              : 'Investitionspfad'}
+          </button>
+        ))}
+      </div>
+
+      {/* Subpages */}
+      {activeTab === 'uberblick' && <SubOverblick company={company} />}
+      {activeTab === 'ownership' && <SubOwnership />}
+      {activeTab === 'fundamentals' && <SubFundamentals company={company} />}
+      {activeTab === 'investitionspfad' && <SubInvestitionspfad company={company} buyers={buyers} />}
+    </div>
+  );
+}
+
+// ─── Hero / Search State ─────────────────────────────────────────────────────
+
+function HeroState({
+  companies,
+  onSelect,
+}: {
+  companies: Company[];
+  onSelect: (c: Company) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<Company[]>([]);
+  const [popular, setPopular] = useState<{ name: string; count: number }[]>([]);
+
+  useEffect(() => {
+    // Build popular from localStorage
+    const raw = localStorage.getItem('argo_access_counts');
+    const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const sorted = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+    setPopular(sorted.length ? sorted : [
+      { name: 'CarbonCure', count: 24 },
+      { name: 'VoltaGrid', count: 18 },
+      { name: 'Fervo Energy', count: 15 },
+      { name: 'Brimstone', count: 12 },
+      { name: 'Factorial Energy', count: 9 },
+    ]);
+  }, []);
+
+  const handleInput = (v: string) => {
+    setQuery(v);
+    if (v.length < 2) { setSuggestions([]); return; }
+    setSuggestions(
+      companies.filter((c) => c.name.toLowerCase().includes(v.toLowerCase())).slice(0, 6)
+    );
+  };
+
+  const handleSelect = (c: Company) => {
+    const raw = localStorage.getItem('argo_access_counts');
+    const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
+    counts[c.name] = (counts[c.name] ?? 0) + 1;
+    localStorage.setItem('argo_access_counts', JSON.stringify(counts));
+    onSelect(c);
+  };
+
+  const handleSearch = () => {
+    const match = companies.find((c) => c.name.toLowerCase() === query.toLowerCase())
+      ?? companies.find((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+    if (match) handleSelect(match);
+  };
+
+  return (
+    <div className="hero">
+      <div className="hero-eyebrow">Private Market Intelligence · Public Market Edge</div>
+      <h1>Sieh, wer profitiert —<br /><span>bevor es der Markt tut.</span></h1>
+      <p className="hero-sub">
+        Argo identifiziert börsennotierte Gewinner hinter privaten Climate-Tech-Entwicklungen —
+        für Investoren, die früher als der Konsens positioniert sein wollen.
+      </p>
+      <div style={{ position: 'relative', maxWidth: 560, margin: '0 auto 1.25rem' }}>
+        <div className="search-wrap">
+          <input
+            type="text"
+            placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, FRVO)"
+            value={query}
+            onChange={(e) => handleInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button className="btn-primary" onClick={handleSearch}>Analysieren →</button>
+        </div>
+        {suggestions.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+            background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+            borderRadius: 'var(--r-md)', zIndex: 50, overflow: 'hidden',
+          }}>
+            {suggestions.map((c) => (
+              <div
+                key={c.name}
+                onClick={() => handleSelect(c)}
+                style={{
+                  padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+                  borderBottom: '1px solid var(--border)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'space-between',
+                  transition: 'background .1s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{c.name}</span>
+                <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--font-m)' }}>{c.category}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="qa-section">
+        <div className="qa-label">Häufig aufgerufen</div>
+        <div className="qa-chips">
+          {popular.map((p) => {
+            const company = companies.find((c) => c.name === p.name);
+            return (
+              <span
+                key={p.name}
+                className="qa-chip"
+                onClick={() => company && handleSelect(company)}
+              >
+                {p.name}
+                <span className="qa-chip-count">{p.count}</span>
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Watchlist ───────────────────────────────────────────────────────────────
+
+function WatchlistPage({
+  companies,
+  onSelectCompany,
+}: {
+  companies: Company[];
+  onSelectCompany: (c: Company) => void;
+}) {
+  const [filterPot, setFilterPot] = useState('');
+  const [filterPfad, setFilterPfad] = useState('');
+  const [filterRate, setFilterRate] = useState('');
+  const [filterIndustry, setFilterIndustry] = useState('');
+  const [search, setSearch] = useState('');
+
+  const industries = Array.from(new Set(companies.map((c) => c.industry).filter(Boolean))) as string[];
 
   const filtered = companies.filter((c) => {
-    if (filters.potential && c.potential !== filters.potential) return false;
-    if (filters.investment_path && c.investment_path !== filters.investment_path) return false;
-    if (filters.industry && (c as any).industry !== filters.industry) return false;
-    if (filters.source && c.source !== filters.source) return false;
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      if (!c.name.toLowerCase().includes(q) && !c.category?.toLowerCase().includes(q) && !(c as any).industry?.toLowerCase().includes(q)) return false;
+    if (filterPot && c.potential !== filterPot) return false;
+    if (filterPfad && c.investment_path !== filterPfad) return false;
+    if (filterRate && c.rating !== filterRate) return false;
+    if (filterIndustry && c.industry !== filterIndustry) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!c.name.toLowerCase().includes(q) && !c.category.toLowerCase().includes(q) && !(c.proxy ?? '').toLowerCase().includes(q)) return false;
     }
     return true;
   });
 
-  const sel = (id: string, value: string) =>
-    setFilters((f) => ({ ...f, [id]: value }));
-
   return (
-    <div>
-      <SectionHead title="Watchlist" count={filtered.length} />
-
-      {/* Filter bar */}
-      <div style={{
-        display: "flex", flexWrap: "wrap", gap: 8,
-        padding: "10px 14px",
-        background: C.bgCard,
-        border: `1px solid ${C.border}`,
-        borderRadius: 8,
-        marginBottom: 12,
-        alignItems: "center",
-      }}>
-        {[
-          { id: "potential", label: "Potenzial", opts: ["Hoch", "Mittel-hoch", "Mittel"] },
-          { id: "investment_path", label: "Pfad", opts: ["IPO-direkt", "Käufer-Proxy", "ETF-Proxy", "Enabler", "Beobachten", "Archiv"] },
-          { id: "source", label: "Quelle", opts: ["bestand", "woche1", "woche2", "manual"] },
-          { id: "industry", label: "Industrie", opts: industries },
-        ].map(({ id, label, opts }) => (
-          <div key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
-            <select
-              value={(filters as Record<string, string>)[id]}
-              onChange={(e) => sel(id, e.target.value)}
-              style={{
-                background: C.bg,
-                border: `1px solid ${C.border}`,
-                borderRadius: 4,
-                color: C.text1,
-                fontSize: 12,
-                padding: "3px 8px",
-                fontFamily: C.body,
-                height: 28,
-                cursor: "pointer",
-              }}
-            >
-              <option value="">Alle</option>
-              {opts.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-        ))}
-        <input
-          type="text"
-          placeholder="Suche…"
-          value={filters.search}
-          onChange={(e) => sel("search", e.target.value)}
-          style={{
-            background: C.bg, border: `1px solid ${C.border}`,
-            borderRadius: 4, color: C.text1, fontSize: 12,
-            padding: "3px 10px", fontFamily: C.body, height: 28,
-            outline: "none", flex: 1, minWidth: 120,
-          }}
-        />
-        <button
-          onClick={() => setFilters({ potential: "", investment_path: "", industry: "", source: "", search: "" })}
-          style={{
-            border: `1px solid ${C.border}`,
-            borderRadius: 4, color: C.text2, fontSize: 11,
-            padding: "3px 10px", cursor: "pointer", fontFamily: C.body, height: 28,
-          }}
-        >Reset</button>
+    <div className="watchlist-wrap">
+      <div className="wl-header">
+        <div className="wl-title">
+          <span style={{ width: 3, height: 18, background: 'var(--teal)', borderRadius: 2, display: 'inline-block' }} />
+          Watchlist <span className="wl-count">({filtered.length})</span>
+        </div>
       </div>
 
-      {/* Table */}
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <div className="filter-bar">
+        <label>Potenzial</label>
+        <select value={filterPot} onChange={(e) => setFilterPot(e.target.value)}>
+          <option value="">Alle</option>
+          <option>Hoch</option><option>Mittel-hoch</option><option>Mittel</option>
+        </select>
+        <label>Pfad</label>
+        <select value={filterPfad} onChange={(e) => setFilterPfad(e.target.value)}>
+          <option value="">Alle</option>
+          <option>Käufer-Proxy</option><option>IPO-direkt</option><option>ETF-Proxy</option>
+          <option>Enabler</option><option>Beobachten</option><option>Archiv</option>
+        </select>
+        <label>Wertung</label>
+        <select value={filterRate} onChange={(e) => setFilterRate(e.target.value)}>
+          <option value="">Alle</option>
+          <option value="A">A · No-Brainer</option>
+          <option value="B">B · Solide</option>
+          <option value="C">C · Abwägen</option>
+          <option value="D">D · Uninteressant</option>
+        </select>
+        <label>Industrie</label>
+        <select value={filterIndustry} onChange={(e) => setFilterIndustry(e.target.value)}>
+          <option value="">Alle</option>
+          {industries.map((ind) => <option key={ind}>{ind}</option>)}
+        </select>
+        <input
+          type="text"
+          placeholder="Suche Unternehmen, Proxy…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="tbl-wrap">
+        <div className="tbl-scroll">
+          <table>
             <thead>
-              <tr style={{ background: "#0D0D0F" }}>
-                {[
-                  { h: "Unternehmen", tip: "Unternehmensname" },
-                  { h: "Kategorie", tip: "Technologie-Cluster" },
-                  { h: "Industrie", tip: "Industriesektor" },
-                  { h: "Potenzial", tip: "Eingeschätztes Marktpotenzial" },
-                  { h: "Risiko", tip: "Technologisches und regulatorisches Risiko" },
-                  { h: "IPO-Potenzial", tip: "Wahrscheinlichkeit eines Börsengangs" },
-                  { h: "Inv.-Pfad", tip: "Empfohlener Investitionsansatz" },
-                  { h: "Proxy-Ticker", tip: "Börsennotierter Proxy-Titel" },
-                  { h: "Funding-Stand", tip: "Gesamtes Fundraising" },
-                  { h: "L. Signal", tip: "Letztes Signal aus Morning Briefing" },
-                  { h: "", tip: "" },
-                ].map(({ h, tip }) => (
-                  <th key={h} title={tip} style={{
-                    padding: "8px 12px", textAlign: "left",
-                    fontFamily: C.mono, fontSize: 10, fontWeight: 600,
-                    color: C.text3, textTransform: "uppercase", letterSpacing: "0.07em",
-                    borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap",
-                    cursor: tip ? "help" : "default",
-                  }}>{h}</th>
-                ))}
+              <tr>
+                <th data-tip="Unternehmensname">Unternehmen</th>
+                <th data-tip="Technologie-Cluster">Kategorie</th>
+                <th data-tip="Industriesektor">Industrie</th>
+                <th data-tip="Eingeschätztes Marktpotenzial">Potenzial</th>
+                <th data-tip="Technologisches und regulatorisches Risiko">Risiko</th>
+                <th data-tip="Wahrscheinlichkeit eines Börsengangs">IPO-Potenzial</th>
+                <th data-tip="Empfohlener Investitionsansatz">Inv.-Pfad</th>
+                <th data-tip="Börsennotierter Proxy-Titel">Proxy</th>
+                <th data-tip="Gesamtwertung nach SRR × MFR × TechReadiness">Wertung</th>
+                <th data-tip="Gesamtes Fundraising">Funding</th>
+                <th data-tip="Letztes Signal aus Morning Briefing">L. Signal</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c, i) => (
-                <tr
-                  key={c.id}
-                  style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = C.bgHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ padding: "9px 12px", fontWeight: 600, color: C.text1, whiteSpace: "nowrap" }}>
+              {filtered.map((c) => (
+                <tr key={c.name}>
+                  <td
+                    className="td-name"
+                    onClick={() => onSelectCompany(c)}
+                  >
                     {c.name}
-                    {(c.source === "woche1" || c.source === "woche2") && (
-                      <span style={{
-                        marginLeft: 6, fontSize: 9, fontFamily: C.mono, fontWeight: 700,
-                        padding: "1px 5px", borderRadius: 3,
-                        background: c.source === "woche1" ? C.tealDim : C.amberDim,
-                        color: c.source === "woche1" ? C.teal : C.amber,
-                        border: `1px solid ${c.source === "woche1" ? C.teal + "33" : C.amber + "33"}`,
-                      }}>
-                        {c.source === "woche1" ? "W1" : "W2"}
-                      </span>
-                    )}
                   </td>
-                  <td style={{ padding: "9px 12px", color: C.text2, maxWidth: 140, fontSize: 11 }}>{c.category}</td>
-                  <td style={{ padding: "9px 12px", color: C.teal, fontSize: 11, fontFamily: C.mono }}>{(c as any).industry ?? "—"}</td>
-                  <td style={{ padding: "9px 12px" }}>
-                    <span style={{ color: potentialColor(c.potential), fontFamily: C.mono, fontWeight: 600, fontSize: 11 }}>
-                      {c.potential ?? "—"}
-                    </span>
+                  <td className="td-muted">{c.category}</td>
+                  <td className="td-muted">{c.industry ?? '—'}</td>
+                  <td><PotentialBadge val={c.potential} /></td>
+                  <td><Badge color={c.risk === 'Hoch' ? 'red' : 'gray'}>{c.risk}</Badge></td>
+                  <td><IpoBadge val={c.ipo_potential} /></td>
+                  <td><PathBadge path={c.investment_path} /></td>
+                  <td className="td-mono">{c.proxy ?? '—'}</td>
+                  <td><RatingBadge rating={c.rating ?? '—'} /></td>
+                  <td className="td-muted" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.funding?.split(';')[0]?.trim() ?? '—'}
                   </td>
-                  <td style={{ padding: "9px 12px" }}>
-                    <span style={{ color: c.risk === "Hoch" ? C.red : C.text2, fontFamily: C.mono, fontSize: 11 }}>
-                      {c.risk ?? "—"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "9px 12px" }}>
-                    <span style={{ color: c.ipo_potential === "Hoch" ? C.teal : C.text2, fontFamily: C.mono, fontSize: 11 }}>
-                      {c.ipo_potential ?? "—"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
-                    {c.investment_path && (
-                      <span style={{
-                        fontFamily: C.mono, fontSize: 10, fontWeight: 600,
-                        color: PATH_COLORS[c.investment_path] ?? C.text2,
-                        padding: "2px 6px", borderRadius: 3,
-                        background: (PATH_COLORS[c.investment_path] ?? C.text2) + "18",
-                        border: `1px solid ${(PATH_COLORS[c.investment_path] ?? C.text2)}33`,
-                      }}>
-                        {c.investment_path}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: "9px 12px", fontFamily: C.mono, fontSize: 11, color: C.teal }}>
-                    {c.proxy_ticker ?? "—"}
-                  </td>
-                  <td style={{ padding: "9px 12px", color: C.text2, fontSize: 11, whiteSpace: "nowrap" }}>
-                    {c.funding_last_round ?? "—"}
-                  </td>
-                  <td style={{ padding: "9px 12px", color: C.amber, fontSize: 11, maxWidth: 180 }}>
-                    {c.last_signal ? (
-                      <span title={c.last_signal}>
-                        {c.last_signal.length > 50 ? c.last_signal.slice(0, 50) + "…" : c.last_signal}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td style={{ padding: "9px 12px" }}>
-                    <button
-                      onClick={() => window.location.href = `/company/${encodeURIComponent(c.name)}`}
-                      style={{
-                        border: `1px solid ${C.border}`,
-                        borderRadius: 4, color: C.text3, fontSize: 10,
-                        padding: "3px 8px", cursor: "pointer",
-                        fontFamily: C.mono, whiteSpace: "nowrap",
-                        transition: "all 0.15s",
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text3; }}
-                    >Detail →</button>
-                  </td>
+                  <td className="td-muted">{c.last_signal ?? '—'}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} style={{ padding: "2rem", textAlign: "center", color: C.text3, fontFamily: C.body }}>
+                  <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)', fontSize: 13 }}>
                     Keine Einträge für die gewählten Filter.
                   </td>
                 </tr>
@@ -653,673 +737,254 @@ function WatchlistView({ companies }: { companies: Company[] }) {
   );
 }
 
-// ── Buyer Score Card ─────────────────────────────────────────────────────────
+// ─── Root Page ────────────────────────────────────────────────────────────────
 
-function BuyerScoreCard({ bs, rank }: { bs: BuyerScore; rank: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const rc = ratingColor(bs.rating as DealRating);
+type NavTab = 'research' | 'watchlist';
 
-  return (
-    <div style={{
-      background: C.bgCard, border: `1px solid ${C.border}`,
-      borderRadius: 10, marginBottom: 8, overflow: "hidden",
-    }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = C.borderMd)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = C.border)}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", cursor: "pointer" }}
-        onClick={() => setExpanded(!expanded)}>
-        <div style={{
-          width: 26, height: 26, borderRadius: "50%",
-          background: rank === 1 ? C.tealDim : "transparent",
-          border: `1px solid ${rank === 1 ? C.teal : C.border}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: C.mono, fontSize: 11, fontWeight: 700,
-          color: rank === 1 ? C.teal : C.text3, flexShrink: 0,
-        }}>{rank}</div>
-
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: C.text1 }}>{bs.buyer_name}</div>
-          <div style={{ fontSize: 11, color: C.text2, fontFamily: C.mono }}>
-            {bs.ticker && <span style={{ color: C.teal }}>{bs.ticker}</span>}
-            {bs.exchange && <span style={{ color: C.text3 }}> · {bs.exchange}</span>}
-            {bs.market_cap_usd_bn && <span style={{ color: C.text3 }}> · ${bs.market_cap_usd_bn}B Marktcap</span>}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            fontFamily: C.mono, fontSize: 11, fontWeight: 700,
-            color: rc, background: ratingBg(bs.rating as DealRating),
-            padding: "2px 8px", borderRadius: 4,
-            border: `1px solid ${rc}44`,
-          }}>{bs.rating}</span>
-          <span style={{ fontFamily: C.mono, fontSize: 12, color: C.text2 }}>
-            {bs.deal_success_score.toFixed(3)}
-          </span>
-          {bs.execution_warning && (
-            <span style={{ color: C.amber, fontSize: 11 }} title="Execution Warning">⚠</span>
-          )}
-          <span style={{ color: C.text3, fontSize: 12, transform: expanded ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>
-        </div>
-      </div>
-
-      {expanded && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "14px 16px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
-            <MetricTile
-              label="SRR"
-              value={`${bs.srr_value.toFixed(2)}x`}
-              sub={bs.srr_category}
-              color={bs.srr_category.includes("++") ? C.teal : bs.srr_category === "Transformational" ? C.blue : bs.srr_category === "High Strategic" ? C.amber : C.text3}
-              bar={Math.min(bs.srr_value / 5, 1)}
-            />
-            <MetricTile
-              label="MFR"
-              value={bs.mfr_value.toFixed(3)}
-              sub={bs.mfr_signal}
-              color={bs.mfr_signal === "Feasible" ? C.teal : bs.mfr_signal === "Watch" ? C.amber : C.red}
-              bar={Math.max(0, 1 - bs.mfr_value / 0.5)}
-            />
-            <MetricTile
-              label="Tech Readiness"
-              value={bs.tech_readiness.toFixed(2)}
-              sub="/1.00 (Neutralwert)"
-              color={bs.tech_readiness >= 0.7 ? C.teal : bs.tech_readiness >= 0.5 ? C.amber : C.red}
-              bar={bs.tech_readiness}
-            />
-            <MetricTile
-              label="Deal Success Score"
-              value={bs.deal_success_score.toFixed(3)}
-              sub="SRR_norm × MFR_norm × TR"
-              color={bs.deal_success_score >= 0.3 ? C.teal : bs.deal_success_score >= 0.15 ? C.amber : C.red}
-              bar={bs.deal_success_score}
-            />
-          </div>
-          {bs.execution_warning && (
-            <div style={{ marginTop: 10, padding: "8px 12px", background: C.amberDim, border: `1px solid ${C.amber}33`, borderRadius: 6, fontSize: 11, color: C.amber }}>
-              ⚠ Execution Warning: Low-Cap-Buyer mit hohem SRR — Finanzierbarkeit separat validieren.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Supply Chain Section ──────────────────────────────────────────────────────
-
-function SupplyChainSection({
-  title, items, color,
-}: { title: string; items: SupplyChainItem[]; color: string }) {
-  return (
-    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px" }}>
-      <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
-        {title}
-      </div>
-      {items.slice(0, 5).map((item) => (
-        <div key={item.ticker} style={{
-          display: "flex", alignItems: "center", gap: 10,
-          paddingBottom: 8, marginBottom: 8,
-          borderBottom: `1px solid ${C.border}`,
-        }}>
-          <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color, minWidth: 48 }}>
-            {item.ticker}
-          </span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: C.text1, fontWeight: 500 }}>{item.name}</div>
-            <div style={{ fontSize: 11, color: C.text2 }}>{item.role}</div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <div style={{ width: 40, height: 3, background: C.border, borderRadius: 2 }}>
-              <div style={{ width: `${Math.round(item.relevance * 100)}%`, height: "100%", background: color, borderRadius: 2 }} />
-            </div>
-            <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>
-              {Math.round(item.relevance * 100)}%
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Result Tabs ───────────────────────────────────────────────────────────────
-
-function ResultTabs({ result, starred, toggleStar }: {
-  result: FullSearchResponse;
-  starred: Set<string>;
-  toggleStar: (name: string) => void;
-}) {
-  const [activeSubTab, setActiveSubTab] = useState<"uberblick" | "ownership" | "fundamentals" | "investitionspfad">("uberblick");
-  const subTabs = [
-    { id: "uberblick" as const, label: "Überblick" },
-    { id: "ownership" as const, label: "Ownership" },
-    { id: "fundamentals" as const, label: "Fundamentals" },
-    { id: "investitionspfad" as const, label: "Investitionspfad" },
-  ];
-
-  return (
-    <div>
-      {/* Compact result row */}
-      <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: 10, padding: "14px 18px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: C.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>{result.company_name}</span>
-            <button onClick={() => toggleStar(result.company_name)} title={starred.has(result.company_name) ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: starred.has(result.company_name) ? C.amber : C.text3, padding: "0 2px", transition: "color 0.15s", lineHeight: 1 }}>
-              {starred.has(result.company_name) ? "★" : "☆"}
-            </button>
-            {result.proxy_ticker && <span style={{ fontFamily: C.mono, fontSize: 11, color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}`, padding: "1px 7px", borderRadius: 4 }}>{result.proxy_ticker}</span>}
-          </div>
-          <div style={{ fontSize: 12, color: C.text2, marginTop: 2, display: "flex", gap: 10, alignItems: "center" }}>
-            {(result as any).industry && <span style={{ color: C.teal, fontFamily: C.mono, fontSize: 11 }}>{(result as any).industry}</span>}
-            {(result as any).industry && result.category && <span style={{ color: C.text3 }}>·</span>}
-            <span>{result.category}</span>
-            {result.investment_path && <><span style={{ color: C.text3 }}>·</span><span style={{ color: result.investment_path === "IPO-direkt" ? C.teal : result.investment_path === "Käufer-Proxy" ? C.blue : C.text2 }}>{result.investment_path}</span></>}
-          </div>
-        </div>
-        {result.buyer_scores?.[0] && (
-          <span style={{ fontFamily: C.mono, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, color: result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber, background: result.buyer_scores[0].rating.startsWith("A") ? C.tealDim : result.buyer_scores[0].rating.startsWith("B") ? C.blueDim : C.amberDim, border: `1px solid ${result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber}44` }}>{result.buyer_scores[0].rating}</span>
-        )}
-        <button onClick={() => window.location.href = `/company/${encodeURIComponent(result.company_name)}`} style={{ background: C.teal, border: "none", borderRadius: 6, color: "#000", fontFamily: C.mono, fontWeight: 700, fontSize: 11, padding: "7px 14px", cursor: "pointer", letterSpacing: "0.04em", whiteSpace: "nowrap", transition: "opacity 0.15s" }} onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")} onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>Detail →</button>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
-        {subTabs.map((t) => (
-          <button key={t.id} onClick={() => setActiveSubTab(t.id)} style={{ padding: "8px 18px", fontSize: 12, fontWeight: 500, color: activeSubTab === t.id ? C.teal : C.text2, background: "none", border: "none", borderBottom: `2px solid ${activeSubTab === t.id ? C.teal : "transparent"}`, cursor: "pointer", fontFamily: C.body, marginBottom: -1, transition: "all 0.15s" }}>{t.label}</button>
-        ))}
-      </div>
-
-      {/* R-02: Überblick */}
-      {activeSubTab === "uberblick" && (
-        <div>
-          <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: 12, padding: "20px 22px", marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                  {result.company_name}
-                  {!result.is_known && <span style={{ marginLeft: 10, fontSize: 10, fontFamily: C.mono, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}33` }}>NEU ANGEREICHERT</span>}
-                </div>
-                {(result as any).industry && <div style={{ fontSize: 11, color: C.teal, marginTop: 3, fontFamily: C.mono }}>{(result as any).industry}</div>}
-                <div style={{ fontSize: 12, color: C.text2, marginTop: 2 }}>{result.category}</div>
-                {result.description && <div style={{ fontSize: 12, color: C.text2, marginTop: 8, lineHeight: 1.6, maxWidth: 560 }}>{result.description}</div>}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                {result.proxy_ticker && <Badge label={result.proxy_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />}
-                {result.investment_path && <Badge label={result.investment_path} color={C.text2} bg="transparent" border={C.border} />}
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: result.last_signal ? 12 : 0 }}>
-              <MetricTile label="Potenzial" value={result.potential ?? "—"} color={result.potential === "Hoch" ? C.teal : result.potential === "Mittel-hoch" ? C.amber : C.text2} />
-              <MetricTile label="Risiko" value={result.risk ?? "—"} color={result.risk === "Hoch" ? C.red : C.text2} />
-              <MetricTile label="IPO-Potenzial" value={result.ipo_potential ?? "—"} color={result.ipo_potential === "Hoch" ? C.teal : C.text2} />
-              <MetricTile label="Funding" value={result.funding_total_usd_mn ? `$${result.funding_total_usd_mn >= 1000 ? (result.funding_total_usd_mn/1000).toFixed(1)+"B" : result.funding_total_usd_mn+"M"}` : "—"} color={C.text1} />
-              <MetricTile label="TAM 2035" value={`$${result.tam.tam_usd_bn}B`} sub={result.tam.confidence === "high" ? "✓ verifiziert" : result.tam.confidence === "medium" ? "~ Schätzung" : "⚠ Fallback"} color={result.tam.confidence === "high" ? C.teal : result.tam.confidence === "medium" ? C.amber : C.red} />
-            </div>
-            {result.last_signal && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 12 }}>
-                <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
-                <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{result.last_signal_date}</span>
-                <span style={{ color: C.text2 }}>{result.last_signal}</span>
-              </div>
-            )}
-          </div>
-          {result.warnings.length > 0 && result.warnings.map((w: string, i: number) => (
-            <div key={i} style={{ padding: "8px 12px", marginBottom: 6, background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 11, color: C.amber }}>⚠ {w}</div>
-          ))}
-        </div>
-      )}
-
-      {/* R-03: Ownership */}
-      {activeSubTab === "ownership" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
-            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Bekannte Investoren</div>
-            <div style={{ fontSize: 12, color: C.text2, padding: "20px 0", textAlign: "center" }}>Crunchbase-Enrichment — Phase 2<br /><span style={{ fontSize: 11, color: C.text3 }}>Automatisch angereichert bei bekannten Unternehmen</span></div>
-          </div>
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
-            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Kapitalstruktur</div>
-            <div style={{ fontSize: 12, color: C.text2, padding: "20px 0", textAlign: "center" }}>Geschätzt via Funding-Runden<br /><span style={{ fontSize: 11, color: C.text3 }}>Bundesanzeiger-Integration für DE-Unternehmen — Phase 2</span></div>
-          </div>
-        </div>
-      )}
-
-      {/* R-04: Fundamentals */}
-      {activeSubTab === "fundamentals" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 16 }}>
-            <MetricTile label="Funding Total" value={result.funding_total_usd_mn ? `$${result.funding_total_usd_mn >= 1000 ? (result.funding_total_usd_mn/1000).toFixed(1)+"B" : result.funding_total_usd_mn+"M"}` : "—"} color={C.text1} />
-            <MetricTile label="Letzte Runde" value={result.funding_last_round ?? "—"} color={C.text2} />
-            <MetricTile label="Est. Valuation" value={result.funding_total_usd_mn ? `~$${((result.funding_total_usd_mn * 5) / 1000).toFixed(1)}B` : "—"} sub="5× Funding-Multiplikator" color={C.teal} />
-            <MetricTile label="TAM 2035" value={`$${result.tam.tam_usd_bn}B`} sub={result.tam.source} color={result.tam.confidence === "high" ? C.teal : C.amber} />
-          </div>
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
-            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Funding-Timeline</div>
-            {result.funding_last_round ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.teal, flexShrink: 0 }} />
-                <div style={{ flex: 1, fontSize: 12, color: C.text1 }}>{result.funding_last_round}</div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: C.text2, padding: "12px 0" }}>Keine Funding-Daten verfügbar</div>
-            )}
-            <div style={{ marginTop: 12, fontSize: 11, color: C.text3 }}>Vollständige Funding-Timeline via Crunchbase-Enrichment — Phase 2</div>
-          </div>
-        </div>
-      )}
-
-      {/* R-05: Investitionspfad */}
-      {activeSubTab === "investitionspfad" && (
-        <div>
-          {result.buyer_scores.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <SectionHead title="Potenzielle Käufer · M&A Scoring" count={result.buyer_scores.length} />
-              <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>SRR × MFR × TechReadiness — geordnet nach DealSuccessScore</div>
-              {result.buyer_scores.map((bs: BuyerScore, i: number) => <BuyerScoreCard key={bs.buyer_name} bs={bs} rank={i + 1} />)}
-            </div>
-          )}
-          {(result.supply_chain.upstream.length > 0 || result.supply_chain.downstream.length > 0 || result.supply_chain.etfs.length > 0) && (
-            <div style={{ marginBottom: 24 }}>
-              <SectionHead title="Supply Chain Contributors" />
-              <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>Börsennotierte Profiteure entlang der Wertschöpfungskette</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {result.supply_chain.upstream.length > 0 && <SupplyChainSection title="Upstream" items={result.supply_chain.upstream} color={C.blue} />}
-                {result.supply_chain.downstream.length > 0 && <SupplyChainSection title="Downstream" items={result.supply_chain.downstream} color={C.teal} />}
-              </div>
-              {result.supply_chain.etfs.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>ETF Exposure</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {result.supply_chain.etfs.map((etf: { ticker: string; name: string; relevance: number }) => (
-                      <div key={etf.ticker} style={{ padding: "6px 12px", borderRadius: 6, background: "rgba(160,100,220,0.1)", border: "1px solid rgba(160,100,220,0.25)", display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: "#C084FC" }}>{etf.ticker}</span>
-                        <span style={{ fontSize: 11, color: C.text2 }}>{etf.name}</span>
-                        <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{Math.round(etf.relevance * 100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {result.buyer_scores.length === 0 && result.supply_chain.upstream.length === 0 && result.supply_chain.downstream.length === 0 && (
-            <div style={{ padding: "24px", textAlign: "center", color: C.text3, fontSize: 12 }}>Kein klarer Investitionspfad erkennbar — Beobachten bis neues Signal vorliegt.</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
-export default function Home() {
+export default function Page() {
+  const [navTab, setNavTab] = useState<NavTab>('research');
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Company[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<BuyerResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<FullSearchResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"search" | "watchlist">("search");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [starred, setStarred] = useState<Set<string>>(new Set());
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("argo_starred") ?? "[]");
-      setStarred(new Set(saved));
-    } catch {}
+    fetchCompanies().then(setCompanies);
   }, []);
 
-  const toggleStar = (name: string) => {
-    setStarred((prev) => {
-      const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
-      localStorage.setItem("argo_starred", JSON.stringify(Array.from(next)));
-      return next;
-    });
-  };
-
-  // Load companies on mount
-  useEffect(() => {
-    fetchCompanies({ limit: 500 }).then(setCompanies).catch(console.error);
-  }, []);
-
-  // Autocomplete
-  useEffect(() => {
-    if (query.length < 2) { setSuggestions([]); return; }
-    const q = query.toLowerCase();
-    setSuggestions(
-      companies.filter((c) =>
-        c.name.toLowerCase().includes(q) || c.proxy_ticker?.toLowerCase().includes(q)
-      ).slice(0, 6)
-    );
-  }, [query, companies]);
-
-  const handleSearch = useCallback(async (name: string) => {
-    if (!name.trim()) return;
+  const handleSelectCompany = useCallback(async (company: Company) => {
+    setSelectedCompany(company);
+    setNavTab('research');
+    setAnalysisResult([]);
     setLoading(true);
-    setError(null);
-    setResult(null);
-    setShowSuggestions(false);
-    // F-08: localStorage-Counter für Quick Access
     try {
-      const counts = JSON.parse(localStorage.getItem("argo_search_counts") ?? "{}");
-      counts[name] = (counts[name] ?? 0) + 1;
-      localStorage.setItem("argo_search_counts", JSON.stringify(counts));
-    } catch {}
-    try {
-      const r = await searchCompanyFull(name);
-      if (!r) { setError(`Kein Unternehmen gefunden für "${name}"`); }
-      else setResult(r);
-    } catch (e) {
-      setError(String(e));
+      const res = await fetch(`${BACKEND_PROXY}/api/v1/company/${encodeURIComponent(company.name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAnalysisResult(data.buyers ?? []);
+      }
+    } catch {
+      // Graceful — show empty buyer list
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch(query);
-    if (e.key === "Escape") setShowSuggestions(false);
-  };
+  const handleBack = () => setSelectedCompany(null);
 
-  const selectSuggestion = (name: string) => {
-    setQuery(name);
-    setShowSuggestions(false);
-    handleSearch(name);
+  const handleSelectFromWatchlist = (c: Company) => {
+    handleSelectCompany(c);
+    setNavTab('research');
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: C.bg,
-      color: C.text1,
-      fontFamily: C.body,
-    }}>
-      {/* Google Fonts */}
+    <>
+      {/* ── Global Styles ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::selection { background: ${C.teal}33; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: ${C.bg}; }
-        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
-        select option { background: #111113; color: #FAFAF9; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        :root{
+          --bg:#0D0F12;--bg-card:#13161B;--bg-hover:#1A1E24;
+          --border:rgba(255,255,255,0.06);--border-md:rgba(255,255,255,0.10);
+          --teal:#00D4A0;--teal-dim:#00A07A;--teal-bg:rgba(0,212,160,0.08);
+          --blue:#3B6EF0;--blue-bg:rgba(59,110,240,0.10);
+          --amber:#F0A500;--amber-bg:rgba(240,165,0,0.10);
+          --red:#F04545;--red-bg:rgba(240,69,69,0.10);
+          --purple:#9B6EF0;--purple-bg:rgba(155,110,240,0.10);
+          --t1:#F0F0EE;--t2:#9A9B99;--t3:#4A4C4A;
+          --font-d:'Plus Jakarta Sans',sans-serif;
+          --font-b:'DM Sans',sans-serif;
+          --font-m:'DM Mono',monospace;
+          --r-sm:6px;--r-md:10px;--r-lg:14px;
+        }
+        body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
+
+        /* Nav */
+        nav{display:flex;align-items:center;justify-content:space-between;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(13,15,18,0.97);position:sticky;top:0;z-index:100}
+        .nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
+        .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#0D0F12}
+        .nav-logo-text{font-family:var(--font-d);font-weight:600;font-size:15px;color:var(--t1)}
+        .nav-logo-sub{font-size:10px;color:var(--t3);font-family:var(--font-m);letter-spacing:.04em;margin-top:1px}
+        .nav-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);padding:3px;border-radius:var(--r-md);border:1px solid var(--border)}
+        .nav-tab{padding:5px 16px;border-radius:7px;font-size:12px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .15s;letter-spacing:.04em;text-transform:uppercase;border:none;background:none}
+        .nav-tab.active{background:var(--bg-card);color:var(--t1);border:1px solid var(--border-md)}
+        .nav-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);font-family:var(--font-m)}
+        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+        /* Pages */
+        .page{padding:0 2rem 4rem}
+
+        /* Hero */
+        .hero{max-width:640px;margin:0 auto;padding:3.5rem 0 2rem;text-align:center}
+        .hero-eyebrow{font-size:11px;font-family:var(--font-m);color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1rem;opacity:.8}
+        .hero h1{font-family:var(--font-d);font-size:40px;font-weight:700;line-height:1.15;letter-spacing:-.02em;color:var(--t1);margin-bottom:.75rem}
+        .hero h1 span{color:var(--teal)}
+        .hero-sub{font-size:15px;color:var(--t2);line-height:1.65;max-width:460px;margin:0 auto 1.75rem}
+        .search-wrap{display:flex;gap:10px;background:var(--bg-card);border:1px solid var(--border-md);border-radius:var(--r-lg);padding:6px 6px 6px 14px;align-items:center}
+        .search-wrap input{flex:1;background:none;border:none;outline:none;color:var(--t1);font-family:var(--font-b);font-size:14px}
+        .search-wrap input::placeholder{color:var(--t3)}
+        .btn-primary{background:var(--teal);color:#0D0F12;font-family:var(--font-d);font-weight:600;font-size:13px;padding:9px 20px;border-radius:var(--r-md);border:none;cursor:pointer;white-space:nowrap}
+        .qa-section{margin-top:.5rem}
+        .qa-label{font-size:10px;color:var(--t3);font-family:var(--font-m);letter-spacing:.07em;text-transform:uppercase;margin-bottom:.5rem;text-align:center}
+        .qa-chips{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap}
+        .qa-chip{background:var(--bg-card);border:1px solid var(--border-md);border-radius:99px;padding:4px 12px;font-size:11px;color:var(--t2);cursor:pointer;transition:all .15s;font-family:var(--font-m);display:flex;align-items:center;gap:5px}
+        .qa-chip:hover{border-color:var(--teal);color:var(--teal)}
+        .qa-chip-count{font-size:10px;color:var(--t3);background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:99px}
+
+        /* Result */
+        .result-wrap{max-width:900px;margin:0 auto;padding-top:1.5rem}
+        .result-topbar{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem}
+        .btn-back{background:none;border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--t2);font-size:12px;padding:5px 12px;cursor:pointer;font-family:var(--font-b)}
+        .btn-back:hover{border-color:var(--teal);color:var(--teal)}
+        .result-breadcrumb{font-size:11px;color:var(--t3);font-family:var(--font-m)}
+
+        /* Company Header Card */
+        .company-header-card{background:var(--bg-card);border:1px solid var(--border-md);border-radius:var(--r-lg);padding:1.25rem 1.5rem;margin-bottom:1rem}
+        .ch-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.875rem}
+        .ch-left{display:flex;align-items:flex-start;gap:12px}
+        .ch-icon{width:40px;height:40px;border-radius:var(--r-md);background:var(--teal-bg);border:1px solid rgba(0,212,160,0.2);display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:14px;color:var(--teal);flex-shrink:0}
+        .ch-name{font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:8px}
+        .ch-ticker{font-family:var(--font-m);font-size:12px;color:var(--teal);background:var(--teal-bg);border:1px solid rgba(0,212,160,0.2);padding:2px 8px;border-radius:99px}
+        .ch-cat{font-size:12px;color:var(--t2);margin-top:3px;font-family:var(--font-m)}
+        .ch-right{display:flex;align-items:center;gap:10px}
+        .star-btn{background:none;border:none;cursor:pointer;font-size:20px;color:var(--t3);padding:4px;transition:color .15s}
+        .star-btn.active,.star-btn:hover{color:var(--amber)}
+        .ch-badges{display:flex;gap:6px;flex-wrap:wrap}
+        .ch-meta{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+        .meta-item .meta-label{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+        .meta-item .meta-val{font-size:12px;color:var(--t1);font-weight:500}
+
+        /* Subtabs */
+        .subtabs{display:flex;gap:0;margin-bottom:1.25rem;border-bottom:1px solid var(--border)}
+        .subtab{padding:8px 18px;font-size:12px;font-weight:500;color:var(--t2);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s;font-family:var(--font-b);margin-bottom:-1px}
+        .subtab.active{color:var(--teal);border-bottom-color:var(--teal)}
+        .subtab:hover{color:var(--t1)}
+
+        /* Info cards (Überblick) */
+        .info-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.25rem}
+        .info-card-title{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.625rem}
+        .info-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)}
+        .info-row:last-child{border-bottom:none}
+        .info-key{font-size:12px;color:var(--t2)}
+        .info-val{font-size:12px;color:var(--t1);font-weight:500;text-align:right;font-family:var(--font-m)}
+        .news-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.25rem}
+        .news-item{padding:8px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:3px}
+        .news-item:last-child{border-bottom:none}
+        .news-date{font-size:10px;color:var(--t3);font-family:var(--font-m)}
+        .news-title{font-size:12px;color:var(--t1)}
+        .news-src{font-size:10px;color:var(--teal)}
+
+        /* Ownership */
+        .ownership-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .own-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.25rem}
+        .own-title{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem}
+
+        /* Fundamentals */
+        .fund-tile{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);padding:.875rem 1rem}
+        .fund-tile-label{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+        .fund-tile-val{font-size:18px;font-weight:600;font-family:var(--font-d);color:var(--t1)}
+        .fund-tile-sub{font-size:10px;color:var(--t3);margin-top:2px}
+        .funding-timeline{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.25rem}
+        .tl-title{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.875rem}
+        .tl-row{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border)}
+        .tl-row:last-child{border-bottom:none}
+        .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0}
+        .tl-round{font-size:12px;color:var(--t1);font-weight:500;min-width:80px}
+        .tl-amount{font-family:var(--font-m);font-size:12px;color:var(--teal);min-width:80px}
+        .tl-date{font-size:11px;color:var(--t3);font-family:var(--font-m);margin-left:auto}
+
+        /* Investitionspfad */
+        .pfad-card{background:var(--bg-card);border:1px solid var(--border-md);border-radius:var(--r-lg);padding:1.25rem;margin-bottom:.875rem}
+        .pfad-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+        .pfad-title{font-family:var(--font-m);font-size:14px;font-weight:500;color:var(--t1)}
+        .scoring-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem}
+        .score-tile{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--r-md);padding:.875rem 1rem}
+        .score-tile-label{font-size:10px;color:var(--t3);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+        .score-tile-val{font-size:22px;font-weight:700;font-family:var(--font-d)}
+        .score-tile-desc{font-size:11px;color:var(--t2);margin-top:4px}
+        .verdict{background:rgba(0,212,160,0.06);border:1px solid rgba(0,212,160,0.2);border-radius:var(--r-md);padding:.875rem 1.1rem;display:flex;align-items:center;justify-content:space-between}
+        .verdict-label{font-size:11px;color:var(--t2);font-family:var(--font-m);text-transform:uppercase;letter-spacing:.06em}
+        .verdict-val{font-family:var(--font-d);font-size:14px;font-weight:700}
+
+        /* Watchlist */
+        .watchlist-wrap{padding-top:1.5rem;width:100%}
+        .wl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+        .wl-title{font-family:var(--font-d);font-size:16px;font-weight:600;color:var(--t1);display:flex;align-items:center;gap:8px}
+        .wl-count{font-size:12px;color:var(--t3);font-family:var(--font-m)}
+        .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1rem;padding:.625rem 1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md)}
+        .filter-bar label{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-m);white-space:nowrap}
+        .filter-bar select{background:var(--bg);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--t1);font-size:11px;padding:3px 7px;height:26px;font-family:var(--font-b);outline:none}
+        .filter-bar input{background:var(--bg);border:1px solid var(--border-md);border-radius:var(--r-sm);color:var(--t1);font-size:11px;padding:3px 10px;height:26px;font-family:var(--font-b);outline:none;flex:1;min-width:120px}
+        .filter-bar input::placeholder{color:var(--t3)}
+        .tbl-wrap{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;width:100%}
+        .tbl-scroll{overflow-x:auto;width:100%}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        thead th{background:#0F1215;font-family:var(--font-m);font-size:10px;font-weight:500;color:var(--t3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;text-transform:uppercase;letter-spacing:.06em;position:relative;cursor:default}
+        thead th[data-tip]:hover::after{content:attr(data-tip);position:absolute;top:100%;left:0;background:#1F2530;color:var(--t2);font-size:10px;padding:5px 9px;border-radius:var(--r-sm);white-space:nowrap;z-index:50;border:1px solid var(--border-md);pointer-events:none;font-family:var(--font-b);text-transform:none;letter-spacing:0;margin-top:2px}
+        tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+        tbody tr:last-child{border-bottom:none}
+        tbody tr:hover{background:var(--bg-hover)}
+        tbody td{padding:7px 12px;vertical-align:middle}
+        .td-name{font-weight:600;font-size:12px;white-space:nowrap;color:var(--t1);cursor:pointer}
+        .td-name:hover{color:var(--teal)}
+        .td-muted{color:var(--t2);font-size:11px}
+        .td-mono{font-family:var(--font-m);font-size:11px;color:var(--t2)}
       `}</style>
 
-      {/* Top bar */}
-      <div style={{
-        borderBottom: `1px solid ${C.border}`,
-        padding: "0 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        height: 52,
-        position: "sticky",
-        top: 0,
-        background: C.bg + "EE",
-        backdropFilter: "blur(12px)",
-        zIndex: 100,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 6,
-            background: C.teal,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: "#000" }}>A</span>
+      {/* ── Nav ── */}
+      <nav>
+        <div className="nav-logo" onClick={() => { setSelectedCompany(null); setNavTab('research'); }}>
+          <div className="nav-logo-icon">A</div>
+          <div>
+            <div className="nav-logo-text">Argo Analytics</div>
+            <div className="nav-logo-sub">Investment Intelligence</div>
           </div>
-          <span style={{ fontFamily: C.display, fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>
-            Argo Analytics
-          </span>
-          <span style={{
-            fontFamily: C.mono, fontSize: 9, fontWeight: 600,
-            padding: "2px 6px", borderRadius: 3,
-            background: C.tealDim, color: C.teal,
-            border: `1px solid ${C.tealBorder}`,
-            letterSpacing: "0.06em",
-          }}>BETA</span>
         </div>
-
-        {/* Tab nav */}
-        <div style={{ display: "flex", gap: 2 }}>
-          {(["search", "watchlist"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontFamily: C.mono,
-                fontSize: 11,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.07em",
-                color: activeTab === tab ? C.text1 : C.text3,
-                background: activeTab === tab ? C.bgCard : "transparent",
-                transition: "all 0.15s",
-              } as React.CSSProperties}
-            >
-              {tab === "search" ? "Research" : "Watchlist"}
-            </button>
-          ))}
+        <div className="nav-tabs">
+          <button
+            className={`nav-tab${navTab === 'research' ? ' active' : ''}`}
+            onClick={() => setNavTab('research')}
+          >
+            Research
+          </button>
+          <button
+            className={`nav-tab${navTab === 'watchlist' ? ' active' : ''}`}
+            onClick={() => setNavTab('watchlist')}
+          >
+            Watchlist
+          </button>
         </div>
-
-        {/* Status */}
-        <div style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>
-          {companies.length > 0
-            ? <><span style={{ color: C.teal }}>●</span> {companies.length} Unternehmen geladen</>
-            : <span style={{ color: C.amber }}>● Verbinde…</span>
-          }
+        <div className="nav-status">
+          <div className="status-dot" />
+          Live · {companies.length} Companies
         </div>
-      </div>
+      </nav>
 
-      {/* Content */}
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 24px" }}>
+      {/* ── Research Page ── */}
+      {navTab === 'research' && (
+        <div className="page">
+          {!selectedCompany ? (
+            <HeroState companies={companies} onSelect={handleSelectCompany} />
+          ) : (
+            <ResultState
+              company={selectedCompany}
+              buyers={analysisResult}
+              onBack={handleBack}
+            />
+          )}
+        </div>
+      )}
 
-        {activeTab === "search" && (
-          <>
-            {/* Hero */}
-            <div style={{ marginBottom: 28 }}>
-              <div style={{
-                fontFamily: C.display,
-                fontSize: 32,
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                lineHeight: 1.1,
-                marginBottom: 8,
-              }}>
-                Sieh, wer profitiert —<br />
-                <span style={{ color: C.teal }}>bevor es der Markt tut.</span>
-              </div>
-              <div style={{ fontSize: 13, color: C.text2, maxWidth: 480, lineHeight: 1.6 }}>
-                Argo identifiziert börsennotierte Gewinner hinter privaten Climate-Tech-Entwicklungen —
-                für Investoren, die früher als der Konsens positioniert sein wollen.
-              </div>
-            </div>
-
-            {/* Search */}
-            <div style={{ position: "relative", marginBottom: 28 }}>
-              <div style={{
-                display: "flex",
-                gap: 8,
-                background: C.bgCard,
-                border: `1.5px solid ${C.borderMd}`,
-                borderRadius: 10,
-                padding: "4px 4px 4px 16px",
-                alignItems: "center",
-                transition: "border-color 0.15s",
-              }}>
-                <span style={{ color: C.text3, fontSize: 16 }}>⌕</span>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
-                  onKeyDown={handleKey}
-                  onFocus={() => setShowSuggestions(true)}
-                  placeholder="Unternehmen oder Ticker suchen… (z.B. CarbonCure, CRH, FRVO)"
-                  style={{
-                    flex: 1, background: "transparent", border: "none",
-                    color: C.text1, fontSize: 14, outline: "none",
-                    fontFamily: C.body,
-                  }}
-                />
-                <button
-                  onClick={() => handleSearch(query)}
-                  disabled={loading || !query.trim()}
-                  style={{
-                    background: loading ? C.tealDim : C.teal,
-                    border: "none",
-                    borderRadius: 7,
-                    color: loading ? C.teal : "#000",
-                    fontFamily: C.mono,
-                    fontWeight: 700,
-                    fontSize: 12,
-                    padding: "9px 18px",
-                    cursor: loading || !query.trim() ? "not-allowed" : "pointer",
-                    letterSpacing: "0.05em",
-                    transition: "all 0.15s",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {loading ? "Analyse läuft…" : "Analysieren →"}
-                </button>
-              </div>
-
-              {/* Suggestions */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div style={{
-                  position: "absolute",
-                  top: "calc(100% + 4px)",
-                  left: 0, right: 0,
-                  background: C.bgCard,
-                  border: `1px solid ${C.borderMd}`,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  zIndex: 50,
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-                }}>
-                  {suggestions.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => selectSuggestion(s.name)}
-                      style={{
-                        padding: "10px 16px",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        borderBottom: `1px solid ${C.border}`,
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = C.bgHover)}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: C.text1 }}>{s.name}</div>
-                        <div style={{ fontSize: 11, color: C.text2 }}>{s.category}</div>
-                      </div>
-                      <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                        {s.proxy_ticker && (
-                          <Badge label={s.proxy_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
-                        )}
-                        {s.investment_path && (
-                          <Badge
-                            label={s.investment_path}
-                            color={PATH_COLORS[s.investment_path] ?? C.text2}
-                            bg="transparent"
-                            border={C.border}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div style={{
-                padding: "12px 16px",
-                background: C.redDim,
-                border: `1px solid ${C.red}33`,
-                borderRadius: 8,
-                color: C.red,
-                fontSize: 13,
-                marginBottom: 20,
-              }}>{error}</div>
-            )}
-
-            {/* Loading skeleton */}
-            {loading && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {[1, 2, 3].map((i) => (
-                  <div key={i} style={{
-                    height: i === 1 ? 120 : 60,
-                    background: C.bgCard,
-                    borderRadius: 10,
-                    border: `1px solid ${C.border}`,
-                    animation: "pulse 1.5s ease-in-out infinite",
-                    opacity: 0.6 - i * 0.1,
-                  }} />
-                ))}
-                <style>{`@keyframes pulse { 0%,100%{opacity:0.6} 50%{opacity:0.3} }`}</style>
-              </div>
-            )}
-
-            {/* Results */}
-            {result && !loading && (
-              <ResultTabs result={result} starred={starred} toggleStar={toggleStar} />
-            )}
-
-            {/* Empty state / Quick Access */}
-            {!result && !loading && !error && (
-              <div style={{ marginTop: 48, textAlign: "center" }}>
-                <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3, marginBottom: 16, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Häufig aufgerufen
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-                  {(() => {
-                    try {
-                      const counts: Record<string, number> = JSON.parse(localStorage.getItem("argo_search_counts") ?? "{}");
-                      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-                      const names = sorted.length > 0
-                        ? sorted.map(([n]) => n)
-                        : ["CarbonCure", "Brimstone", "VoltaGrid", "Fervo Energy", "Factorial Energy", "Syzygy Plasmonics"];
-                      return names.map((name) => (
-                        <button
-                          key={name}
-                          onClick={() => { setQuery(name); handleSearch(name); }}
-                          style={{
-                            background: C.bgCard, border: `1px solid ${C.border}`,
-                            borderRadius: 6, color: C.text2, fontSize: 12,
-                            fontFamily: C.mono, padding: "6px 14px", cursor: "pointer",
-                            transition: "all 0.15s",
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
-                        >
-                          {name}
-                          {counts[name] && <span style={{ marginLeft: 6, fontSize: 10, color: C.text3 }}>{counts[name]}</span>}
-                        </button>
-                      ));
-                    } catch { return null; }
-                  })()}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {activeTab === "watchlist" && (
-          <WatchlistView companies={companies} />
-        )}
-      </div>
-    </div>
+      {/* ── Watchlist Page ── */}
+      {navTab === 'watchlist' && (
+        <div className="page">
+          <WatchlistPage
+            companies={companies}
+            onSelectCompany={handleSelectFromWatchlist}
+          />
+        </div>
+      )}
+    </>
   );
 }
