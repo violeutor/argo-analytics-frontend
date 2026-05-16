@@ -602,7 +602,7 @@ function WatchlistView({ companies }: { companies: Company[] }) {
                     <button
                       onClick={() => window.location.href = `/company/${encodeURIComponent(c.name)}`}
                       style={{
-                        background: "transparent", border: `1px solid ${C.border}`,
+                        border: `1px solid ${C.border}`,
                         borderRadius: 4, color: C.text3, fontSize: 10,
                         padding: "3px 8px", cursor: "pointer",
                         fontFamily: C.mono, whiteSpace: "nowrap",
