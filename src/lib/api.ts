@@ -8,18 +8,13 @@ import type {
   DealRating,
 } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const API_KEY = process.env.API_KEY ?? "";
-const YAHOO_PROXY = "/api/market"; // Next.js API route (avoids CORS)
+const BACKEND_PROXY = "/api/backend"; // Next.js proxy — API_KEY serverseitig in route.ts
+const YAHOO_PROXY = "/api/market";   // Next.js proxy — CORS-safe Yahoo Finance
 
 // ── Shared headers ────────────────────────────────────────────────────────────
 
 function backendHeaders(extra?: Record<string, string>): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-    "X-API-Key": API_KEY,
-    ...extra,
-  };
+  return { "Content-Type": "application/json", ...extra };
 }
 
 // ── Backend ───────────────────────────────────────────────────────────────────
@@ -28,7 +23,7 @@ export async function fetchCompanies(params?: {
   limit?: number;
   source?: string;
 }): Promise<Company[]> {
-  const url = new URL(`${API_BASE}/api/v1/companies`);
+  const url = new URL(`${BACKEND_PROXY}/companies`, window.location.origin);
   if (params?.limit) url.searchParams.set("limit", String(params.limit));
   if (params?.source) url.searchParams.set("source", params.source);
   const res = await fetch(url.toString(), {
@@ -40,7 +35,7 @@ export async function fetchCompanies(params?: {
 }
 
 export async function fetchBuyers(): Promise<Buyer[]> {
-  const res = await fetch(`${API_BASE}/api/v1/buyers`, {
+  const res = await fetch(`${BACKEND_PROXY}/buyers`, {
     headers: backendHeaders(),
     next: { revalidate: 300 },
   });
@@ -58,7 +53,7 @@ export async function runAnalyze(payload: {
   target_funding_usd_mn?: number;
   target_stage?: string;
 }): Promise<AnalyzeResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/analyze`, {
+  const res = await fetch(`${BACKEND_PROXY}/analyze`, {
     method: "POST",
     headers: backendHeaders(),
     body: JSON.stringify(payload),
@@ -321,7 +316,7 @@ export interface FullSearchResponse {
 }
 
 export async function searchCompanyFull(query: string): Promise<FullSearchResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/search`, {
+  const res = await fetch(`${BACKEND_PROXY}/search`, {
     method: "POST",
     headers: backendHeaders(),
     cache: "no-store",
