@@ -977,7 +977,7 @@ export default function Home() {
     setStarred((prev) => {
       const next = new Set(prev);
       next.has(name) ? next.delete(name) : next.add(name);
-      localStorage.setItem("argo_starred", JSON.stringify([...next]));
+      localStorage.setItem("argo_starred", JSON.stringify(Array.from(next)));
       return next;
     });
   };
