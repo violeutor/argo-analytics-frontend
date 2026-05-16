@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { fetchCompanies, searchCompanyFull } from "@/lib/api";
-import type { FullSearchResponse, BuyerScore, SupplyChainItem, SearchResult } from "@/lib/api";
-import type { Company, DealRating, MFRSignal, SRRCategory } from "@/types";
+import type { FullSearchResponse, BuyerScore, SupplyChainItem } from "@/lib/api";
+import type { Company, DealRating, MFRSignal, SRRCategory, SearchResult } from "@/types";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
