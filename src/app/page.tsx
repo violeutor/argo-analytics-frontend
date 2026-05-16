@@ -511,7 +511,7 @@ function WatchlistView({ companies }: { companies: Company[] }) {
         <button
           onClick={() => setFilters({ potential: "", investment_path: "", source: "", search: "" })}
           style={{
-            background: "transparent", border: `1px solid ${C.border}`,
+            border: `1px solid ${C.border}`,
             borderRadius: 4, color: C.text2, fontSize: 11,
             padding: "3px 10px", cursor: "pointer", fontFamily: C.body, height: 28,
           }}
