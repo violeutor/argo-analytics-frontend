@@ -24,10 +24,10 @@ const C = {
   blue: "#5B9CF6",
   blueDim: "rgba(91,156,246,0.12)",
   text1: "#FAFAF9",
-  text2: "#A1A1AA",
-  text3: "#52525B",
+  text2: "#C4C4C2",
+  text3: "#71717A",
   mono: "'DM Mono', 'Fira Code', 'Courier New', monospace",
-  display: "'Syne', 'Space Grotesk', system-ui, sans-serif",
+  display: "'Plus Jakarta Sans', 'Space Grotesk', system-ui, sans-serif",
   body: "'DM Sans', system-ui, sans-serif",
 };
 
@@ -207,7 +207,12 @@ function CompanyCard({ result }: { result: SearchResult }) {
           <div style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, color: C.text1, letterSpacing: "-0.02em" }}>
             {company.name}
           </div>
-          <div style={{ fontSize: 12, color: C.text2, marginTop: 4, fontFamily: C.body }}>
+          {(company as any).industry && (
+            <div style={{ fontSize: 11, color: C.teal, marginTop: 3, fontFamily: C.mono, letterSpacing: "0.04em" }}>
+              {(company as any).industry}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: C.text2, marginTop: 2, fontFamily: C.body }}>
             {company.category}
           </div>
         </div>
@@ -437,17 +442,21 @@ function WatchlistView({ companies }: { companies: Company[] }) {
   const [filters, setFilters] = useState({
     potential: "",
     investment_path: "",
+    industry: "",
     source: "",
     search: "",
   });
 
+  const industries = Array.from(new Set(companies.map((c) => (c as any).industry).filter(Boolean))).sort();
+
   const filtered = companies.filter((c) => {
     if (filters.potential && c.potential !== filters.potential) return false;
     if (filters.investment_path && c.investment_path !== filters.investment_path) return false;
+    if (filters.industry && (c as any).industry !== filters.industry) return false;
     if (filters.source && c.source !== filters.source) return false;
     if (filters.search) {
       const q = filters.search.toLowerCase();
-      if (!c.name.toLowerCase().includes(q) && !c.category?.toLowerCase().includes(q)) return false;
+      if (!c.name.toLowerCase().includes(q) && !c.category?.toLowerCase().includes(q) && !(c as any).industry?.toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -473,6 +482,7 @@ function WatchlistView({ companies }: { companies: Company[] }) {
           { id: "potential", label: "Potenzial", opts: ["Hoch", "Mittel-hoch", "Mittel"] },
           { id: "investment_path", label: "Pfad", opts: ["IPO-direkt", "Käufer-Proxy", "ETF-Proxy", "Enabler", "Beobachten", "Archiv"] },
           { id: "source", label: "Quelle", opts: ["bestand", "woche1", "woche2", "manual"] },
+          { id: "industry", label: "Industrie", opts: industries },
         ].map(({ id, label, opts }) => (
           <div key={id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
@@ -509,7 +519,7 @@ function WatchlistView({ companies }: { companies: Company[] }) {
           }}
         />
         <button
-          onClick={() => setFilters({ potential: "", investment_path: "", source: "", search: "" })}
+          onClick={() => setFilters({ potential: "", investment_path: "", industry: "", source: "", search: "" })}
           style={{
             border: `1px solid ${C.border}`,
             borderRadius: 4, color: C.text2, fontSize: 11,
@@ -524,12 +534,25 @@ function WatchlistView({ companies }: { companies: Company[] }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#0D0D0F" }}>
-                {["Unternehmen", "Kategorie", "Kerntechnologie", "Potenzial", "Risiko", "IPO-Potenzial", "Inv.-Pfad", "Proxy-Ticker", "Funding-Stand", "Letzte Entwicklung", ""].map((h) => (
-                  <th key={h} style={{
+                {[
+                  { h: "Unternehmen", tip: "Unternehmensname" },
+                  { h: "Kategorie", tip: "Technologie-Cluster" },
+                  { h: "Industrie", tip: "Industriesektor" },
+                  { h: "Potenzial", tip: "Eingeschätztes Marktpotenzial" },
+                  { h: "Risiko", tip: "Technologisches und regulatorisches Risiko" },
+                  { h: "IPO-Potenzial", tip: "Wahrscheinlichkeit eines Börsengangs" },
+                  { h: "Inv.-Pfad", tip: "Empfohlener Investitionsansatz" },
+                  { h: "Proxy-Ticker", tip: "Börsennotierter Proxy-Titel" },
+                  { h: "Funding-Stand", tip: "Gesamtes Fundraising" },
+                  { h: "L. Signal", tip: "Letztes Signal aus Morning Briefing" },
+                  { h: "", tip: "" },
+                ].map(({ h, tip }) => (
+                  <th key={h} title={tip} style={{
                     padding: "8px 12px", textAlign: "left",
                     fontFamily: C.mono, fontSize: 10, fontWeight: 600,
                     color: C.text3, textTransform: "uppercase", letterSpacing: "0.07em",
                     borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap",
+                    cursor: tip ? "help" : "default",
                   }}>{h}</th>
                 ))}
               </tr>
@@ -556,7 +579,8 @@ function WatchlistView({ companies }: { companies: Company[] }) {
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: "9px 12px", color: C.text2, maxWidth: 160 }}>{c.category}</td>
+                  <td style={{ padding: "9px 12px", color: C.text2, maxWidth: 140, fontSize: 11 }}>{c.category}</td>
+                  <td style={{ padding: "9px 12px", color: C.teal, fontSize: 11, fontFamily: C.mono }}>{(c as any).industry ?? "—"}</td>
                   <td style={{ padding: "9px 12px" }}>
                     <span style={{ color: potentialColor(c.potential), fontFamily: C.mono, fontWeight: 600, fontSize: 11 }}>
                       {c.potential ?? "—"}
@@ -760,6 +784,174 @@ function SupplyChainSection({
   );
 }
 
+// ── Result Tabs ───────────────────────────────────────────────────────────────
+
+function ResultTabs({ result, starred, toggleStar }: {
+  result: FullSearchResponse;
+  starred: Set<string>;
+  toggleStar: (name: string) => void;
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<"uberblick" | "ownership" | "fundamentals" | "investitionspfad">("uberblick");
+  const subTabs = [
+    { id: "uberblick" as const, label: "Überblick" },
+    { id: "ownership" as const, label: "Ownership" },
+    { id: "fundamentals" as const, label: "Fundamentals" },
+    { id: "investitionspfad" as const, label: "Investitionspfad" },
+  ];
+
+  return (
+    <div>
+      {/* Compact result row */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: 10, padding: "14px 18px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: C.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>{result.company_name}</span>
+            <button onClick={() => toggleStar(result.company_name)} title={starred.has(result.company_name) ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: starred.has(result.company_name) ? C.amber : C.text3, padding: "0 2px", transition: "color 0.15s", lineHeight: 1 }}>
+              {starred.has(result.company_name) ? "★" : "☆"}
+            </button>
+            {result.proxy_ticker && <span style={{ fontFamily: C.mono, fontSize: 11, color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}`, padding: "1px 7px", borderRadius: 4 }}>{result.proxy_ticker}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: C.text2, marginTop: 2, display: "flex", gap: 10, alignItems: "center" }}>
+            {(result as any).industry && <span style={{ color: C.teal, fontFamily: C.mono, fontSize: 11 }}>{(result as any).industry}</span>}
+            {(result as any).industry && result.category && <span style={{ color: C.text3 }}>·</span>}
+            <span>{result.category}</span>
+            {result.investment_path && <><span style={{ color: C.text3 }}>·</span><span style={{ color: result.investment_path === "IPO-direkt" ? C.teal : result.investment_path === "Käufer-Proxy" ? C.blue : C.text2 }}>{result.investment_path}</span></>}
+          </div>
+        </div>
+        {result.buyer_scores?.[0] && (
+          <span style={{ fontFamily: C.mono, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, color: result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber, background: result.buyer_scores[0].rating.startsWith("A") ? C.tealDim : result.buyer_scores[0].rating.startsWith("B") ? C.blueDim : C.amberDim, border: `1px solid ${result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber}44` }}>{result.buyer_scores[0].rating}</span>
+        )}
+        <button onClick={() => window.location.href = `/company/${encodeURIComponent(result.company_name)}`} style={{ background: C.teal, border: "none", borderRadius: 6, color: "#000", fontFamily: C.mono, fontWeight: 700, fontSize: 11, padding: "7px 14px", cursor: "pointer", letterSpacing: "0.04em", whiteSpace: "nowrap", transition: "opacity 0.15s" }} onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")} onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>Detail →</button>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
+        {subTabs.map((t) => (
+          <button key={t.id} onClick={() => setActiveSubTab(t.id)} style={{ padding: "8px 18px", fontSize: 12, fontWeight: 500, color: activeSubTab === t.id ? C.teal : C.text2, background: "none", border: "none", borderBottom: `2px solid ${activeSubTab === t.id ? C.teal : "transparent"}`, cursor: "pointer", fontFamily: C.body, marginBottom: -1, transition: "all 0.15s" }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* R-02: Überblick */}
+      {activeSubTab === "uberblick" && (
+        <div>
+          <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: 12, padding: "20px 22px", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                  {result.company_name}
+                  {!result.is_known && <span style={{ marginLeft: 10, fontSize: 10, fontFamily: C.mono, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}33` }}>NEU ANGEREICHERT</span>}
+                </div>
+                {(result as any).industry && <div style={{ fontSize: 11, color: C.teal, marginTop: 3, fontFamily: C.mono }}>{(result as any).industry}</div>}
+                <div style={{ fontSize: 12, color: C.text2, marginTop: 2 }}>{result.category}</div>
+                {result.description && <div style={{ fontSize: 12, color: C.text2, marginTop: 8, lineHeight: 1.6, maxWidth: 560 }}>{result.description}</div>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                {result.proxy_ticker && <Badge label={result.proxy_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />}
+                {result.investment_path && <Badge label={result.investment_path} color={C.text2} bg="transparent" border={C.border} />}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: result.last_signal ? 12 : 0 }}>
+              <MetricTile label="Potenzial" value={result.potential ?? "—"} color={result.potential === "Hoch" ? C.teal : result.potential === "Mittel-hoch" ? C.amber : C.text2} />
+              <MetricTile label="Risiko" value={result.risk ?? "—"} color={result.risk === "Hoch" ? C.red : C.text2} />
+              <MetricTile label="IPO-Potenzial" value={result.ipo_potential ?? "—"} color={result.ipo_potential === "Hoch" ? C.teal : C.text2} />
+              <MetricTile label="Funding" value={result.funding_total_usd_mn ? `$${result.funding_total_usd_mn >= 1000 ? (result.funding_total_usd_mn/1000).toFixed(1)+"B" : result.funding_total_usd_mn+"M"}` : "—"} color={C.text1} />
+              <MetricTile label="TAM 2035" value={`$${result.tam.tam_usd_bn}B`} sub={result.tam.confidence === "high" ? "✓ verifiziert" : result.tam.confidence === "medium" ? "~ Schätzung" : "⚠ Fallback"} color={result.tam.confidence === "high" ? C.teal : result.tam.confidence === "medium" ? C.amber : C.red} />
+            </div>
+            {result.last_signal && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 12 }}>
+                <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
+                <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{result.last_signal_date}</span>
+                <span style={{ color: C.text2 }}>{result.last_signal}</span>
+              </div>
+            )}
+          </div>
+          {result.warnings.length > 0 && result.warnings.map((w: string, i: number) => (
+            <div key={i} style={{ padding: "8px 12px", marginBottom: 6, background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 11, color: C.amber }}>⚠ {w}</div>
+          ))}
+        </div>
+      )}
+
+      {/* R-03: Ownership */}
+      {activeSubTab === "ownership" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
+            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Bekannte Investoren</div>
+            <div style={{ fontSize: 12, color: C.text2, padding: "20px 0", textAlign: "center" }}>Crunchbase-Enrichment — Phase 2<br /><span style={{ fontSize: 11, color: C.text3 }}>Automatisch angereichert bei bekannten Unternehmen</span></div>
+          </div>
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
+            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Kapitalstruktur</div>
+            <div style={{ fontSize: 12, color: C.text2, padding: "20px 0", textAlign: "center" }}>Geschätzt via Funding-Runden<br /><span style={{ fontSize: 11, color: C.text3 }}>Bundesanzeiger-Integration für DE-Unternehmen — Phase 2</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* R-04: Fundamentals */}
+      {activeSubTab === "fundamentals" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 16 }}>
+            <MetricTile label="Funding Total" value={result.funding_total_usd_mn ? `$${result.funding_total_usd_mn >= 1000 ? (result.funding_total_usd_mn/1000).toFixed(1)+"B" : result.funding_total_usd_mn+"M"}` : "—"} color={C.text1} />
+            <MetricTile label="Letzte Runde" value={result.funding_last_round ?? "—"} color={C.text2} />
+            <MetricTile label="Est. Valuation" value={result.funding_total_usd_mn ? `~$${((result.funding_total_usd_mn * 5) / 1000).toFixed(1)}B` : "—"} sub="5× Funding-Multiplikator" color={C.teal} />
+            <MetricTile label="TAM 2035" value={`$${result.tam.tam_usd_bn}B`} sub={result.tam.source} color={result.tam.confidence === "high" ? C.teal : C.amber} />
+          </div>
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px" }}>
+            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Funding-Timeline</div>
+            {result.funding_last_round ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.teal, flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: 12, color: C.text1 }}>{result.funding_last_round}</div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: C.text2, padding: "12px 0" }}>Keine Funding-Daten verfügbar</div>
+            )}
+            <div style={{ marginTop: 12, fontSize: 11, color: C.text3 }}>Vollständige Funding-Timeline via Crunchbase-Enrichment — Phase 2</div>
+          </div>
+        </div>
+      )}
+
+      {/* R-05: Investitionspfad */}
+      {activeSubTab === "investitionspfad" && (
+        <div>
+          {result.buyer_scores.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <SectionHead title="Potenzielle Käufer · M&A Scoring" count={result.buyer_scores.length} />
+              <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>SRR × MFR × TechReadiness — geordnet nach DealSuccessScore</div>
+              {result.buyer_scores.map((bs: BuyerScore, i: number) => <BuyerScoreCard key={bs.buyer_name} bs={bs} rank={i + 1} />)}
+            </div>
+          )}
+          {(result.supply_chain.upstream.length > 0 || result.supply_chain.downstream.length > 0 || result.supply_chain.etfs.length > 0) && (
+            <div style={{ marginBottom: 24 }}>
+              <SectionHead title="Supply Chain Contributors" />
+              <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>Börsennotierte Profiteure entlang der Wertschöpfungskette</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {result.supply_chain.upstream.length > 0 && <SupplyChainSection title="Upstream" items={result.supply_chain.upstream} color={C.blue} />}
+                {result.supply_chain.downstream.length > 0 && <SupplyChainSection title="Downstream" items={result.supply_chain.downstream} color={C.teal} />}
+              </div>
+              {result.supply_chain.etfs.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>ETF Exposure</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {result.supply_chain.etfs.map((etf: { ticker: string; name: string; relevance: number }) => (
+                      <div key={etf.ticker} style={{ padding: "6px 12px", borderRadius: 6, background: "rgba(160,100,220,0.1)", border: "1px solid rgba(160,100,220,0.25)", display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: "#C084FC" }}>{etf.ticker}</span>
+                        <span style={{ fontSize: 11, color: C.text2 }}>{etf.name}</span>
+                        <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{Math.round(etf.relevance * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {result.buyer_scores.length === 0 && result.supply_chain.upstream.length === 0 && result.supply_chain.downstream.length === 0 && (
+            <div style={{ padding: "24px", textAlign: "center", color: C.text3, fontSize: 12 }}>Kein klarer Investitionspfad erkennbar — Beobachten bis neues Signal vorliegt.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -771,7 +963,24 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"search" | "watchlist">("search");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [starred, setStarred] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("argo_starred") ?? "[]");
+      setStarred(new Set(saved));
+    } catch {}
+  }, []);
+
+  const toggleStar = (name: string) => {
+    setStarred((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      localStorage.setItem("argo_starred", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // Load companies on mount
   useEffect(() => {
@@ -795,9 +1004,15 @@ export default function Home() {
     setError(null);
     setResult(null);
     setShowSuggestions(false);
+    // F-08: localStorage-Counter für Quick Access
+    try {
+      const counts = JSON.parse(localStorage.getItem("argo_search_counts") ?? "{}");
+      counts[name] = (counts[name] ?? 0) + 1;
+      localStorage.setItem("argo_search_counts", JSON.stringify(counts));
+    } catch {}
     try {
       const r = await searchCompanyFull(name);
-      if (!r) { setError(`Kein Unternehmen gefunden für "${name}"`); } 
+      if (!r) { setError(`Kein Unternehmen gefunden für "${name}"`); }
       else setResult(r);
     } catch (e) {
       setError(String(e));
@@ -826,7 +1041,7 @@ export default function Home() {
     }}>
       {/* Google Fonts */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: ${C.teal}33; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -918,13 +1133,12 @@ export default function Home() {
                 lineHeight: 1.1,
                 marginBottom: 8,
               }}>
-                Climate Tech<br />
-                <span style={{ color: C.teal }}>Investment Intelligence</span>
+                Sieh, wer profitiert —<br />
+                <span style={{ color: C.teal }}>bevor es der Markt tut.</span>
               </div>
               <div style={{ fontSize: 13, color: C.text2, maxWidth: 480, lineHeight: 1.6 }}>
-                Gib einen Unternehmensnamen oder Ticker ein. Argo berechnet Investitionspfade,
-                SRR × MFR × TechReadiness und zeigt, mit welchen Finanzinstrumenten
-                du von einer Entwicklung profitieren kannst.
+                Argo identifiziert börsennotierte Gewinner hinter privaten Climate-Tech-Entwicklungen —
+                für Investoren, die früher als der Konsens positioniert sein wollen.
               </div>
             </div>
 
@@ -1060,201 +1274,42 @@ export default function Home() {
 
             {/* Results */}
             {result && !loading && (
-              <div>
-                {/* ── Compact result row + Detail link ── */}
-                <div style={{
-                  background: C.bgCard, border: `1px solid ${C.borderMd}`,
-                  borderRadius: 10, padding: "14px 18px", marginBottom: 12,
-                  display: "flex", alignItems: "center", gap: 12,
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: C.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>
-                      {result.company_name}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.text2, marginTop: 2, display: "flex", gap: 10, alignItems: "center" }}>
-                      <span>{result.category}</span>
-                      {result.investment_path && <>
-                        <span style={{ color: C.text3 }}>·</span>
-                        <span style={{ color: result.investment_path === "IPO-direkt" ? C.teal : result.investment_path === "Käufer-Proxy" ? C.blue : C.text2 }}>{result.investment_path}</span>
-                      </>}
-                      {result.proxy_ticker && <>
-                        <span style={{ color: C.text3 }}>·</span>
-                        <span style={{ fontFamily: C.mono, color: C.teal, fontSize: 11 }}>{result.proxy_ticker}</span>
-                      </>}
-                      {result.ipo_potential && <>
-                        <span style={{ color: C.text3 }}>·</span>
-                        <span>IPO {result.ipo_potential}</span>
-                      </>}
-                    </div>
-                  </div>
-                  {result.buyer_scores?.[0] && (
-                    <span style={{
-                      fontFamily: C.mono, fontSize: 10, fontWeight: 700,
-                      padding: "2px 8px", borderRadius: 4,
-                      color: result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber,
-                      background: result.buyer_scores[0].rating.startsWith("A") ? C.tealDim : result.buyer_scores[0].rating.startsWith("B") ? C.blueDim : C.amberDim,
-                      border: `1px solid ${result.buyer_scores[0].rating.startsWith("A") ? C.teal : result.buyer_scores[0].rating.startsWith("B") ? C.blue : C.amber}44`,
-                    }}>{result.buyer_scores[0].rating}</span>
-                  )}
-                  <button
-                    onClick={() => window.location.href = `/company/${encodeURIComponent(result.company_name)}`}
-                    style={{
-                      background: C.teal, border: "none", borderRadius: 6,
-                      color: "#000", fontFamily: C.mono, fontWeight: 700,
-                      fontSize: 11, padding: "7px 14px", cursor: "pointer",
-                      letterSpacing: "0.04em", whiteSpace: "nowrap",
-                      transition: "opacity 0.15s",
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                  >
-                    Detail →
-                  </button>
-                </div>
-
-                {/* ── Company overview card ── */}
-                <div style={{
-                  background: C.bgCard, border: `1px solid ${C.borderMd}`,
-                  borderRadius: 12, padding: "20px 22px", marginBottom: 16,
-                }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div>
-                      <div style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                        {result.company_name}
-                        {!result.is_known && (
-                          <span style={{
-                            marginLeft: 10, fontSize: 10, fontFamily: C.mono, fontWeight: 600,
-                            padding: "2px 8px", borderRadius: 4,
-                            background: C.amberDim, color: C.amber,
-                            border: `1px solid ${C.amber}33`,
-                          }}>NEU ANGEREICHERT</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: C.text2, marginTop: 4 }}>{result.category}</div>
-                      {result.description && (
-                        <div style={{ fontSize: 12, color: C.text2, marginTop: 8, lineHeight: 1.6, maxWidth: 560 }}>
-                          {result.description}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                      {result.proxy_ticker && (
-                        <Badge label={result.proxy_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
-                      )}
-                      {result.investment_path && (
-                        <Badge label={result.investment_path} color={C.text2} bg="transparent" border={C.border} />
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: result.last_signal ? 12 : 0 }}>
-                    <MetricTile label="Potenzial" value={result.potential ?? "—"} color={result.potential === "Hoch" ? C.teal : result.potential === "Mittel-hoch" ? C.amber : C.text2} />
-                    <MetricTile label="Risiko" value={result.risk ?? "—"} color={result.risk === "Hoch" ? C.red : C.text2} />
-                    <MetricTile label="IPO-Potenzial" value={result.ipo_potential ?? "—"} color={result.ipo_potential === "Hoch" ? C.teal : C.text2} />
-                    <MetricTile label="Funding" value={result.funding_total_usd_mn ? `$${result.funding_total_usd_mn >= 1000 ? (result.funding_total_usd_mn/1000).toFixed(1)+"B" : result.funding_total_usd_mn+"M"}` : "—"} color={C.text1} />
-                    <MetricTile label="TAM 2035" value={`$${result.tam.tam_usd_bn}B`} sub={result.tam.confidence === "high" ? "✓ verifiziert" : result.tam.confidence === "medium" ? "~ Schätzung" : "⚠ Fallback"} color={result.tam.confidence === "high" ? C.teal : result.tam.confidence === "medium" ? C.amber : C.red} />
-                  </div>
-                  {result.last_signal && (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 12 }}>
-                      <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
-                      <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{result.last_signal_date}</span>
-                      <span style={{ color: C.text2 }}>{result.last_signal}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Buyer Scores ── */}
-                {result.buyer_scores.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <SectionHead title="Potenzielle Käufer · M&A Scoring" count={result.buyer_scores.length} />
-                    <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>
-                      SRR × MFR × TechReadiness — geordnet nach DealSuccessScore
-                    </div>
-                    {result.buyer_scores.map((bs: BuyerScore, i: number) => (
-                      <BuyerScoreCard key={bs.buyer_name} bs={bs} rank={i + 1} />
-                    ))}
-                  </div>
-                )}
-
-                {/* ── Supply Chain ── */}
-                {(result.supply_chain.upstream.length > 0 || result.supply_chain.downstream.length > 0 || result.supply_chain.etfs.length > 0) && (
-                  <div style={{ marginBottom: 24 }}>
-                    <SectionHead title="Supply Chain Contributors" />
-                    <div style={{ fontSize: 12, color: C.text2, marginBottom: 12 }}>
-                      Börsennotierte Profiteure entlang der Wertschöpfungskette
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      {result.supply_chain.upstream.length > 0 && (
-                        <SupplyChainSection title="Upstream" items={result.supply_chain.upstream} color={C.blue} />
-                      )}
-                      {result.supply_chain.downstream.length > 0 && (
-                        <SupplyChainSection title="Downstream" items={result.supply_chain.downstream} color={C.teal} />
-                      )}
-                    </div>
-                    {result.supply_chain.etfs.length > 0 && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>ETF Exposure</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                          {result.supply_chain.etfs.map((etf: { ticker: string; name: string; relevance: number }) => (
-                            <div key={etf.ticker} style={{
-                              padding: "6px 12px", borderRadius: 6,
-                              background: "rgba(160,100,220,0.1)",
-                              border: "1px solid rgba(160,100,220,0.25)",
-                              display: "flex", alignItems: "center", gap: 8,
-                            }}>
-                              <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: "#C084FC" }}>{etf.ticker}</span>
-                              <span style={{ fontSize: 11, color: C.text2 }}>{etf.name}</span>
-                              <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{Math.round(etf.relevance * 100)}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Warnings ── */}
-                {result.warnings.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    {result.warnings.map((w: string, i: number) => (
-                      <div key={i} style={{
-                        padding: "8px 12px", marginBottom: 6,
-                        background: C.amberDim, border: `1px solid ${C.amber}22`,
-                        borderRadius: 6, fontSize: 11, color: C.amber, fontFamily: C.body,
-                      }}>⚠ {w}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ResultTabs result={result} starred={starred} toggleStar={toggleStar} />
             )}
 
-            {/* Empty state */}
+            {/* Empty state / Quick Access */}
             {!result && !loading && !error && (
               <div style={{ marginTop: 48, textAlign: "center" }}>
-                <div style={{ fontFamily: C.mono, fontSize: 12, color: C.text3, marginBottom: 20 }}>
-                  ── QUICK ACCESS ──
+                <div style={{ fontFamily: C.mono, fontSize: 11, color: C.text3, marginBottom: 16, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Häufig aufgerufen
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-                  {["CarbonCure", "Brimstone", "VoltaGrid", "Fervo Energy", "Factorial Energy", "Syzygy Plasmonics"].map((name) => (
-                    <button
-                      key={name}
-                      onClick={() => { setQuery(name); handleSearch(name); }}
-                      style={{
-                        background: C.bgCard,
-                        border: `1px solid ${C.border}`,
-                        borderRadius: 6,
-                        color: C.text2,
-                        fontSize: 12,
-                        fontFamily: C.mono,
-                        padding: "6px 14px",
-                        cursor: "pointer",
-                        transition: "all 0.15s",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
-                    >
-                      {name}
-                    </button>
-                  ))}
+                  {(() => {
+                    try {
+                      const counts: Record<string, number> = JSON.parse(localStorage.getItem("argo_search_counts") ?? "{}");
+                      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                      const names = sorted.length > 0
+                        ? sorted.map(([n]) => n)
+                        : ["CarbonCure", "Brimstone", "VoltaGrid", "Fervo Energy", "Factorial Energy", "Syzygy Plasmonics"];
+                      return names.map((name) => (
+                        <button
+                          key={name}
+                          onClick={() => { setQuery(name); handleSearch(name); }}
+                          style={{
+                            background: C.bgCard, border: `1px solid ${C.border}`,
+                            borderRadius: 6, color: C.text2, fontSize: 12,
+                            fontFamily: C.mono, padding: "6px 14px", cursor: "pointer",
+                            transition: "all 0.15s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
+                        >
+                          {name}
+                          {counts[name] && <span style={{ marginLeft: 6, fontSize: 10, color: C.text3 }}>{counts[name]}</span>}
+                        </button>
+                      ));
+                    } catch { return null; }
+                  })()}
                 </div>
               </div>
             )}
