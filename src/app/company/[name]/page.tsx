@@ -31,7 +31,8 @@ interface ScoringDetail {
 interface SupplyItem { ticker: string; name: string; exchange?: string; role: string; relevance: number }
 interface CompanyDetail {
   name: string; category?: string; core_technology?: string;
-  website?: string; intro: string; industry?: string;
+  website?: string; intro: string; industry?: string; risk?: string;
+  founding_year?: number; headquarters?: string; headcount?: string;
   product_description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
@@ -262,10 +263,10 @@ export default function CompanyDetailPage() {
           <div style={{ width: 28, height: 28, background: C.teal, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 13, color: C.bg }}>A</div>
           <div>
             <div style={{ fontFamily: C.display, fontWeight: 600, fontSize: 15, color: C.t1 }}>Argo Analytics</div>
-            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".04em" }}>Investment Intelligence</div>
+            <div style={{ fontSize: 10, color: C.t3, letterSpacing: ".04em" }}>Investment Intelligence</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3, fontFamily: C.mono }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} />
           Live · Research
         </div>
@@ -295,52 +296,79 @@ export default function CompanyDetailPage() {
             <button onClick={() => router.back()} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
               ← Zurück
             </button>
-            <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>ANALYSE · {data.name.toUpperCase()}</span>
+            <span style={{ fontSize: 11, color: C.t3 }}>ANALYSE · {data.name.toUpperCase()}</span>
           </div>
 
           {/* Company Header */}
           <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rLg, padding: "20px 24px", marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: C.rMd, flexShrink: 0, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 14, color: C.teal }}>
-                  {initials(data.name)}
-                </div>
-                <div>
-                  <div style={{ fontFamily: C.display, fontSize: 18, fontWeight: 700, color: C.t1, display: "flex", alignItems: "center", gap: 8 }}>
-                    {data.name}
-                    <span style={{ fontFamily: C.mono, fontSize: 12, color: data.ipo_status === "listed" ? C.teal : C.t3, background: data.ipo_status === "listed" ? C.tealDim : "rgba(255,255,255,0.05)", border: `1px solid ${data.ipo_status === "listed" ? C.tealBorder : C.border}`, padding: "2px 8px", borderRadius: 99 }}>
-                      {data.ipo_status === "listed" ? "● Listed" : "Private"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: C.t2, marginTop: 3, fontFamily: C.mono }}>
-                    {[data.category, data.investment_path, data.funding_stage].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
+
+            {/* Row 1: Name + Public/Private + Rating */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontFamily: C.display, fontSize: 20, fontWeight: 700, color: C.t1 }}>{data.name}</span>
+                <span style={{
+                  fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 500,
+                  color: data.ipo_status === "listed" ? C.teal : C.t2,
+                  background: data.ipo_status === "listed" ? C.tealDim : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${data.ipo_status === "listed" ? C.tealBorder : C.border}`,
+                }}>
+                  {data.ipo_status === "listed" ? "Public" : "Private"}
+                </span>
               </div>
               {data.scorings[0] && (
-                <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontFamily: C.mono, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
+                <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
                   {data.scorings[0].rating}
                 </span>
               )}
             </div>
 
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-              {data.ipo_potential && <Badge label={`Potenzial: ${data.ipo_potential}`} color={data.ipo_potential === "Hoch" ? C.teal : C.amber} bg={data.ipo_potential === "Hoch" ? C.tealDim : C.amberDim} border={data.ipo_potential === "Hoch" ? C.tealBorder : C.amber + "33"} />}
-              {data.investment_path && <Badge label={data.investment_path} color={PATH_COLORS[data.investment_path] ?? C.t2} bg={(PATH_COLORS[data.investment_path] ?? C.t2) + "18"} border={(PATH_COLORS[data.investment_path] ?? C.t2) + "33"} />}
-              {data.proxy_ticker && <Badge label={`Proxy: ${data.proxy_ticker}`} color={C.amber} bg={C.amberDim} border={C.amber + "33"} />}
-              {data.industry && <Badge label={data.industry} color={C.t2} bg="rgba(255,255,255,0.05)" border={C.border} />}
+            {/* Row 2: Ticker+Index (public) OR Technologie+Series (private) */}
+            <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>
+              {data.ipo_status === "listed"
+                ? [data.proxy_ticker].filter(Boolean).join(" · ") || "—"
+                : [data.core_technology ?? data.product_description, data.funding_stage].filter(Boolean).join(" · ") || "—"
+              }
             </div>
 
+            {/* Row 3: Badges */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+              {data.ipo_potential && data.ipo_status !== "listed" && (
+                <Badge
+                  label={`Potenzial: ${data.ipo_potential}`}
+                  color={data.ipo_potential === "Hoch" ? C.teal : C.amber}
+                  bg={data.ipo_potential === "Hoch" ? C.tealDim : C.amberDim}
+                  border={data.ipo_potential === "Hoch" ? C.tealBorder : C.amber + "33"} />
+              )}
+              {data.ipo_potential && (
+                <Badge
+                  label={`Risiko: ${data.risk ?? "—"}`}
+                  color={C.t2} bg="rgba(255,255,255,0.05)" border={C.border} />
+              )}
+              {data.ipo_status !== "listed" && data.ipo_potential && (
+                <Badge
+                  label={`IPO: ${data.ipo_potential}`}
+                  color={C.blue} bg={C.blueDim} border={C.blue + "33"} />
+              )}
+              {data.investment_path && (
+                <Badge
+                  label={`Exposure: ${data.investment_path}`}
+                  color={PATH_COLORS[data.investment_path] ?? C.t2}
+                  bg={(PATH_COLORS[data.investment_path] ?? C.t2) + "18"}
+                  border={(PATH_COLORS[data.investment_path] ?? C.t2) + "33"} />
+              )}
+            </div>
+
+            {/* Row 4: Meta-Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
               {[
                 { label: "Funding Total", val: fmtM(data.funding_total_usd_mn) },
                 { label: "Letzte Runde", val: data.funding_last_round?.split(";")[0] ?? "—" },
-                { label: "TAM 2035", val: `$${data.tam_usd_bn}B`, color: confColor(data.tam_confidence) },
-                { label: "IPO-W'keit", val: data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—" },
-                { label: "L. Signal", val: data.last_signal_date ?? "—", color: C.t3 },
+                { label: "Sektor", val: data.industry ?? "—" },
+                { label: "Kategorie", val: data.category ?? "—" },
+                { label: "Attraktivster Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t2 },
               ].map(m => (
                 <div key={m.label}>
-                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{m.label}</div>
+                  <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{m.label}</div>
                   <div style={{ fontSize: 12, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
                 </div>
               ))}
@@ -351,7 +379,7 @@ export default function CompanyDetailPage() {
           {data.intro && (
             <div style={{ borderLeft: `3px solid ${C.teal}`, paddingLeft: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7, color: C.t1 }}>
               {data.intro}
-              <div style={{ marginTop: 6, fontSize: 10, color: C.t3, fontFamily: C.mono }}>↳ Generated by Claude · Argo Analytics Intelligence Layer</div>
+              <div style={{ marginTop: 6, fontSize: 10, color: C.t3 }}>↳ Generated by Claude · Argo Analytics Intelligence Layer</div>
             </div>
           )}
 
@@ -385,27 +413,38 @@ export default function CompanyDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <Card>
                   <SLabel text="Unternehmen" />
-                  <InfoRow k="Sektor" v={data.industry ?? "—"} />
+                  {data.founding_year && <InfoRow k="Gegründet" v={String(data.founding_year)} />}
+                  {data.headquarters && <InfoRow k="Hauptsitz" v={data.headquarters} />}
+                  {data.headcount && <InfoRow k="Mitarbeiter" v={data.headcount} />}
                   <InfoRow k="Kategorie" v={data.category ?? "—"} />
-                  <InfoRow k="Technologie" v={data.core_technology ?? data.product_description ?? "—"} />
+                  <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                      <span style={{ fontSize: 12, color: C.t2, flexShrink: 0 }}>Technologie</span>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 12, color: C.t1, fontWeight: 500, marginBottom: data.technology_tags.length > 0 ? 6 : 0 }}>
+                          {data.core_technology ?? data.product_description ?? "—"}
+                        </div>
+                        {data.technology_tags.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                            {data.technology_tags.map(tag => (
+                              <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   {data.website && <InfoRow k="Website" v={data.website} vColor={C.teal} />}
                 </Card>
                 <Card>
                   <SLabel text="Markt & Positionierung" />
+                  <InfoRow k="Sektor" v={data.industry ?? "—"} />
                   <InfoRow k="TAM 2035" v={`$${data.tam_usd_bn}B`} vColor={confColor(data.tam_confidence)} />
                   <InfoRow k="TAM-Quelle" v={data.tam_source} />
                   <InfoRow k="Konfidenz" v={data.tam_confidence} vColor={confColor(data.tam_confidence)} />
                   <InfoRow k="Funding Total" v={fmtM(data.funding_total_usd_mn)} />
                 </Card>
               </div>
-              {data.technology_tags.length > 0 && (
-                <Card>
-                  <SLabel text="Technology Tags" />
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {data.technology_tags.map(tag => <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />)}
-                  </div>
-                </Card>
-              )}
             </div>
           )}
 
