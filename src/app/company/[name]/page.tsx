@@ -6,6 +6,11 @@ import { useParams, useRouter } from "next/navigation";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OwnershipItem { name: string; type: string; notes?: string }
+interface FundingRoundItem {
+  date?: string; type?: string; amount_usd_mn?: number;
+  lead_investor?: string; co_investors?: string[];
+  source?: string; notes?: string;
+}
 interface FundamentalsData {
   is_listed: boolean; ticker?: string; exchange?: string;
   price?: number; market_cap_bn?: number; pe_ratio?: number;
@@ -32,6 +37,7 @@ interface CompanyDetail {
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
   investment_path?: string; proxy_ticker?: string;
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
+  funding_rounds: FundingRoundItem[];
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
   scorings: ScoringDetail[];
   supply_chain_upstream: SupplyItem[]; supply_chain_downstream: SupplyItem[];
@@ -252,6 +258,99 @@ function ScoringCard({ s, rank }: { s: ScoringDetail; rank: number }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Funding Timeline ──────────────────────────────────────────────────────────
+
+function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
+  if (!rounds || rounds.length === 0) return null;
+
+  const fmtAmount = (n?: number | null) =>
+    n == null ? null : n >= 1000 ? `$${(n / 1000).toFixed(1)}B` : `$${n}M`;
+
+  const typeColor = (t?: string) => {
+    if (!t) return C.text3;
+    if (t === "IPO") return C.blue;
+    if (t === "Series D+" || t === "Series D") return C.teal;
+    if (t === "Series C") return C.teal;
+    if (t === "Series B") return C.amber;
+    if (t === "Series A") return C.amber;
+    return C.text2;
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{
+        fontSize: 10, color: C.text3, fontFamily: C.mono,
+        textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12,
+      }}>
+        Funding History
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {rounds.map((r, i) => {
+          const amount = fmtAmount(r.amount_usd_mn);
+          const color = typeColor(r.type);
+          const isLast = i === rounds.length - 1;
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 14,
+              paddingBottom: isLast ? 0 : 14,
+              borderBottom: isLast ? "none" : `1px solid ${C.border}`,
+              marginBottom: isLast ? 0 : 14,
+            }}>
+              {/* Dot + line */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: 3 }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: r.type === "IPO" ? C.blue : color,
+                  border: `2px solid ${color}`,
+                  flexShrink: 0,
+                }} />
+              </div>
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{
+                    fontFamily: C.mono, fontSize: 11, fontWeight: 700,
+                    color, background: color + "18",
+                    padding: "1px 7px", borderRadius: 4,
+                    border: `1px solid ${color}33`,
+                  }}>{r.type ?? "—"}</span>
+                  {amount && (
+                    <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.text1 }}>
+                      {amount}
+                    </span>
+                  )}
+                  {r.date && (
+                    <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3, marginLeft: "auto" }}>
+                      {r.date.slice(0, 7)}
+                    </span>
+                  )}
+                </div>
+                {r.lead_investor && (
+                  <div style={{ fontSize: 12, color: C.text2, marginTop: 4 }}>
+                    <span style={{ color: C.text3, fontSize: 10 }}>Lead: </span>
+                    {r.lead_investor}
+                    {r.co_investors && r.co_investors.length > 0 && (
+                      <span style={{ color: C.text3 }}>
+                        {" · "}{r.co_investors.slice(0, 2).join(", ")}
+                        {r.co_investors.length > 2 && ` +${r.co_investors.length - 2}`}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {r.notes && (
+                  <div style={{ fontSize: 11, color: C.text3, marginTop: 3, fontStyle: "italic" }}>
+                    {r.notes}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -557,13 +656,16 @@ export default function CompanyDetailPage() {
                   <MetricTile label="52W Low" value={fmt(data.fundamentals.week_52_low, 0, "$")} color={C.text2} />
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
-                  <MetricTile label="Funding Total" value={data.funding_total_usd_mn ? `$${data.funding_total_usd_mn >= 1000 ? (data.funding_total_usd_mn / 1000).toFixed(1) + "B" : data.funding_total_usd_mn + "M"}` : "—"} color={C.text1} />
-                  <MetricTile label="Stage" value={data.funding_stage ?? "—"} color={C.text2} />
-                  <MetricTile label="Last Round" value={data.funding_last_round?.split(";")[0] ?? "—"} color={C.text2} />
-                  <MetricTile label={data.ipo_status === "listed" ? "Status" : "IPO Potenzial"} value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
-                    color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : C.text2} />
-                </div>
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
+                    <MetricTile label="Funding Total" value={data.funding_total_usd_mn ? `$${data.funding_total_usd_mn >= 1000 ? (data.funding_total_usd_mn / 1000).toFixed(1) + "B" : data.funding_total_usd_mn + "M"}` : "—"} color={C.text1} />
+                    <MetricTile label="Stage" value={data.funding_stage ?? "—"} color={C.text2} />
+                    <MetricTile label="Last Round" value={data.funding_last_round?.split(";")[0] ?? "—"} color={C.text2} />
+                    <MetricTile label={data.ipo_status === "listed" ? "Status" : "IPO Potenzial"} value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
+                      color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : C.text2} />
+                  </div>
+                  <FundingTimeline rounds={data.funding_rounds} />
+                </>
               )}
             </Card>
 
