@@ -330,7 +330,6 @@ export default function CompanyDetailPage() {
         <button
           onClick={() => router.back()}
           style={{
-            background: "transparent", border: `1px solid ${C.border}`,
             borderRadius: 6, color: C.text2, fontSize: 12,
             padding: "5px 12px", cursor: "pointer", fontFamily: C.mono,
             display: "flex", alignItems: "center", gap: 6,
