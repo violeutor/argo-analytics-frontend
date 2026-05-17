@@ -365,10 +365,10 @@ export default function CompanyDetailPage() {
                 { label: "Letzte Runde", val: data.funding_last_round?.split(";")[0] ?? "—" },
                 { label: "Sektor", val: data.industry ?? "—" },
                 { label: "Kategorie", val: data.category ?? "—" },
-                { label: "Attraktivster Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t2 },
+                { label: "Attraktivster Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t1 },
               ].map(m => (
-                <div key={m.label}>
-                  <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{m.label}</div>
+                <div key={m.label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>{m.label}</div>
                   <div style={{ fontSize: 12, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
                 </div>
               ))}
