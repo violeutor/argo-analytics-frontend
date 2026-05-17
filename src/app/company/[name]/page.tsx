@@ -642,19 +642,22 @@ export default function CompanyDetailPage() {
             <Card>
               <SectionHead
                 title="Fundamentals"
-                sub={data.fundamentals.is_listed || data.ipo_status === "listed" ? `${data.fundamentals.ticker ?? data.proxy_ticker ?? ""} · ${data.fundamentals.exchange ?? ""} · Live via Yahoo Finance` : "Private company — Bundesanzeiger & Crunchbase"}
+                sub={data.fundamentals.is_listed || data.ipo_status === "listed" ? `${data.fundamentals.ticker ?? data.proxy_ticker ?? ""} · ${data.fundamentals.exchange ?? ""} · Live via Yahoo Finance` : "Private company — Bundesanzeiger & öffentliche Quellen"}
               />
               {data.fundamentals.is_listed ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 8 }}>
-                  <MetricTile label="Kurs" value={fmt(data.fundamentals.price, 2, data.fundamentals.currency === "EUR" ? "€" : "$")} color={C.text1} />
-                  <MetricTile label="Marktcap" value={fmtBn(data.fundamentals.market_cap_bn)} color={C.text1} />
-                  <MetricTile label="KGV" value={fmt(data.fundamentals.pe_ratio, 1)} color={C.text2} />
-                  <MetricTile label="Revenue" value={fmtBn(data.fundamentals.revenue_bn)} color={C.text2} />
-                  <MetricTile label="EBITDA" value={fmtBn(data.fundamentals.ebitda_bn)} color={C.text2} />
-                  <MetricTile label="Debt/EBITDA" value={data.fundamentals.debt_ebitda ? `${data.fundamentals.debt_ebitda.toFixed(1)}x` : "—"} color={data.fundamentals.debt_ebitda && data.fundamentals.debt_ebitda > 3 ? C.amber : C.text2} />
-                  <MetricTile label="52W High" value={fmt(data.fundamentals.week_52_high, 0, "$")} color={C.text2} />
-                  <MetricTile label="52W Low" value={fmt(data.fundamentals.week_52_low, 0, "$")} color={C.text2} />
-                </div>
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 8 }}>
+                    <MetricTile label="Kurs" value={fmt(data.fundamentals.price, 2, data.fundamentals.currency === "EUR" ? "€" : "$")} color={C.text1} />
+                    <MetricTile label="Marktcap" value={fmtBn(data.fundamentals.market_cap_bn)} color={C.text1} />
+                    <MetricTile label="KGV" value={fmt(data.fundamentals.pe_ratio, 1)} color={C.text2} />
+                    <MetricTile label="Revenue" value={fmtBn(data.fundamentals.revenue_bn)} color={C.text2} />
+                    <MetricTile label="EBITDA" value={fmtBn(data.fundamentals.ebitda_bn)} color={C.text2} />
+                    <MetricTile label="Debt/EBITDA" value={data.fundamentals.debt_ebitda ? `${data.fundamentals.debt_ebitda.toFixed(1)}x` : "—"} color={data.fundamentals.debt_ebitda && data.fundamentals.debt_ebitda > 3 ? C.amber : C.text2} />
+                    <MetricTile label="52W High" value={fmt(data.fundamentals.week_52_high, 0, "$")} color={C.text2} />
+                    <MetricTile label="52W Low" value={fmt(data.fundamentals.week_52_low, 0, "$")} color={C.text2} />
+                  </div>
+                  <FundingTimeline rounds={data.funding_rounds} />
+                </>
               ) : (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
