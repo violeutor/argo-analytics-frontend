@@ -29,7 +29,7 @@ interface CompanyDetail {
   website?: string; intro: string; industry?: string;
   product_description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
-  ipo_potential?: string; ipo_probability_pct?: number;
+  ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
   investment_path?: string; proxy_ticker?: string;
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
@@ -281,7 +281,7 @@ function SCRow({ item, color }: { item: SupplyItem; color: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = "/api/backend";
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -305,7 +305,7 @@ export default function CompanyDetailPage() {
   }, [name]);
 
   const PATH_COLORS: Record<string, string> = {
-    "IPO-direkt": C.teal, "Käufer-Proxy": C.blue,
+    "IPO-direkt": C.teal, "IPO": C.teal, "Käufer-Proxy": C.blue,
     "ETF-Proxy": C.amber, "Enabler": C.purple,
     "Beobachten": C.text3, "Archiv": C.red,
   };
@@ -405,7 +405,9 @@ export default function CompanyDetailPage() {
                       border={(PATH_COLORS[data.investment_path] ?? C.text2) + "33"}
                     />
                   )}
-                  {data.ipo_probability_pct != null && (
+                  {data.ipo_status === "listed" ? (
+                    <span style={{ fontFamily: C.mono, fontSize: 11, color: C.teal, fontWeight: 700 }}>● Börsennotiert</span>
+                  ) : data.ipo_probability_pct != null && (
                     <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>
                       IPO-Wahrscheinlichkeit{" "}
                       <span style={{ color: data.ipo_probability_pct >= 60 ? C.teal : data.ipo_probability_pct >= 35 ? C.amber : C.text2, fontWeight: 700 }}>
@@ -432,8 +434,10 @@ export default function CompanyDetailPage() {
               {/* Key metrics */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
                 <MetricTile label="Potenzial" value={data.ipo_potential === "IPO erfolgt" ? "Listed" : data.category?.includes("Hoch") ? "Hoch" : "—"} color={C.teal} />
-                <MetricTile label="IPO-Potenzial" value={data.ipo_potential ?? "—"}
-                  color={data.ipo_potential === "Hoch" ? C.teal : data.ipo_potential === "Mittel-hoch" ? C.amber : C.text2} />
+                <MetricTile
+                  label={data.ipo_status === "listed" ? "Status" : "IPO-Potenzial"}
+                  value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
+                  color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : data.ipo_potential === "Mittel-hoch" ? C.amber : C.text2} />
                 <MetricTile label="TAM 2035"
                   value={`$${data.tam_usd_bn}B`}
                   sub={data.tam_confidence === "high" ? "✓ verifiziert" : data.tam_confidence === "medium" ? "~ Schätzung" : "⚠ Fallback"}
@@ -539,7 +543,7 @@ export default function CompanyDetailPage() {
             <Card>
               <SectionHead
                 title="Fundamentals"
-                sub={data.fundamentals.is_listed ? `${data.fundamentals.ticker} · ${data.fundamentals.exchange} · Live via Yahoo Finance` : "Private company — public market data not available"}
+                sub={data.fundamentals.is_listed || data.ipo_status === "listed" ? `${data.fundamentals.ticker ?? data.proxy_ticker ?? ""} · ${data.fundamentals.exchange ?? ""} · Live via Yahoo Finance` : "Private company — Bundesanzeiger & Crunchbase"}
               />
               {data.fundamentals.is_listed ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 8 }}>
@@ -557,8 +561,8 @@ export default function CompanyDetailPage() {
                   <MetricTile label="Funding Total" value={data.funding_total_usd_mn ? `$${data.funding_total_usd_mn >= 1000 ? (data.funding_total_usd_mn / 1000).toFixed(1) + "B" : data.funding_total_usd_mn + "M"}` : "—"} color={C.text1} />
                   <MetricTile label="Stage" value={data.funding_stage ?? "—"} color={C.text2} />
                   <MetricTile label="Last Round" value={data.funding_last_round?.split(";")[0] ?? "—"} color={C.text2} />
-                  <MetricTile label="IPO Potenzial" value={data.ipo_potential ?? "—"}
-                    color={data.ipo_potential === "Hoch" ? C.teal : C.text2} />
+                  <MetricTile label={data.ipo_status === "listed" ? "Status" : "IPO Potenzial"} value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
+                    color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : C.text2} />
                 </div>
               )}
             </Card>
