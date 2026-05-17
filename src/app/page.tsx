@@ -57,15 +57,6 @@ async function fetchCompanies(): Promise<Company[]> {
   return res.json();
 }
 
-async function fetchMarketData(ticker: string): Promise<MarketData | null> {
-  try {
-    const res = await fetch(`/api/market?ticker=${ticker}`);
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
-}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
