@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface OwnershipItem { name: string; type: string; notes?: string }
+interface OwnershipItem { name: string; type: string; role?: string; notes?: string }
 interface FundingRoundItem {
   date?: string; type?: string; amount_usd_mn?: number;
   lead_investor?: string; co_investors?: string[];
@@ -46,790 +46,487 @@ interface CompanyDetail {
   is_known: boolean; warnings: string[];
 }
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
 
 const C = {
-  bg: "#09090B", bgCard: "#111113", bgSection: "#0D0D0F",
-  border: "rgba(255,255,255,0.07)", borderMd: "rgba(255,255,255,0.12)",
-  teal: "#00D4A0", tealDim: "rgba(0,212,160,0.10)", tealBorder: "rgba(0,212,160,0.22)",
-  amber: "#F0A500", amberDim: "rgba(240,165,0,0.09)",
-  red: "#F04545", redDim: "rgba(240,69,69,0.09)",
-  blue: "#5B9CF6", blueDim: "rgba(91,156,246,0.10)",
-  purple: "#C084FC", purpleDim: "rgba(192,132,252,0.10)",
-  text1: "#FAFAF9", text2: "#A1A1AA", text3: "#52525B",
-  mono: "'DM Mono','Fira Code',monospace",
-  display: "'Plus Jakarta Sans','Space Grotesk',system-ui,sans-serif",
-  body: "'DM Sans',system-ui,sans-serif",
+  bg: "#0D0F12", bgCard: "#13161B", bgHover: "#1A1E24",
+  border: "rgba(255,255,255,0.06)", borderMd: "rgba(255,255,255,0.10)",
+  teal: "#00D4A0", tealDim: "rgba(0,212,160,0.08)", tealBorder: "rgba(0,212,160,0.20)",
+  blue: "#3B6EF0", blueDim: "rgba(59,110,240,0.10)",
+  amber: "#F0A500", amberDim: "rgba(240,165,0,0.10)",
+  red: "#F04545", redDim: "rgba(240,69,69,0.10)",
+  purple: "#9B6EF0", purpleDim: "rgba(155,110,240,0.10)",
+  t1: "#F0F0EE", t2: "#9A9B99", t3: "#4A4C4A",
+  mono: "'DM Mono',monospace",
+  display: "'Plus Jakarta Sans',sans-serif",
+  body: "'DM Sans',sans-serif",
+  rSm: "6px", rMd: "10px", rLg: "14px",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const fmt = (n?: number | null, d = 2, pre = "") =>
   n == null ? "—" : `${pre}${n.toFixed(d)}`;
-
 const fmtBn = (n?: number | null) =>
   n == null ? "—" : n >= 1 ? `$${n.toFixed(1)}B` : `$${(n * 1000).toFixed(0)}M`;
-
-const ratingColor = (r: string) => {
-  if (r.startsWith("A")) return C.teal;
-  if (r.startsWith("B")) return C.blue;
-  if (r.startsWith("C")) return C.amber;
-  return C.red;
-};
-
-const ratingBg = (r: string) => {
-  if (r.startsWith("A")) return C.tealDim;
-  if (r.startsWith("B")) return C.blueDim;
-  if (r.startsWith("C")) return C.amberDim;
-  return C.redDim;
-};
-
+const fmtM = (n?: number | null) =>
+  n == null ? "—" : n >= 1000 ? `$${(n / 1000).toFixed(1)}B` : `$${n}M`;
+const ratingColor = (r: string) =>
+  r.startsWith("A") ? C.teal : r.startsWith("B") ? C.blue : r.startsWith("C") ? C.amber : C.red;
 const mfrColor = (s: string) =>
   s === "Feasible" ? C.teal : s === "Watch" ? C.amber : C.red;
-
-const srrColor = (c: string) =>
-  c.includes("++") ? C.teal : c === "Transformational" ? C.blue :
-  c === "High Strategic" ? C.amber : C.text3;
-
 const confColor = (c: string) =>
   c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
-
-const TR_LABELS: Record<string, string> = {
-  tech_stack_fit: "Tech Stack Fit",
-  integration_capacity: "Integration Capacity",
-  gtm_fit: "GTM Fit",
-  capital_deployment_velocity: "Capital Deployment Velocity",
-  rd_intensity: "R&D Intensity",
-  regulatory_readiness: "Regulatory Readiness",
-  strategic_coherence: "Strategic Coherence",
+const PATH_COLORS: Record<string, string> = {
+  "IPO": C.teal, "IPO-direkt": C.teal, "Käufer-Proxy": C.blue,
+  "ETF-Proxy": C.amber, "Enabler": C.purple, "Beobachten": C.t3, "Archiv": C.red,
 };
+const initials = (n: string) => n.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Components ────────────────────────────────────────────────────────────────
 
-function SectionHead({ title, sub }: { title: string; sub?: string }) {
+function Badge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <div style={{ width: 3, height: 18, background: C.teal, borderRadius: 2, flexShrink: 0 }} />
-      <div>
-        <div style={{ fontFamily: C.display, fontSize: 11, fontWeight: 700, color: C.text1, textTransform: "uppercase", letterSpacing: "0.1em" }}>{title}</div>
-        {sub && <div style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{sub}</div>}
-      </div>
-    </div>
+    <span style={{
+      display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 500,
+      padding: "3px 10px", borderRadius: 99, fontFamily: C.mono, letterSpacing: ".02em",
+      color, background: bg, border: `1px solid ${border}`,
+    }}>{label}</span>
   );
+}
+
+function SLabel({ text }: { text: string }) {
+  return <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>{text}</div>;
 }
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{
-      background: C.bgCard, border: `1px solid ${C.border}`,
-      borderRadius: 10, padding: "18px 20px", ...style,
-    }}>
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px", ...style }}>
       {children}
     </div>
   );
 }
 
-function MetricTile({ label, value, sub, color, bar }: {
-  label: string; value: string; sub?: string; color?: string; bar?: number;
-}) {
+function FundTile({ label, val, sub, color }: { label: string; val: string; sub?: string; color?: string }) {
   return (
-    <div style={{ background: C.bgSection, border: `1px solid ${C.border}`, borderRadius: 7, padding: "10px 12px" }}>
-      <div style={{ fontSize: 9, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: color ?? C.text1, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: C.text2, marginTop: 3 }}>{sub}</div>}
-      {bar != null && (
-        <div style={{ height: 3, background: C.border, borderRadius: 2, marginTop: 6, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${Math.min(bar * 100, 100)}%`, background: color ?? C.teal, borderRadius: 2, transition: "width 0.5s" }} />
-        </div>
-      )}
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
+      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: color ?? C.t1, lineHeight: 1 }}>{val}</div>
+      {sub && <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
 
-function Badge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
+function InfoRow({ k, v, vColor }: { k: string; v: string; vColor?: string }) {
   return (
-    <span style={{
-      display: "inline-block", padding: "2px 8px", borderRadius: 4,
-      fontSize: 10, fontWeight: 600, fontFamily: C.mono,
-      color, background: bg, border: `1px solid ${border}`, letterSpacing: "0.04em",
-    }}>{label}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
+      <span style={{ fontSize: 12, color: C.t2 }}>{k}</span>
+      <span style={{ fontSize: 12, color: vColor ?? C.t1, fontWeight: 500, fontFamily: C.mono }}>{v}</span>
+    </div>
   );
 }
 
-// ── Scoring card ──────────────────────────────────────────────────────────────
+function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
+  if (!rounds || rounds.length === 0) return null;
+  const dotColor = (t?: string) =>
+    t === "IPO" ? C.teal : t?.includes("C") || t?.includes("D") ? C.teal : t?.includes("B") ? C.blue : C.t3;
+  return (
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
+      <SLabel text="Funding History" />
+      {rounds.map((r, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: i < rounds.length - 1 ? `1px solid ${C.border}` : "none" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor(r.type), flexShrink: 0 }} />
+          <div style={{ fontSize: 12, color: C.t1, fontWeight: 500, minWidth: 80 }}>{r.type ?? "—"}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 12, color: C.teal, minWidth: 80 }}>{r.amount_usd_mn ? fmtM(r.amount_usd_mn) : "—"}</div>
+          {r.lead_investor && <div style={{ fontSize: 11, color: C.t2, flex: 1 }}>{r.lead_investor}</div>}
+          <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginLeft: "auto" }}>{r.date ? r.date.slice(0, 7) : "—"}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ScoringCard({ s, rank }: { s: ScoringDetail; rank: number }) {
   const [open, setOpen] = useState(rank === 1);
   const rc = ratingColor(s.rating);
-
+  const mc = mfrColor(s.mfr_signal);
   return (
-    <div style={{
-      border: `1px solid ${open ? C.borderMd : C.border}`,
-      borderRadius: 8, marginBottom: 8, overflow: "hidden",
-      background: open ? C.bgCard : "transparent",
-      transition: "all 0.15s",
-    }}>
-      {/* Header row */}
-      <div
-        onClick={() => setOpen(!open)}
-        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer" }}
-      >
-        <div style={{
-          width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-          background: rank === 1 ? C.tealDim : "transparent",
-          border: `1px solid ${rank === 1 ? C.teal : C.border}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: C.mono, fontSize: 10, fontWeight: 700,
-          color: rank === 1 ? C.teal : C.text3,
-        }}>{rank}</div>
-
+    <div style={{ background: C.bgCard, border: `1px solid ${open ? C.borderMd : C.border}`, borderRadius: C.rLg, marginBottom: 10, overflow: "hidden" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", cursor: "pointer" }}>
         <div style={{ flex: 1 }}>
-          <span style={{ fontWeight: 600, fontSize: 13, color: C.text1 }}>{s.buyer_name}</span>
-          {s.ticker && <span style={{ fontFamily: C.mono, fontSize: 11, color: C.teal, marginLeft: 8 }}>{s.ticker}</span>}
+          <div style={{ fontFamily: C.mono, fontSize: 14, fontWeight: 500, color: C.t1, display: "flex", alignItems: "center", gap: 8 }}>
+            {s.ticker ? `Käufer-Proxy · ${s.ticker}` : s.buyer_name}
+            {s.execution_warning && <span style={{ color: C.amber, fontSize: 11 }}>⚠</span>}
+          </div>
+          <div style={{ fontSize: 11, color: C.t2, marginTop: 3 }}>{s.buyer_name} · {s.srr_category}</div>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            fontFamily: C.mono, fontSize: 10, fontWeight: 700,
-            color: rc, background: ratingBg(s.rating),
-            padding: "2px 8px", borderRadius: 4, border: `1px solid ${rc}44`,
-          }}>{s.rating}</span>
-          <span style={{ fontFamily: C.mono, fontSize: 12, color: C.text2 }}>
-            {s.deal_success_score.toFixed(3)}
-          </span>
-          {s.execution_warning && <span style={{ color: C.amber, fontSize: 11 }} title="Execution Warning">⚠</span>}
-          <span style={{ color: C.text3, fontSize: 11, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>▾</span>
-        </div>
+        <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontFamily: C.mono, fontWeight: 600, color: rc, background: rc + "18", border: `1px solid ${rc}33` }}>{s.rating}</span>
       </div>
-
-      {/* Expanded */}
       {open && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px" }}>
-          {/* Top metrics */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8, marginBottom: 16 }}>
-            <MetricTile label="SRR" value={`${s.srr_value.toFixed(2)}x`} sub={s.srr_category}
-              color={srrColor(s.srr_category)} bar={Math.min(s.srr_value / 5, 1)} />
-            <MetricTile label="MFR" value={s.mfr_value.toFixed(3)} sub={s.mfr_signal}
-              color={mfrColor(s.mfr_signal)} bar={Math.max(0, 1 - s.mfr_value / 0.5)} />
-            <MetricTile label="Tech Readiness" value={s.tech_readiness.overall.toFixed(2)} sub="/1.00"
-              color={s.tech_readiness.overall >= 0.7 ? C.teal : s.tech_readiness.overall >= 0.5 ? C.amber : C.red}
-              bar={s.tech_readiness.overall} />
-            <MetricTile label="Deal Success Score" value={s.deal_success_score.toFixed(3)} sub="SRR_norm × MFR_norm × TR"
-              color={s.deal_success_score >= 0.3 ? C.teal : s.deal_success_score >= 0.15 ? C.amber : C.red}
-              bar={s.deal_success_score} />
-          </div>
-
-          {/* TechReadiness 7-factor breakdown */}
-          <div style={{ marginBottom: s.execution_warning ? 12 : 0 }}>
-            <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
-              Tech Readiness — 7 Factors
-              {!s.tech_readiness.inputs_provided && (
-                <span style={{ color: C.amber, marginLeft: 8 }}>(neutral fallback 0.5)</span>
-              )}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {Object.entries(s.tech_readiness.factors).map(([key, val]) => (
-                <div key={key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 160, fontSize: 11, color: C.text2, flexShrink: 0 }}>
-                    {TR_LABELS[key] ?? key}
-                    <span style={{ color: C.text3, fontFamily: C.mono, fontSize: 10, marginLeft: 4 }}>
-                      ×{((s.tech_readiness.factor_weights[key] ?? 0) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                  <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", width: `${val * 100}%`,
-                      background: val >= 0.7 ? C.teal : val >= 0.5 ? C.amber : C.red,
-                      borderRadius: 2, transition: "width 0.4s",
-                    }} />
-                  </div>
-                  <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text2, width: 32, textAlign: "right" }}>
-                    {val.toFixed(2)}
-                  </span>
+        <div style={{ padding: "0 20px 20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
+            {[
+              { label: "SRR — Strategic Relevance", val: `${s.srr_value.toFixed(2)}×`, desc: s.srr_category, color: C.teal, pct: Math.min(s.srr_value / 2, 1) },
+              { label: "MFR — M&A Feasibility", val: `${s.mfr_value.toFixed(2)}×`, desc: `${s.mfr_signal === "Feasible" ? "🟢" : s.mfr_signal === "Watch" ? "🟡" : "🔴"} ${s.mfr_signal}`, color: mc, pct: s.mfr_value < 0.15 ? 0.9 : s.mfr_value < 0.5 ? 0.55 : 0.2 },
+              { label: "Tech Readiness", val: s.tech_readiness.overall.toFixed(2), desc: s.tech_readiness.inputs_provided ? "Inputs provided" : "Neutral fallback", color: C.blue, pct: s.tech_readiness.overall },
+            ].map(tile => (
+              <div key={tile.label} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{tile.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: tile.color }}>{tile.val}</div>
+                <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>{tile.desc}</div>
+                <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, marginTop: 8, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${tile.pct * 100}%`, background: tile.color, borderRadius: 99 }} />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-
-          {s.execution_warning && (
-            <div style={{ marginTop: 12, padding: "8px 12px", background: C.amberDim, border: `1px solid ${C.amber}33`, borderRadius: 6, fontSize: 11, color: C.amber }}>
-              ⚠ Execution Warning: Low-Cap-Buyer mit hohem SRR — Finanzierbarkeit separat validieren.
-            </div>
-          )}
+          <div style={{ background: rc + "0A", border: `1px solid ${rc}33`, borderRadius: C.rMd, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, color: C.t2, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Gesamturteil</span>
+            <span style={{ fontFamily: C.display, fontSize: 15, fontWeight: 700, color: rc }}>{s.rating}</span>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ── Funding Timeline ──────────────────────────────────────────────────────────
-
-function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
-  if (!rounds || rounds.length === 0) return null;
-
-  const fmtAmount = (n?: number | null) =>
-    n == null ? null : n >= 1000 ? `$${(n / 1000).toFixed(1)}B` : `$${n}M`;
-
-  const typeColor = (t?: string) => {
-    if (!t) return C.text3;
-    if (t === "IPO") return C.blue;
-    if (t === "Series D+" || t === "Series D") return C.teal;
-    if (t === "Series C") return C.teal;
-    if (t === "Series B") return C.amber;
-    if (t === "Series A") return C.amber;
-    return C.text2;
-  };
-
+function SupplyRow({ item, color }: { item: SupplyItem; color: string }) {
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{
-        fontSize: 10, color: C.text3, fontFamily: C.mono,
-        textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12,
-      }}>
-        Funding History
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        {rounds.map((r, i) => {
-          const amount = fmtAmount(r.amount_usd_mn);
-          const color = typeColor(r.type);
-          const isLast = i === rounds.length - 1;
-          return (
-            <div key={i} style={{
-              display: "flex", alignItems: "flex-start", gap: 14,
-              paddingBottom: isLast ? 0 : 14,
-              borderBottom: isLast ? "none" : `1px solid ${C.border}`,
-              marginBottom: isLast ? 0 : 14,
-            }}>
-              {/* Dot + line */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: 3 }}>
-                <div style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: r.type === "IPO" ? C.blue : color,
-                  border: `2px solid ${color}`,
-                  flexShrink: 0,
-                }} />
-              </div>
-              {/* Content */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{
-                    fontFamily: C.mono, fontSize: 11, fontWeight: 700,
-                    color, background: color + "18",
-                    padding: "1px 7px", borderRadius: 4,
-                    border: `1px solid ${color}33`,
-                  }}>{r.type ?? "—"}</span>
-                  {amount && (
-                    <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.text1 }}>
-                      {amount}
-                    </span>
-                  )}
-                  {r.date && (
-                    <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3, marginLeft: "auto" }}>
-                      {r.date.slice(0, 7)}
-                    </span>
-                  )}
-                </div>
-                {r.lead_investor && (
-                  <div style={{ fontSize: 12, color: C.text2, marginTop: 4 }}>
-                    <span style={{ color: C.text3, fontSize: 10 }}>Lead: </span>
-                    {r.lead_investor}
-                    {r.co_investors && r.co_investors.length > 0 && (
-                      <span style={{ color: C.text3 }}>
-                        {" · "}{r.co_investors.slice(0, 2).join(", ")}
-                        {r.co_investors.length > 2 && ` +${r.co_investors.length - 2}`}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {r.notes && (
-                  <div style={{ fontSize: 11, color: C.text3, marginTop: 3, fontStyle: "italic" }}>
-                    {r.notes}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Supply chain row ──────────────────────────────────────────────────────────
-
-function SCRow({ item, color }: { item: SupplyItem; color: string }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "8px 0", borderBottom: `1px solid ${C.border}`,
-    }}>
-      <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color, minWidth: 52 }}>{item.ticker}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+      <span style={{ fontFamily: C.mono, fontSize: 12, color, minWidth: 80 }}>{item.ticker}</span>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, color: C.text1 }}>{item.name}</div>
-        <div style={{ fontSize: 11, color: C.text2 }}>{item.role}</div>
+        <div style={{ fontSize: 12, color: C.t1 }}>{item.name}</div>
+        <div style={{ fontSize: 10, color: C.t3 }}>{item.role}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ width: 48, height: 3, background: C.border, borderRadius: 2 }}>
-          <div style={{ width: `${item.relevance * 100}%`, height: "100%", background: color, borderRadius: 2 }} />
+        <div style={{ width: 60, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${item.relevance * 100}%`, background: color, borderRadius: 99 }} />
         </div>
-        <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{Math.round(item.relevance * 100)}%</span>
+        <span style={{ fontSize: 11, color: C.t2, fontFamily: C.mono }}>{Math.round(item.relevance * 100)}%</span>
       </div>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+function Placeholder({ title, sub }: { title: string; sub: string }) {
+  return (
+    <Card>
+      <SLabel text={title} />
+      <div style={{ padding: "40px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>{sub}</div>
+    </Card>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
+const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Exposure Types", "Signal History"];
 
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const name = decodeURIComponent((params?.name ?? '') as string);
+  const name = decodeURIComponent((params?.name ?? "") as string);
 
   const [data, setData] = useState<CompanyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     if (!name) return;
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`)
-      .then(r => {
-        if (!r.ok) throw new Error(`${r.status}`);
-        return r.json();
-      })
+      .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [name]);
 
-  const PATH_COLORS: Record<string, string> = {
-    "IPO-direkt": C.teal, "IPO": C.teal, "Käufer-Proxy": C.blue,
-    "ETF-Proxy": C.amber, "Enabler": C.purple,
-    "Beobachten": C.text3, "Archiv": C.red,
-  };
-
-  const [activeTab, setActiveTab] = useState(0);
-
-  const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Exposure Types", "Signal History"];
-
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text1, fontFamily: C.body }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 14 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(0,212,160,0.2); }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        button { font-family: inherit; }
       `}</style>
 
-      {/* Top bar */}
-      <div style={{
-        borderBottom: `1px solid ${C.border}`, padding: "0 24px",
-        display: "flex", alignItems: "center", gap: 16, height: 52,
-        position: "sticky", top: 0, zIndex: 100,
-        background: C.bg + "EE", backdropFilter: "blur(12px)",
+      {/* Nav */}
+      <nav style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 2rem", height: 52, borderBottom: `1px solid ${C.border}`,
+        background: "rgba(13,15,18,0.97)", position: "sticky", top: 0, zIndex: 100,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 24, height: 24, borderRadius: 5, background: C.teal, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontFamily: C.mono, fontSize: 11, fontWeight: 700, color: "#000" }}>A</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => router.push("/")}>
+          <div style={{ width: 28, height: 28, background: C.teal, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 13, color: C.bg }}>A</div>
+          <div>
+            <div style={{ fontFamily: C.display, fontWeight: 600, fontSize: 15, color: C.t1 }}>Argo Analytics</div>
+            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".04em" }}>Investment Intelligence</div>
           </div>
-          <span style={{ fontFamily: C.display, fontSize: 13, fontWeight: 700 }}>Argo Analytics</span>
         </div>
-        {data && (
-          <>
-            <div style={{ width: 1, height: 20, background: C.border }} />
-            <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>
-              {data.name}
-            </span>
-          </>
-        )}
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3, fontFamily: C.mono }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} />
+          Live · Research
+        </div>
+      </nav>
 
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 32px" }}>
+      {/* Content */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1.5rem 2rem 4rem" }}>
 
-        {/* Zurück-Button */}
-        <button
-          onClick={() => router.back()}
-          style={{
-            marginBottom: 20, borderRadius: 6, color: C.text2, fontSize: 12,
-            padding: "5px 12px", cursor: "pointer", fontFamily: C.mono,
-            display: "flex", alignItems: "center", gap: 6, background: "transparent",
-            border: `1px solid ${C.border}`, transition: "all 0.15s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
-        >
-          ← Zurück
-        </button>
-
-        {/* Loading */}
         {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[140, 80, 200, 120].map((h, i) => (
-              <div key={i} style={{
-                height: h, background: C.bgCard, borderRadius: 10,
-                border: `1px solid ${C.border}`,
-                animation: "pulse 1.5s ease-in-out infinite",
-                opacity: 0.5 - i * 0.05,
-              }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
+            {[120, 60, 180].map((h, i) => (
+              <div key={i} style={{ height: h, background: C.bgCard, borderRadius: C.rLg, border: `1px solid ${C.border}`, opacity: 0.5 }} />
             ))}
-            <style>{`@keyframes pulse { 0%,100%{opacity:0.5}50%{opacity:0.2} }`}</style>
           </div>
         )}
 
-        {/* Error */}
         {error && (
-          <div style={{ padding: "16px 20px", background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: 8, color: C.red }}>
+          <div style={{ padding: "16px 20px", background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: C.rMd, color: C.red, marginTop: 16 }}>
             Unternehmen nicht gefunden: {error}
           </div>
         )}
 
-        {data && !loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {data && !loading && (<>
 
-            {/* ── Hero ── */}
-            <Card>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: C.display, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: 6 }}>
+          {/* Back + breadcrumb */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <button onClick={() => router.back()} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
+              ← Zurück
+            </button>
+            <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>ANALYSE · {data.name.toUpperCase()}</span>
+          </div>
+
+          {/* Company Header */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rLg, padding: "20px 24px", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: C.rMd, flexShrink: 0, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 14, color: C.teal }}>
+                  {initials(data.name)}
+                </div>
+                <div>
+                  <div style={{ fontFamily: C.display, fontSize: 18, fontWeight: 700, color: C.t1, display: "flex", alignItems: "center", gap: 8 }}>
                     {data.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: C.text2 }}>{data.category}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-                  {data.proxy_ticker && (
-                    <Badge label={data.proxy_ticker} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
-                  )}
-                  {data.investment_path && (
-                    <Badge
-                      label={data.investment_path}
-                      color={PATH_COLORS[data.investment_path] ?? C.text2}
-                      bg={(PATH_COLORS[data.investment_path] ?? C.text2) + "18"}
-                      border={(PATH_COLORS[data.investment_path] ?? C.text2) + "33"}
-                    />
-                  )}
-                  {data.ipo_status === "listed" ? (
-                    <span style={{ fontFamily: C.mono, fontSize: 11, color: C.teal, fontWeight: 700 }}>● Börsennotiert</span>
-                  ) : data.ipo_probability_pct != null && (
-                    <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text3 }}>
-                      IPO-Wahrscheinlichkeit{" "}
-                      <span style={{ color: data.ipo_probability_pct >= 60 ? C.teal : data.ipo_probability_pct >= 35 ? C.amber : C.text2, fontWeight: 700 }}>
-                        {data.ipo_probability_pct}%
-                      </span>
+                    <span style={{ fontFamily: C.mono, fontSize: 12, color: data.ipo_status === "listed" ? C.teal : C.t3, background: data.ipo_status === "listed" ? C.tealDim : "rgba(255,255,255,0.05)", border: `1px solid ${data.ipo_status === "listed" ? C.tealBorder : C.border}`, padding: "2px 8px", borderRadius: 99 }}>
+                      {data.ipo_status === "listed" ? "● Listed" : "Private"}
                     </span>
-                  )}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.t2, marginTop: 3, fontFamily: C.mono }}>
+                    {[data.category, data.investment_path, data.funding_stage].filter(Boolean).join(" · ")}
+                  </div>
                 </div>
               </div>
-
-              {/* AI Intro */}
-              <div style={{
-                borderLeft: `3px solid ${C.teal}`,
-                paddingLeft: 14, marginBottom: 16,
-                fontSize: 13, lineHeight: 1.7, color: C.text1,
-                fontStyle: "normal",
-              }}>
-                {data.intro}
-                <div style={{ marginTop: 6, fontSize: 10, color: C.text3, fontFamily: C.mono }}>
-                  ↳ Generated by Claude · Argo Analytics Intelligence Layer
-                </div>
-              </div>
-
-              {/* Key metrics */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
-                <MetricTile label="Potenzial" value={data.ipo_potential === "IPO erfolgt" ? "Listed" : data.category?.includes("Hoch") ? "Hoch" : "—"} color={C.teal} />
-                <MetricTile
-                  label={data.ipo_status === "listed" ? "Status" : "IPO-Potenzial"}
-                  value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
-                  color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : data.ipo_potential === "Mittel-hoch" ? C.amber : C.text2} />
-                <MetricTile label="TAM 2035"
-                  value={`$${data.tam_usd_bn}B`}
-                  sub={data.tam_confidence === "high" ? "✓ verifiziert" : data.tam_confidence === "medium" ? "~ Schätzung" : "⚠ Fallback"}
-                  color={confColor(data.tam_confidence)} />
-                <MetricTile label="Funding"
-                  value={data.funding_total_usd_mn
-                    ? data.funding_total_usd_mn >= 1000
-                      ? `$${(data.funding_total_usd_mn / 1000).toFixed(1)}B`
-                      : `$${data.funding_total_usd_mn}M`
-                    : "—"}
-                  color={C.text1} />
-              </div>
-
-              {/* Last signal */}
-              {data.last_signal && (
-                <div style={{
-                  marginTop: 12, display: "flex", gap: 8, alignItems: "center",
-                  padding: "8px 12px", background: C.amberDim,
-                  border: `1px solid ${C.amber}22`, borderRadius: 6, fontSize: 12,
-                }}>
-                  <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
-                  <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{data.last_signal_date}</span>
-                  <span style={{ color: C.text2 }}>{data.last_signal}</span>
-                </div>
+              {data.scorings[0] && (
+                <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontFamily: C.mono, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
+                  {data.scorings[0].rating}
+                </span>
               )}
-            </Card>
-
-            {/* ── Tab Nav ── */}
-            <div style={{
-              display: "flex", gap: 2, borderBottom: `1px solid ${C.border}`,
-              overflowX: "auto", scrollbarWidth: "none",
-            }}>
-              {TABS.map((tab, i) => (
-                <button key={tab} onClick={() => setActiveTab(i)} style={{
-                  padding: "10px 16px", fontSize: 12, fontFamily: C.mono,
-                  fontWeight: 600, cursor: "pointer", border: "none",
-                  background: "transparent", whiteSpace: "nowrap",
-                  color: activeTab === i ? C.teal : C.text3,
-                  borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
-                  marginBottom: -1, transition: "all 0.15s",
-                }}>{tab}</button>
-              ))}
             </div>
 
-            {/* ── Tab 0: Überblick ── */}
-            {activeTab === 0 && (<>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+              {data.ipo_potential && <Badge label={`Potenzial: ${data.ipo_potential}`} color={data.ipo_potential === "Hoch" ? C.teal : C.amber} bg={data.ipo_potential === "Hoch" ? C.tealDim : C.amberDim} border={data.ipo_potential === "Hoch" ? C.tealBorder : C.amber + "33"} />}
+              {data.investment_path && <Badge label={data.investment_path} color={PATH_COLORS[data.investment_path] ?? C.t2} bg={(PATH_COLORS[data.investment_path] ?? C.t2) + "18"} border={(PATH_COLORS[data.investment_path] ?? C.t2) + "33"} />}
+              {data.proxy_ticker && <Badge label={`Proxy: ${data.proxy_ticker}`} color={C.amber} bg={C.amberDim} border={C.amber + "33"} />}
+              {data.industry && <Badge label={data.industry} color={C.t2} bg="rgba(255,255,255,0.05)" border={C.border} />}
+            </div>
 
-            {/* ── Industry & Product ── */}
-            <Card>
-              <SectionHead title="Industry & Product" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Sector</div>
-                  <div style={{ fontSize: 13, color: C.text1 }}>{data.industry ?? "—"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+              {[
+                { label: "Funding Total", val: fmtM(data.funding_total_usd_mn) },
+                { label: "Letzte Runde", val: data.funding_last_round?.split(";")[0] ?? "—" },
+                { label: "TAM 2035", val: `$${data.tam_usd_bn}B`, color: confColor(data.tam_confidence) },
+                { label: "IPO-W'keit", val: data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—" },
+                { label: "L. Signal", val: data.last_signal_date ?? "—", color: C.t3 },
+              ].map(m => (
+                <div key={m.label}>
+                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{m.label}</div>
+                  <div style={{ fontSize: 12, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Core Technology</div>
-                  <div style={{ fontSize: 13, color: C.text1 }}>{data.product_description ?? "—"}</div>
-                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* AI Intro */}
+          {data.intro && (
+            <div style={{ borderLeft: `3px solid ${C.teal}`, paddingLeft: 14, marginBottom: 16, fontSize: 13, lineHeight: 1.7, color: C.t1 }}>
+              {data.intro}
+              <div style={{ marginTop: 6, fontSize: 10, color: C.t3, fontFamily: C.mono }}>↳ Generated by Claude · Argo Analytics Intelligence Layer</div>
+            </div>
+          )}
+
+          {/* Last signal */}
+          {data.last_signal && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, padding: "8px 14px", background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: C.rMd, fontSize: 12 }}>
+              <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
+              <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{data.last_signal_date}</span>
+              <span style={{ color: C.t2 }}>{data.last_signal}</span>
+            </div>
+          )}
+
+          {/* Tab Nav */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
+            {TABS.map((tab, i) => (
+              <button key={tab} onClick={() => setActiveTab(i)} style={{
+                padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: "none", background: "none", whiteSpace: "nowrap",
+                color: activeTab === i ? C.teal : C.t2,
+                borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
+                marginBottom: -1, transition: "all .15s", fontFamily: C.body,
+              }}>
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab 0: Überblick */}
+          {activeTab === 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Card>
+                  <SLabel text="Unternehmen" />
+                  <InfoRow k="Sektor" v={data.industry ?? "—"} />
+                  <InfoRow k="Kategorie" v={data.category ?? "—"} />
+                  <InfoRow k="Technologie" v={data.core_technology ?? data.product_description ?? "—"} />
+                  {data.website && <InfoRow k="Website" v={data.website} vColor={C.teal} />}
+                </Card>
+                <Card>
+                  <SLabel text="Markt & Positionierung" />
+                  <InfoRow k="TAM 2035" v={`$${data.tam_usd_bn}B`} vColor={confColor(data.tam_confidence)} />
+                  <InfoRow k="TAM-Quelle" v={data.tam_source} />
+                  <InfoRow k="Konfidenz" v={data.tam_confidence} vColor={confColor(data.tam_confidence)} />
+                  <InfoRow k="Funding Total" v={fmtM(data.funding_total_usd_mn)} />
+                </Card>
               </div>
-
               {data.technology_tags.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Technology Tags</div>
+                <Card>
+                  <SLabel text="Technology Tags" />
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {data.technology_tags.map(tag => (
-                      <span key={tag} style={{
-                        padding: "3px 10px", borderRadius: 4, fontSize: 11,
-                        fontFamily: C.mono, fontWeight: 500,
-                        background: C.tealDim, color: C.teal, border: `1px solid ${C.tealBorder}`,
-                      }}>{tag}</span>
-                    ))}
+                    {data.technology_tags.map(tag => <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />)}
                   </div>
-                </div>
+                </Card>
               )}
+            </div>
+          )}
 
-              {/* TAM source */}
-              <div style={{ marginTop: 14, padding: "10px 12px", background: C.bgSection, borderRadius: 6, border: `1px solid ${C.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: C.text2 }}>
-                    TAM 2035: <span style={{ color: confColor(data.tam_confidence), fontWeight: 600 }}>${data.tam_usd_bn}B</span>
-                  </span>
-                  <span style={{ fontSize: 10, color: C.text3, fontFamily: C.mono }}>{data.tam_source}</span>
-                </div>
-              </div>
-            </Card>
+          {/* Tab 1: Markt */}
+          {activeTab === 1 && <Placeholder title="Markt" sub="TAM-Breakdown · Wachstumstreiber · Wettbewerbslandschaft — Phase 2" />}
 
-            </>)}
-
-            {/* ── Tab 1: Markt ── */}
-            {activeTab === 1 && (<>
+          {/* Tab 2: Ownership */}
+          {activeTab === 2 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Card>
-                <SectionHead title="Markt" sub="TAM-Breakdown · Wachstumstreiber · Wettbewerbslandschaft" />
-                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
-                  Coming soon — Marktdaten werden in Phase 2 befüllt
-                </div>
-              </Card>
-            </>)}
-
-            {/* ── Tab 2: Ownership ── */}
-            {activeTab === 2 && (<>
-
-            {/* ── Ownership Structure ── */}
-            <Card>
-              <SectionHead title="Ownership Structure" sub="Known investors & strategic shareholders" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SLabel text="Bekannte Investoren" />
                 {data.ownership.map((o, i) => (
-                  <div key={i} style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "10px 0",
-                    borderBottom: i < data.ownership.length - 1 ? `1px solid ${C.border}` : "none",
-                  }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: 6, flexShrink: 0,
-                      background: o.type === "Corporate" ? C.blueDim : o.type === "Fund" ? C.tealDim : o.type === "Government" ? C.purpleDim : C.amberDim,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 10, fontFamily: C.mono, fontWeight: 700,
-                      color: o.type === "Corporate" ? C.blue : o.type === "Fund" ? C.teal : o.type === "Government" ? C.purple : C.amber,
-                    }}>
-                      {o.type === "Corporate" ? "CO" : o.type === "Fund" ? "FD" : o.type === "Government" ? "GV" : o.type === "VC" ? "VC" : "—"}
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < data.ownership.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: C.rSm, flexShrink: 0, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.t2, fontFamily: C.mono }}>
+                      {o.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, color: C.text1, fontWeight: 500 }}>{o.name}</div>
-                      {o.notes && <div style={{ fontSize: 11, color: C.text2 }}>{o.notes}</div>}
+                      <div style={{ fontSize: 12, color: C.t1 }}>{o.name}</div>
+                      <div style={{ fontSize: 10, color: C.t3, marginTop: 1 }}>{o.type}{o.notes ? ` · ${o.notes}` : ""}</div>
                     </div>
-                    <Badge
-                      label={o.type}
-                      color={o.type === "Corporate" ? C.blue : o.type === "Fund" ? C.teal : o.type === "Government" ? C.purple : C.amber}
-                      bg={(o.type === "Corporate" ? C.blue : o.type === "Fund" ? C.teal : C.amber) + "18"}
-                      border={(o.type === "Corporate" ? C.blue : o.type === "Fund" ? C.teal : C.amber) + "33"}
-                    />
+                    {o.role && <span style={{ fontSize: 11, fontFamily: C.mono, color: C.teal }}>{o.role}</span>}
                   </div>
                 ))}
-              </div>
-            </Card>
+              </Card>
+              <Card>
+                <SLabel text="Kapitalstruktur (geschätzt)" />
+                <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", paddingTop: 8 }}>
+                  Wird via North Data (DE) und EDGAR (US) angereichert — Phase 3
+                </div>
+              </Card>
+            </div>
+          )}
 
-            </>)}
-
-            {/* ── Tab 3: Fundamentals ── */}
-            {activeTab === 3 && (<>
-
-            {/* ── Fundamentals ── */}
-            <Card>
-              <SectionHead
-                title="Fundamentals"
-                sub={data.fundamentals.is_listed || data.ipo_status === "listed" ? `${data.fundamentals.ticker ?? data.proxy_ticker ?? ""} · ${data.fundamentals.exchange ?? ""} · Live via Yahoo Finance` : "Private company — Bundesanzeiger & öffentliche Quellen"}
-              />
+          {/* Tab 3: Fundamentals */}
+          {activeTab === 3 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {data.fundamentals.is_listed ? (
-                <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 8 }}>
-                    <MetricTile label="Kurs" value={fmt(data.fundamentals.price, 2, data.fundamentals.currency === "EUR" ? "€" : "$")} color={C.text1} />
-                    <MetricTile label="Marktcap" value={fmtBn(data.fundamentals.market_cap_bn)} color={C.text1} />
-                    <MetricTile label="KGV" value={fmt(data.fundamentals.pe_ratio, 1)} color={C.text2} />
-                    <MetricTile label="Revenue" value={fmtBn(data.fundamentals.revenue_bn)} color={C.text2} />
-                    <MetricTile label="EBITDA" value={fmtBn(data.fundamentals.ebitda_bn)} color={C.text2} />
-                    <MetricTile label="Debt/EBITDA" value={data.fundamentals.debt_ebitda ? `${data.fundamentals.debt_ebitda.toFixed(1)}x` : "—"} color={data.fundamentals.debt_ebitda && data.fundamentals.debt_ebitda > 3 ? C.amber : C.text2} />
-                    <MetricTile label="52W High" value={fmt(data.fundamentals.week_52_high, 0, "$")} color={C.text2} />
-                    <MetricTile label="52W Low" value={fmt(data.fundamentals.week_52_low, 0, "$")} color={C.text2} />
-                  </div>
-                  <FundingTimeline rounds={data.funding_rounds} />
-                </>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                  <FundTile label="Kurs" val={fmt(data.fundamentals.price, 2, data.fundamentals.currency === "EUR" ? "€" : "$")} color={C.t1} />
+                  <FundTile label="Marktcap" val={fmtBn(data.fundamentals.market_cap_bn)} color={C.t1} />
+                  <FundTile label="KGV" val={fmt(data.fundamentals.pe_ratio, 1)} />
+                  <FundTile label="Revenue" val={fmtBn(data.fundamentals.revenue_bn)} />
+                  <FundTile label="EBITDA" val={fmtBn(data.fundamentals.ebitda_bn)} />
+                  <FundTile label="Debt/EBITDA" val={data.fundamentals.debt_ebitda ? `${data.fundamentals.debt_ebitda.toFixed(1)}×` : "—"} color={data.fundamentals.debt_ebitda && data.fundamentals.debt_ebitda > 3 ? C.amber : C.t1} />
+                  <FundTile label="52W High" val={fmt(data.fundamentals.week_52_high, 0, "$")} />
+                  <FundTile label="52W Low" val={fmt(data.fundamentals.week_52_low, 0, "$")} />
+                </div>
               ) : (
-                <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 8 }}>
-                    <MetricTile label="Funding Total" value={data.funding_total_usd_mn ? `$${data.funding_total_usd_mn >= 1000 ? (data.funding_total_usd_mn / 1000).toFixed(1) + "B" : data.funding_total_usd_mn + "M"}` : "—"} color={C.text1} />
-                    <MetricTile label="Stage" value={data.funding_stage ?? "—"} color={C.text2} />
-                    <MetricTile label="Last Round" value={data.funding_last_round?.split(";")[0] ?? "—"} color={C.text2} />
-                    <MetricTile label={data.ipo_status === "listed" ? "Status" : "IPO Potenzial"} value={data.ipo_status === "listed" ? "Listed" : data.ipo_potential ?? "—"}
-                      color={data.ipo_status === "listed" ? C.blue : data.ipo_potential === "Hoch" ? C.teal : C.text2} />
-                  </div>
-                  <FundingTimeline rounds={data.funding_rounds} />
-                </>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                  <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
+                  <FundTile label="Letzte Runde" val={data.funding_last_round?.split(";")[0] ?? "—"} />
+                  <FundTile label="Stage" val={data.funding_stage ?? "—"} />
+                  <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
+                </div>
               )}
-            </Card>
+              <FundingTimeline rounds={data.funding_rounds} />
+            </div>
+          )}
 
-            </>)}
+          {/* Tab 4: Potenziale & Risiken */}
+          {activeTab === 4 && <Placeholder title="Potenziale & Risiken" sub="2×n Grid · Chancen links · Risiken rechts · Composite Score — Phase 2" />}
 
-            {/* ── Tab 4: Potenziale & Risiken ── */}
-            {activeTab === 4 && (<>
-              <Card>
-                <SectionHead title="Potenziale & Risiken" sub="Chancen · Risiken · Composite Score" />
-                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
-                  Coming soon — 2×n Grid mit Chancen und Risiken
-                </div>
-              </Card>
-            </>)}
+          {/* Tab 5: Peer Review */}
+          {activeTab === 5 && <Placeholder title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions — Phase 2" />}
 
-            {/* ── Tab 5: Peer Review ── */}
-            {activeTab === 5 && (<>
-              <Card>
-                <SectionHead title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions" />
-                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
-                  Coming soon — Peer-Vergleich und Comparable Transactions
-                </div>
-              </Card>
-            </>)}
+          {/* Tab 6: Value Drivers */}
+          {activeTab === 6 && <Placeholder title="Value Drivers" sub="Enabler · Contributors im 2×n Grid — Phase 1" />}
 
-            {/* ── Tab 6: Value Drivers ── */}
-            {activeTab === 6 && (<>
-              <Card>
-                <SectionHead title="Value Drivers" sub="Enabler · Contributors · Börsennotierte Proxies" />
-                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
-                  Coming soon — Enabler und Contributors im 2×n Grid
-                </div>
-              </Card>
-            </>)}
-
-            {/* ── Tab 7: Exposure Types ── */}
-            {activeTab === 7 && (<>
-
-            {/* ── Scoring ── */}
-            <Card>
-              <SectionHead title="M&A Scoring — Alle Käufer" sub="SRR × MFR × TechReadiness · geordnet nach DealSuccessScore" />
-              {data.scorings.map((s, i) => (
-                <ScoringCard key={s.buyer_name} s={s} rank={i + 1} />
-              ))}
-            </Card>
-
-            {/* ── Supply Chain ── */}
-            {(data.supply_chain_upstream.length > 0 || data.supply_chain_downstream.length > 0) && (
-              <Card>
-                <SectionHead title="Supply Chain Contributors" sub="Börsennotierte Profiteure entlang der Wertschöpfungskette" />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  {data.supply_chain_upstream.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Upstream</div>
-                      {data.supply_chain_upstream.slice(0, 6).map(item => (
-                        <SCRow key={item.ticker} item={item} color={C.blue} />
-                      ))}
-                    </div>
-                  )}
-                  {data.supply_chain_downstream.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Downstream</div>
-                      {data.supply_chain_downstream.slice(0, 6).map(item => (
-                        <SCRow key={item.ticker} item={item} color={C.teal} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {data.supply_chain_etfs.length > 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    <div style={{ fontSize: 10, color: C.text3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>ETF Exposure</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {data.supply_chain_etfs.map(etf => (
-                        <div key={etf.ticker} style={{
-                          padding: "6px 12px", borderRadius: 6,
-                          background: C.purpleDim, border: `1px solid ${C.purple}33`,
-                          display: "flex", alignItems: "center", gap: 8,
-                        }}>
-                          <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
-                          <span style={{ fontSize: 11, color: C.text2 }}>{etf.name}</span>
-                          <span style={{ fontFamily: C.mono, fontSize: 10, color: C.text3 }}>{Math.round(etf.relevance * 100)}%</span>
-                        </div>
-                      ))}
-                    </div>
+          {/* Tab 7: Exposure Types */}
+          {activeTab === 7 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {data.scorings.map((s, i) => <ScoringCard key={s.buyer_name} s={s} rank={i + 1} />)}
+              {(data.supply_chain_upstream.length > 0 || data.supply_chain_downstream.length > 0) && (
+                <Card>
+                  <SLabel text="Supply Chain Contributors" />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                    {data.supply_chain_upstream.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Upstream</div>
+                        {data.supply_chain_upstream.slice(0, 6).map(item => <SupplyRow key={item.ticker} item={item} color={C.blue} />)}
+                      </div>
+                    )}
+                    {data.supply_chain_downstream.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Downstream</div>
+                        {data.supply_chain_downstream.slice(0, 6).map(item => <SupplyRow key={item.ticker} item={item} color={C.teal} />)}
+                      </div>
+                    )}
                   </div>
-                )}
-              </Card>
-            )}
+                  {data.supply_chain_etfs.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>ETF Exposure</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {data.supply_chain_etfs.map(etf => (
+                          <div key={etf.ticker} style={{ padding: "6px 12px", borderRadius: C.rMd, background: C.purpleDim, border: `1px solid ${C.purple}33`, display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
+                            <span style={{ fontSize: 11, color: C.t2 }}>{etf.name}</span>
+                            <span style={{ fontFamily: C.mono, fontSize: 10, color: C.t3 }}>{Math.round(etf.relevance * 100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+            </div>
+          )}
 
-            {/* ── Warnings ── */}
-            {data.warnings.length > 0 && (
-              <div>
-                {data.warnings.map((w, i) => (
-                  <div key={i} style={{
-                    padding: "8px 14px", marginBottom: 6,
-                    background: C.amberDim, border: `1px solid ${C.amber}22`,
-                    borderRadius: 6, fontSize: 11, color: C.amber,
-                  }}>⚠ {w}</div>
-                ))}
-              </div>
-            )}
+          {/* Tab 8: Signal History */}
+          {activeTab === 8 && <Placeholder title="Signal History" sub="KPI-Verläufe · Bewertungs-Verläufe · M&A-Events — Phase 4 (Signal-Engine)" />}
 
-            </>)}
+          {/* Warnings */}
+          {data.warnings.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              {data.warnings.map((w, i) => (
+                <div key={i} style={{ padding: "8px 14px", marginBottom: 6, background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: C.rSm, fontSize: 11, color: C.amber }}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
 
-            {/* ── Tab 8: Signal History ── */}
-            {activeTab === 8 && (<>
-              <Card>
-                <SectionHead title="Signal History" sub="KPI-Verläufe · Bewertung · Ownership · M&A-Events" />
-                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
-                  Coming soon — Signal-Engine wird in Phase 4 befüllt
-                </div>
-              </Card>
-            </>)}
-
-          </div>
-        )}
+        </>)}
       </div>
     </div>
   );
