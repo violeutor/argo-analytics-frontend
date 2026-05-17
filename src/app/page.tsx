@@ -188,8 +188,9 @@ function SubOverblick({ company }: { company: Company }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         <div className="info-card">
           <div className="info-card-title">Unternehmen</div>
-          <div className="info-row"><span className="info-key">Kategorie</span><span className="info-val">{company.category}</span></div>
-          <div className="info-row"><span className="info-key">Industrie</span><span className="info-val">{company.industry ?? '—'}</span></div>
+<div className="info-row"><span className="info-key">Industrie</span><span className="info-val">{company.industry ?? '—'}</span></div>
+<div className="info-row"><span className="info-key">Kategorie</span><span className="info-val">{company.category}</span></div>
+         </div>
           <div className="info-row"><span className="info-key">Status</span><span className="info-val" style={{ color: 'var(--teal)' }}>Privat · Aktiv</span></div>
           <div className="info-row"><span className="info-key">Pfad</span><span className="info-val">{company.investment_path}</span></div>
           <div className="info-row"><span className="info-key">Quelle</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.source ?? 'Bestand'}</span></div>
@@ -450,12 +451,12 @@ function ResultState({
             <div className="meta-val">—</div>
           </div>
           <div className="meta-item">
-            <div className="meta-label">Kategorie</div>
-            <div className="meta-val">{company.category}</div>
-          </div>
-          <div className="meta-item">
-            <div className="meta-label">Industrie</div>
-            <div className="meta-val">{company.industry ?? '—'}</div>
+ 	 <div className="meta-label">Industrie</div>
+ 	 <div className="meta-val">{company.industry ?? '—'}</div>
+	</div>
+	<div className="meta-item">
+  	<div className="meta-label">Kategorie</div>
+  	<div className="meta-val">{company.category}</div>
           </div>
           <div className="meta-item">
             <div className="meta-label">L. Signal</div>
@@ -548,7 +549,7 @@ function HeroState({
       <div className="hero-eyebrow">Private Market Intelligence · Public Market Edge</div>
       <h1>Sieh, wer profitiert —<br /><span>bevor es der Markt tut.</span></h1>
       <p className="hero-sub">
-        Argo identifiziert börsennotierte Gewinner hinter privaten Climate-Tech-Entwicklungen —
+        Argo identifiziert Gewinner branchenübergreifend —
         für Investoren, die früher als der Konsens positioniert sein wollen.
       </p>
       <div style={{ position: 'relative', maxWidth: 560, margin: '0 auto 1.25rem' }}>
