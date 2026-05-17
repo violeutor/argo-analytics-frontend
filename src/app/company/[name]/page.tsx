@@ -421,14 +421,15 @@ export default function CompanyDetailPage() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                       <span style={{ fontSize: 12, color: C.t2, flexShrink: 0 }}>Technologie</span>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 12, color: C.t1, fontWeight: 500, marginBottom: data.technology_tags.length > 0 ? 6 : 0 }}>
-                          {data.core_technology ?? data.product_description ?? "—"}
-                        </div>
-                        {data.technology_tags.length > 0 && (
+                        {data.technology_tags.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
                             {data.technology_tags.map(tag => (
                               <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
                             ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: C.t1, fontWeight: 500 }}>
+                            {data.core_technology ?? data.product_description ?? "—"}
                           </div>
                         )}
                       </div>
