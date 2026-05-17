@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,88 +28,17 @@ interface Buyer {
   market_cap?: number;
 }
 
-interface AnalysisResult {
-  company: Company;
-  buyers: BuyerResult[];
-}
 
-interface BuyerResult {
-  buyer: Buyer;
-  srr: number;
-  srr_category: string;
-  mfr: number;
-  mfr_signal: string;
-  tech_readiness: number;
-  rating: string;
-  deal_success_score: number;
-}
 
-interface MarketData {
-  price?: number;
-  market_cap?: number;
-  pe_ratio?: number;
-  week_52_high?: number;
-  week_52_low?: number;
-  revenue?: number;
-  ebitda?: number;
-  exchange?: string;
-  currency?: string;
-}
 
-interface FundamentalsDetail {
-  is_listed: boolean;
-  ticker?: string;
-  exchange?: string;
-  price?: number;
-  market_cap_bn?: number;
-  pe_ratio?: number;
-  revenue_bn?: number;
-  ebitda_bn?: number;
-  week_52_high?: number;
-  week_52_low?: number;
-  currency?: string;
-  ba_found?: boolean;
-  ba_revenue_mn?: number;
-  ba_equity_mn?: number;
-  ba_employees?: number;
-}
 
-interface FundingRound {
-  round_name: string;
-  amount_mn?: number;
-  date?: string;
-}
 
-interface CompanyDetail {
-  ipo_status?: string;
-  ipo_probability_pct?: number;
-  funding_last_round?: string;
-  funding_rounds?: FundingRound[];
-  fundamentals?: FundamentalsDetail;
-  description?: string;
-  wikipedia_url?: string;
-  headquarters?: string;
-  employee_count?: string;
-  founded?: string;
-}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BACKEND_PROXY = '/api/backend';
 
-const RATING_COLOR: Record<string, string> = {
-  A: 'var(--teal)',
-  B: 'var(--blue)',
-  C: 'var(--amber)',
-  D: 'var(--red)',
-};
 
-const RATING_LABEL: Record<string, string> = {
-  A: 'A · No-Brainer',
-  B: 'B · Solide',
-  C: 'C · Abwägen',
-  D: 'D · Uninteressant',
-};
 
 const PATH_COLOR: Record<string, string> = {
   'IPO-direkt': 'var(--blue)',
@@ -211,381 +141,16 @@ function IpoBadge({ val }: { val: string }) {
   return <Badge color="gray">{val}</Badge>;
 }
 
-function ScoreBar({ value, color = 'var(--teal)' }: { value: number; color?: string }) {
-  return (
-    <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, marginTop: 8, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${Math.min(value * 100, 100)}%`, borderRadius: 99, background: color }} />
-    </div>
-  );
-}
 
 // ─── Subtab components ───────────────────────────────────────────────────────
 
-function SubOverblick({ company }: { company: Company }) {
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-        <div className="info-card">
-          <div className="info-card-title">Unternehmen</div>
-<div className="info-row"><span className="info-key">Industrie</span><span className="info-val">{company.industry ?? '—'}</span></div>
-<div className="info-row"><span className="info-key">Kategorie</span><span className="info-val">{company.category}</span></div>
-         </div>
-          <div className="info-row"><span className="info-key">Status</span><span className="info-val" style={{ color: company.ipo_status === 'listed' ? 'var(--blue)' : 'var(--teal)' }}>{company.ipo_status === 'listed' ? 'Börsennotiert · Aktiv' : 'Privat · Aktiv'}</span></div>
-          <div className="info-row"><span className="info-key">Pfad</span><span className="info-val">{company.investment_path}</span></div>
-          <div className="info-row"><span className="info-key">Quelle</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.source ?? 'Bestand'}</span></div>
-        </div>
-        <div className="info-card">
-          <div className="info-card-title">Markt & Positionierung</div>
-          <div className="info-row"><span className="info-key">Potenzial</span><span className="info-val">{company.potential}</span></div>
-          <div className="info-row"><span className="info-key">Risiko</span><span className="info-val">{company.risk}</span></div>
-          <div className="info-row"><span className="info-key">IPO-Potenzial</span><span className="info-val">{company.ipo_potential}</span></div>
-          <div className="info-row"><span className="info-key">Proxy</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.proxy ?? '—'}</span></div>
-          <div className="info-row"><span className="info-key">Funding</span><span className="info-val">{company.funding ?? '—'}</span></div>
-        </div>
-      </div>
-      <div className="news-card">
-        <div className="info-card-title">Letzte Entwicklungen</div>
-        {company.last_signal && company.last_signal !== '—' ? (
-          <div className="news-item">
-            <div className="news-title">{company.last_signal}</div>
-            <div className="news-src">Morning Briefing</div>
-          </div>
-        ) : (
-          <div style={{ padding: '8px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
-            Keine aktuellen Signale — Briefing-Integration aktiv
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-function SubOwnership() {
-  return (
-    <div className="ownership-grid">
-      <div className="own-card">
-        <div className="own-title">Bekannte Investoren</div>
-        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
-          Crunchbase-Enrichment · Daten werden automatisch ergänzt
-        </div>
-      </div>
-      <div className="own-card">
-        <div className="own-title">Kapitalstruktur (geschätzt)</div>
-        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
-          Schätzung auf Basis bekannter Runden — folgt
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function SubFundamentals({ company, detail }: { company: Company; detail?: CompanyDetail | null }) {
-  const isListed = company.ipo_status === 'listed' || company.investment_path === 'IPO';
-  const fd = detail?.fundamentals;
 
-  return (
-    <div>
-      {/* Market Data — only for listed companies */}
-      {isListed && fd?.is_listed && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(59,110,240,0.2)', borderRadius: 'var(--r-lg)', padding: '1rem 1.25rem', marginBottom: 12 }}>
-          <div className="info-card-title" style={{ color: 'var(--blue)', marginBottom: 8 }}>● Marktdaten · {fd.ticker} · {fd.exchange}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
-            <div className="fund-tile">
-              <div className="fund-tile-label">Kurs</div>
-              <div className="fund-tile-val" style={{ color: 'var(--blue)' }}>{fd.price ? `${fd.currency ?? '$'}${fd.price.toFixed(2)}` : '—'}</div>
-              <div className="fund-tile-sub">Aktuell</div>
-            </div>
-            <div className="fund-tile">
-              <div className="fund-tile-label">Market Cap</div>
-              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.market_cap_bn ? `$${fd.market_cap_bn.toFixed(1)}B` : '—'}</div>
-              <div className="fund-tile-sub">Mrd. USD</div>
-            </div>
-            <div className="fund-tile">
-              <div className="fund-tile-label">52W High</div>
-              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.week_52_high ? `${fd.week_52_high.toFixed(2)}` : '—'}</div>
-              <div className="fund-tile-sub">52W Low: {fd.week_52_low?.toFixed(2) ?? '—'}</div>
-            </div>
-            <div className="fund-tile">
-              <div className="fund-tile-label">Revenue</div>
-              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.revenue_bn ? `$${fd.revenue_bn.toFixed(2)}B` : '—'}</div>
-              <div className="fund-tile-sub">EBITDA: {fd.ebitda_bn ? `$${fd.ebitda_bn.toFixed(2)}B` : '—'}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Funding Tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 12 }}>
-        <div className="fund-tile">
-          <div className="fund-tile-label">Funding Total</div>
-          <div className="fund-tile-val">{company.funding?.split(';')[0]?.trim() ?? '—'}</div>
-          <div className="fund-tile-sub">Gesamt über alle Runden</div>
-        </div>
-        <div className="fund-tile">
-          <div className="fund-tile-label">Letzte Runde</div>
-          <div className="fund-tile-val" style={{ fontSize: 14 }}>{detail?.funding_last_round?.split('(')[0]?.trim() ?? '—'}</div>
-          <div className="fund-tile-sub">Aus Funding-Stand</div>
-        </div>
-        <div className="fund-tile">
-          <div className="fund-tile-label">Est. Valuation</div>
-          <div className="fund-tile-val" style={{ color: 'var(--teal)', fontSize: 14 }}>—</div>
-          <div className="fund-tile-sub">5× Multiplikator</div>
-        </div>
-        <div className="fund-tile">
-          <div className="fund-tile-label">IPO-Status</div>
-          <div className="fund-tile-val" style={{ color: isListed ? 'var(--blue)' : 'var(--t2)', fontSize: 14 }}>
-            {isListed ? 'Listed' : company.ipo_potential ?? '—'}
-          </div>
-          <div className="fund-tile-sub">{detail?.ipo_probability_pct ? `${detail.ipo_probability_pct}% Wahrscheinlichkeit` : ''}</div>
-        </div>
-      </div>
-
-      {/* Funding Timeline */}
-      <div className="funding-timeline">
-        <div className="tl-title">Funding-Timeline</div>
-        {detail?.funding_rounds && detail.funding_rounds.length > 0 ? (
-          detail.funding_rounds.map((r, i) => (
-            <div key={i} className="tl-row">
-              <div className="tl-dot" />
-              <div className="tl-round">{r.round_name}</div>
-              <div className="tl-amount">{r.amount_mn ? `$${r.amount_mn.toFixed(0)}M` : '—'}</div>
-              <div className="tl-date">{r.date ?? '—'}</div>
-            </div>
-          ))
-        ) : (
-          <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
-            Vollständige Timeline folgt — Crunchbase-Enrichment aktiv
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SubInvestitionspfad({ company, buyers }: { company: Company; buyers: BuyerResult[] }) {
-  const ratingColorMap: Record<string, string> = {
-    A: 'var(--teal)', B: 'var(--blue)', C: 'var(--amber)', D: 'var(--red)',
-  };
-
-  if (company.investment_path === 'Beobachten' || company.investment_path === 'Archiv') {
-    return (
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
-        padding: '2rem', textAlign: 'center', color: 'var(--t2)', fontSize: 13,
-      }}>
-        <div style={{ fontSize: 28, marginBottom: 8 }}>◎</div>
-        <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--t1)' }}>{company.investment_path}</div>
-        <div>Kein klarer Kapitalmarktpfad erkennbar — auf Signal warten</div>
-      </div>
-    );
-  }
-
-  if (buyers.length === 0) {
-    return (
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
-        padding: '2rem', textAlign: 'center', color: 'var(--t2)', fontSize: 13,
-      }}>
-        Scoring-Daten werden geladen…
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {buyers.map((b, i) => {
-        const ratingColor = ratingColorMap[b.rating] ?? 'var(--t2)';
-        const srrPct = Math.min((Math.log(1 + b.srr) / Math.log(11)) * 100, 100);
-        const mfrPct = b.mfr_signal === 'feasible' ? 90 : b.mfr_signal === 'watch' ? 60 : 30;
-        const borderColor = b.rating === 'A' ? 'rgba(0,212,160,0.2)' : b.rating === 'B' ? 'rgba(59,110,240,0.2)' : 'var(--border-md)';
-
-        return (
-          <div key={i} className="pfad-card" style={{ borderColor }}>
-            <div className="pfad-header">
-              <div>
-                <div className="pfad-title">
-                  {company.investment_path} · {b.buyer.ticker} · {b.buyer.exchange}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 3 }}>
-                  {b.buyer.name} · Marktcap: {b.buyer.market_cap ? `$${(b.buyer.market_cap / 1e9).toFixed(0)} Mrd.` : '—'}
-                </div>
-              </div>
-              <RatingBadge rating={b.rating} large />
-            </div>
-
-            <div className="scoring-grid">
-              <div className="score-tile">
-                <div className="score-tile-label">SRR — Strategic Relevance</div>
-                <div className="score-tile-val" style={{ color: 'var(--teal)' }}>{b.srr.toFixed(2)}×</div>
-                <div className="score-tile-desc">{b.srr_category}</div>
-                <ScoreBar value={srrPct / 100} color="var(--teal)" />
-              </div>
-              <div className="score-tile">
-                <div className="score-tile-label">MFR — M&A Feasibility</div>
-                <div className="score-tile-val" style={{ color: b.mfr_signal === 'feasible' ? 'var(--teal)' : b.mfr_signal === 'watch' ? 'var(--amber)' : 'var(--red)' }}>
-                  {b.mfr < 0.01 ? '<0.01×' : `${b.mfr.toFixed(2)}×`}
-                </div>
-                <div className="score-tile-desc">
-                  {b.mfr_signal === 'feasible' ? '🟢 Feasible' : b.mfr_signal === 'watch' ? '🟡 Watch' : '🔴 Overstretch'}
-                </div>
-                <ScoreBar value={mfrPct / 100} color={b.mfr_signal === 'feasible' ? 'var(--teal)' : b.mfr_signal === 'watch' ? 'var(--amber)' : 'var(--red)'} />
-              </div>
-              <div className="score-tile">
-                <div className="score-tile-label">Tech Readiness</div>
-                <div className="score-tile-val" style={{ color: 'var(--blue)' }}>{b.tech_readiness.toFixed(2)}</div>
-                <div className="score-tile-desc">{b.tech_readiness >= 0.7 ? 'Stark' : b.tech_readiness >= 0.5 ? 'Solide' : 'Früh'}</div>
-                <ScoreBar value={b.tech_readiness} color="var(--blue)" />
-              </div>
-            </div>
-
-            <div className="verdict" style={{
-              background: `${ratingColor}0F`,
-              borderColor: `${ratingColor}33`,
-            }}>
-              <span className="verdict-label">Gesamturteil</span>
-              <span className="verdict-val" style={{ color: ratingColor }}>
-                {RATING_LABEL[b.rating] ?? b.rating} — {b.srr_category} · {b.mfr_signal === 'feasible' ? 'Feasible' : b.mfr_signal === 'watch' ? 'Watch' : 'Overstretch'} · TR {b.tech_readiness.toFixed(2)}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ─── Result State ────────────────────────────────────────────────────────────
 
 type SubTab = 'uberblick' | 'ownership' | 'fundamentals' | 'investitionspfad';
-
-function ResultState({
-  company,
-  buyers,
-  onBack,
-}: {
-  company: Company;
-  buyers: BuyerResult[];
-  onBack: () => void;
-}) {
-  const [activeTab, setActiveTab] = useState<SubTab>('uberblick');
-  const [starred, setStarred] = useState(false);
-  const [detail, setDetail] = useState<CompanyDetail | null>(null);
-
-  useEffect(() => {
-    fetch(`${BACKEND_PROXY}/api/v1/company/${encodeURIComponent(company.name)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d && setDetail(d))
-      .catch(() => {});
-  }, [company.name]);
-
-  const initials = company.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-
-  const ratingColor = company.rating && company.rating !== '—'
-    ? RATING_COLOR[company.rating] ?? 'var(--t2)'
-    : 'var(--t2)';
-
-  return (
-    <div className="result-wrap">
-      {/* Topbar */}
-      <div className="result-topbar">
-        <button className="btn-back" onClick={onBack}>← Zurück</button>
-        <span className="result-breadcrumb">ANALYSE · {company.name.toUpperCase()}</span>
-      </div>
-
-      {/* Company Header Card */}
-      <div className="company-header-card">
-        <div className="ch-top">
-          <div className="ch-left">
-            <div className="ch-icon">{initials}</div>
-            <div>
-              <div className="ch-name">
-                {company.name}
-                <span className="ch-ticker">
-                  {company.ipo_status === 'listed' || company.investment_path === 'IPO' ? (company.proxy ?? 'Börsennotiert') : 'Private'}
-                </span>
-              </div>
-              <div className="ch-cat">
-                {company.category} · {company.investment_path}
-                {company.funding ? ` · ${company.funding.split(';')[0].split('(')[0].trim()}` : ''}
-              </div>
-            </div>
-          </div>
-          <div className="ch-right">
-            <button
-              className={`star-btn${starred ? ' active' : ''}`}
-              onClick={() => setStarred(!starred)}
-              title="Zur Watchlist hinzufügen"
-            >
-              {starred ? '★' : '☆'}
-            </button>
-            {company.rating && company.rating !== '—' && (
-              <RatingBadge rating={company.rating} large />
-            )}
-          </div>
-        </div>
-
-        {/* Badges */}
-        <div className="ch-badges">
-          <Badge color="teal">Potenzial: {company.potential}</Badge>
-          <Badge color="gray">Risiko: {company.risk}</Badge>
-          {company.ipo_status === 'listed' ? <Badge color="blue">● Börsennotiert</Badge> : <Badge color="gray">IPO: {company.ipo_potential}</Badge>}
-          <Badge color="gray">{company.investment_path}</Badge>
-          {company.proxy && company.proxy !== '—' && (
-            <Badge color="amber">Proxy: {company.proxy}</Badge>
-          )}
-        </div>
-
-        {/* Meta Grid */}
-        <div className="ch-meta">
-          <div className="meta-item">
-            <div className="meta-label">Funding Total</div>
-            <div className="meta-val">{company.funding?.split(';')[0]?.split('Gesamt:')[0]?.trim() ?? '—'}</div>
-          </div>
-          <div className="meta-item">
-            <div className="meta-label">Letzte Runde</div>
-            <div className="meta-val">—</div>
-          </div>
-          <div className="meta-item">
- 	 <div className="meta-label">Industrie</div>
- 	 <div className="meta-val">{company.industry ?? '—'}</div>
-	</div>
-	<div className="meta-item">
-  	<div className="meta-label">Kategorie</div>
-  	<div className="meta-val">{company.category}</div>
-          </div>
-          <div className="meta-item">
-            <div className="meta-label">L. Signal</div>
-            <div className="meta-val" style={{ color: company.last_signal && company.last_signal !== '—' ? 'var(--t1)' : 'var(--t3)' }}>
-              {company.last_signal ?? '—'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Subtabs */}
-      <div className="subtabs">
-        {(['uberblick', 'ownership', 'fundamentals', 'investitionspfad'] as SubTab[]).map((tab) => (
-          <button
-            key={tab}
-            className={`subtab${activeTab === tab ? ' active' : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === 'uberblick' ? 'Überblick'
-              : tab === 'ownership' ? 'Ownership'
-              : tab === 'fundamentals' ? 'Fundamentals'
-              : 'Investitionspfad'}
-          </button>
-        ))}
-      </div>
-
-      {/* Subpages */}
-      {activeTab === 'uberblick' && <SubOverblick company={company} />}
-      {activeTab === 'ownership' && <SubOwnership />}
-      {activeTab === 'fundamentals' && <SubFundamentals company={company} detail={detail} />}
-      {activeTab === 'investitionspfad' && <SubInvestitionspfad company={company} buyers={buyers} />}
-    </div>
-  );
-}
 
 // ─── Hero / Search State ─────────────────────────────────────────────────────
 
@@ -838,39 +403,20 @@ function WatchlistPage({
 type NavTab = 'research' | 'watchlist';
 
 export default function Page() {
+  const router = useRouter();
   const [navTab, setNavTab] = useState<NavTab>('research');
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<BuyerResult[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
   }, []);
 
-  const handleSelectCompany = useCallback(async (company: Company) => {
-    setSelectedCompany(company);
-    setNavTab('research');
-    setAnalysisResult([]);
-    setLoading(true);
-    try {
-      const res = await fetch(`${BACKEND_PROXY}/api/v1/company/${encodeURIComponent(company.name)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAnalysisResult(data.buyers ?? []);
-      }
-    } catch {
-      // Graceful — show empty buyer list
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleBack = () => setSelectedCompany(null);
+  const handleSelectCompany = useCallback((company: Company) => {
+    router.push(`/company/${encodeURIComponent(company.name)}`);
+  }, [router]);
 
   const handleSelectFromWatchlist = (c: Company) => {
     handleSelectCompany(c);
-    setNavTab('research');
   };
 
   return (
@@ -1030,7 +576,7 @@ export default function Page() {
 
       {/* ── Nav ── */}
       <nav>
-        <div className="nav-logo" onClick={() => { setSelectedCompany(null); setNavTab('research'); }}>
+        <div className="nav-logo" onClick={() => setNavTab('research')}>
           <div className="nav-logo-icon">A</div>
           <div>
             <div className="nav-logo-text">Argo Analytics</div>
@@ -1060,15 +606,7 @@ export default function Page() {
       {/* ── Research Page ── */}
       {navTab === 'research' && (
         <div className="page">
-          {!selectedCompany ? (
-            <HeroState companies={companies} onSelect={handleSelectCompany} />
-          ) : (
-            <ResultState
-              company={selectedCompany}
-              buyers={analysisResult}
-              onBack={handleBack}
-            />
-          )}
+          <HeroState companies={companies} onSelect={handleSelectCompany} />
         </div>
       )}
 
