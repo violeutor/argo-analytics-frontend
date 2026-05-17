@@ -41,7 +41,7 @@ const BACKEND_PROXY = '/api/backend';
 
 
 const PATH_COLOR: Record<string, string> = {
-  'IPO-direkt': 'var(--blue)',
+  'IPO': 'var(--blue)',
   'Käufer-Proxy': 'var(--teal)',
   'ETF-Proxy': 'var(--amber)',
   'Enabler': 'var(--purple)',
@@ -317,7 +317,7 @@ function WatchlistPage({
         <label>Pfad</label>
         <select value={filterPfad} onChange={(e) => setFilterPfad(e.target.value)}>
           <option value="">Alle</option>
-          <option>Käufer-Proxy</option><option>IPO-direkt</option><option>ETF-Proxy</option>
+          <option>Käufer-Proxy</option><option>IPO</option><option>ETF-Proxy</option>
           <option>Enabler</option><option>Beobachten</option><option>Archiv</option>
         </select>
         <label>Wertung</label>
