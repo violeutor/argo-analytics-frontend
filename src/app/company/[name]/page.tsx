@@ -232,6 +232,13 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [starred, setStarred] = useState(false);
+
+  useEffect(() => {
+    if (!name) return;
+    const wl: string[] = JSON.parse(localStorage.getItem("argo_watchlist") ?? "[]");
+    setStarred(wl.includes(name));
+  }, [name]);
 
   useEffect(() => {
     if (!name) return;
@@ -315,11 +322,27 @@ export default function CompanyDetailPage() {
                   {data.ipo_status === "listed" ? "Public" : "Private"}
                 </span>
               </div>
-              {data.scorings[0] && (
-                <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
-                  {data.scorings[0].rating}
-                </span>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  onClick={() => {
+                    const key = "argo_watchlist";
+                    const wl: string[] = JSON.parse(localStorage.getItem(key) ?? "[]");
+                    const idx = wl.indexOf(data.name);
+                    if (idx >= 0) wl.splice(idx, 1); else wl.push(data.name);
+                    localStorage.setItem(key, JSON.stringify(wl));
+                    setStarred(idx < 0);
+                  }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: starred ? C.amber : C.t3, padding: 4, transition: "color .15s", lineHeight: 1 }}
+                  title={starred ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"}
+                >
+                  {starred ? "★" : "☆"}
+                </button>
+                {data.scorings[0] && (
+                  <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
+                    {data.scorings[0].rating}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Row 2: Ticker+Index (public) OR Technologie+Series (private) */}
