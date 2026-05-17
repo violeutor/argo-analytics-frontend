@@ -11,6 +11,7 @@ interface Company {
   potential: string;
   risk: string;
   ipo_potential: string;
+  ipo_status?: string;
   investment_path: string;
   proxy?: string;
   rating?: string;
@@ -52,6 +53,43 @@ interface MarketData {
   ebitda?: number;
   exchange?: string;
   currency?: string;
+}
+
+interface FundamentalsDetail {
+  is_listed: boolean;
+  ticker?: string;
+  exchange?: string;
+  price?: number;
+  market_cap_bn?: number;
+  pe_ratio?: number;
+  revenue_bn?: number;
+  ebitda_bn?: number;
+  week_52_high?: number;
+  week_52_low?: number;
+  currency?: string;
+  ba_found?: boolean;
+  ba_revenue_mn?: number;
+  ba_equity_mn?: number;
+  ba_employees?: number;
+}
+
+interface FundingRound {
+  round_name: string;
+  amount_mn?: number;
+  date?: string;
+}
+
+interface CompanyDetail {
+  ipo_status?: string;
+  ipo_probability_pct?: number;
+  funding_last_round?: string;
+  funding_rounds?: FundingRound[];
+  fundamentals?: FundamentalsDetail;
+  description?: string;
+  wikipedia_url?: string;
+  headquarters?: string;
+  employee_count?: string;
+  founded?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -149,6 +187,7 @@ function RatingBadge({ rating, large = false }: { rating: string; large?: boolea
 function PathBadge({ path }: { path: string }) {
   const map: Record<string, 'teal' | 'blue' | 'amber' | 'purple' | 'gray' | 'red'> = {
     'IPO-direkt': 'blue',
+    'IPO': 'blue',
     'Käufer-Proxy': 'teal',
     'ETF-Proxy': 'amber',
     'Enabler': 'purple',
@@ -191,7 +230,7 @@ function SubOverblick({ company }: { company: Company }) {
 <div className="info-row"><span className="info-key">Industrie</span><span className="info-val">{company.industry ?? '—'}</span></div>
 <div className="info-row"><span className="info-key">Kategorie</span><span className="info-val">{company.category}</span></div>
          </div>
-          <div className="info-row"><span className="info-key">Status</span><span className="info-val" style={{ color: 'var(--teal)' }}>Privat · Aktiv</span></div>
+          <div className="info-row"><span className="info-key">Status</span><span className="info-val" style={{ color: company.ipo_status === 'listed' ? 'var(--blue)' : 'var(--teal)' }}>{company.ipo_status === 'listed' ? 'Börsennotiert · Aktiv' : 'Privat · Aktiv'}</span></div>
           <div className="info-row"><span className="info-key">Pfad</span><span className="info-val">{company.investment_path}</span></div>
           <div className="info-row"><span className="info-key">Quelle</span><span className="info-val" style={{ fontFamily: 'var(--font-m)', fontSize: 11 }}>{company.source ?? 'Bestand'}</span></div>
         </div>
@@ -240,18 +279,51 @@ function SubOwnership() {
   );
 }
 
-function SubFundamentals({ company }: { company: Company }) {
+function SubFundamentals({ company, detail }: { company: Company; detail?: CompanyDetail | null }) {
+  const isListed = company.ipo_status === 'listed' || company.investment_path === 'IPO';
+  const fd = detail?.fundamentals;
+
   return (
     <div>
+      {/* Market Data — only for listed companies */}
+      {isListed && fd?.is_listed && (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(59,110,240,0.2)', borderRadius: 'var(--r-lg)', padding: '1rem 1.25rem', marginBottom: 12 }}>
+          <div className="info-card-title" style={{ color: 'var(--blue)', marginBottom: 8 }}>● Marktdaten · {fd.ticker} · {fd.exchange}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+            <div className="fund-tile">
+              <div className="fund-tile-label">Kurs</div>
+              <div className="fund-tile-val" style={{ color: 'var(--blue)' }}>{fd.price ? `${fd.currency ?? '$'}${fd.price.toFixed(2)}` : '—'}</div>
+              <div className="fund-tile-sub">Aktuell</div>
+            </div>
+            <div className="fund-tile">
+              <div className="fund-tile-label">Market Cap</div>
+              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.market_cap_bn ? `$${fd.market_cap_bn.toFixed(1)}B` : '—'}</div>
+              <div className="fund-tile-sub">Mrd. USD</div>
+            </div>
+            <div className="fund-tile">
+              <div className="fund-tile-label">52W High</div>
+              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.week_52_high ? `${fd.week_52_high.toFixed(2)}` : '—'}</div>
+              <div className="fund-tile-sub">52W Low: {fd.week_52_low?.toFixed(2) ?? '—'}</div>
+            </div>
+            <div className="fund-tile">
+              <div className="fund-tile-label">Revenue</div>
+              <div className="fund-tile-val" style={{ fontSize: 16 }}>{fd.revenue_bn ? `$${fd.revenue_bn.toFixed(2)}B` : '—'}</div>
+              <div className="fund-tile-sub">EBITDA: {fd.ebitda_bn ? `$${fd.ebitda_bn.toFixed(2)}B` : '—'}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Funding Tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 12 }}>
         <div className="fund-tile">
           <div className="fund-tile-label">Funding Total</div>
-          <div className="fund-tile-val">{company.funding ?? '—'}</div>
+          <div className="fund-tile-val">{company.funding?.split(';')[0]?.trim() ?? '—'}</div>
           <div className="fund-tile-sub">Gesamt über alle Runden</div>
         </div>
         <div className="fund-tile">
           <div className="fund-tile-label">Letzte Runde</div>
-          <div className="fund-tile-val" style={{ fontSize: 14 }}>—</div>
+          <div className="fund-tile-val" style={{ fontSize: 14 }}>{detail?.funding_last_round?.split('(')[0]?.trim() ?? '—'}</div>
           <div className="fund-tile-sub">Aus Funding-Stand</div>
         </div>
         <div className="fund-tile">
@@ -260,16 +332,31 @@ function SubFundamentals({ company }: { company: Company }) {
           <div className="fund-tile-sub">5× Multiplikator</div>
         </div>
         <div className="fund-tile">
-          <div className="fund-tile-label">MFR</div>
-          <div className="fund-tile-val" style={{ color: 'var(--teal)', fontSize: 14 }}>—</div>
-          <div className="fund-tile-sub">vs. Käufer</div>
+          <div className="fund-tile-label">IPO-Status</div>
+          <div className="fund-tile-val" style={{ color: isListed ? 'var(--blue)' : 'var(--t2)', fontSize: 14 }}>
+            {isListed ? 'Listed' : company.ipo_potential ?? '—'}
+          </div>
+          <div className="fund-tile-sub">{detail?.ipo_probability_pct ? `${detail.ipo_probability_pct}% Wahrscheinlichkeit` : ''}</div>
         </div>
       </div>
+
+      {/* Funding Timeline */}
       <div className="funding-timeline">
         <div className="tl-title">Funding-Timeline</div>
-        <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
-          Vollständige Timeline folgt — Crunchbase-Enrichment aktiv
-        </div>
+        {detail?.funding_rounds && detail.funding_rounds.length > 0 ? (
+          detail.funding_rounds.map((r, i) => (
+            <div key={i} className="tl-row">
+              <div className="tl-dot" />
+              <div className="tl-round">{r.round_name}</div>
+              <div className="tl-amount">{r.amount_mn ? `$${r.amount_mn.toFixed(0)}M` : '—'}</div>
+              <div className="tl-date">{r.date ?? '—'}</div>
+            </div>
+          ))
+        ) : (
+          <div style={{ padding: '16px 0', opacity: 0.4, fontSize: 12, color: 'var(--t2)' }}>
+            Vollständige Timeline folgt — Crunchbase-Enrichment aktiv
+          </div>
+        )}
       </div>
     </div>
   );
@@ -382,6 +469,14 @@ function ResultState({
 }) {
   const [activeTab, setActiveTab] = useState<SubTab>('uberblick');
   const [starred, setStarred] = useState(false);
+  const [detail, setDetail] = useState<CompanyDetail | null>(null);
+
+  useEffect(() => {
+    fetch(`${BACKEND_PROXY}/api/v1/company/${encodeURIComponent(company.name)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setDetail(d))
+      .catch(() => {});
+  }, [company.name]);
 
   const initials = company.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -406,7 +501,7 @@ function ResultState({
               <div className="ch-name">
                 {company.name}
                 <span className="ch-ticker">
-                  {company.investment_path === 'IPO-direkt' || company.investment_path === 'Beobachten' && company.proxy ? company.proxy : 'Private'}
+                  {company.ipo_status === 'listed' || company.investment_path === 'IPO' ? (company.proxy ?? 'Börsennotiert') : 'Private'}
                 </span>
               </div>
               <div className="ch-cat">
@@ -433,7 +528,7 @@ function ResultState({
         <div className="ch-badges">
           <Badge color="teal">Potenzial: {company.potential}</Badge>
           <Badge color="gray">Risiko: {company.risk}</Badge>
-          <Badge color="blue">IPO: {company.ipo_potential}</Badge>
+          {company.ipo_status === 'listed' ? <Badge color="blue">● Börsennotiert</Badge> : <Badge color="gray">IPO: {company.ipo_potential}</Badge>}
           <Badge color="gray">{company.investment_path}</Badge>
           {company.proxy && company.proxy !== '—' && (
             <Badge color="amber">Proxy: {company.proxy}</Badge>
@@ -486,7 +581,7 @@ function ResultState({
       {/* Subpages */}
       {activeTab === 'uberblick' && <SubOverblick company={company} />}
       {activeTab === 'ownership' && <SubOwnership />}
-      {activeTab === 'fundamentals' && <SubFundamentals company={company} />}
+      {activeTab === 'fundamentals' && <SubFundamentals company={company} detail={detail} />}
       {activeTab === 'investitionspfad' && <SubInvestitionspfad company={company} buyers={buyers} />}
     </div>
   );
