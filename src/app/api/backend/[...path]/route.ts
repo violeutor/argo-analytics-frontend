@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const API_KEY = process.env.API_KEY ?? "";
+// Serverseitig — kein NEXT_PUBLIC_ Prefix
+const API_BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_KEY  = process.env.API_KEY ?? "";
 
 export async function GET(
   request: NextRequest,
@@ -22,9 +23,13 @@ async function proxyRequest(
   pathSegments: string[],
   method: string
 ) {
-  const path = pathSegments.join("/");
+  // pathSegments kommt von /api/backend/[...path]
+  // page.tsx ruft z.B. /api/backend/api/v1/companies auf
+  // → pathSegments = ["api", "v1", "companies"]
+  // → wir joinen direkt, kein zusätzliches /api/v1/ prefixen
+  const path   = pathSegments.join("/");
   const search = request.nextUrl.search ?? "";
-  const url = `${API_BASE}/api/v1/${path}${search}`;
+  const url    = `${API_BASE}/${path}${search}`;
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -38,7 +43,7 @@ async function proxyRequest(
   }
 
   try {
-    const res = await fetch(url, init);
+    const res  = await fetch(url, init);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
