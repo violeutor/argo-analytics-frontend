@@ -409,6 +409,10 @@ export default function CompanyDetailPage() {
     "Beobachten": C.text3, "Archiv": C.red,
   };
 
+  const [activeTab, setActiveTab] = useState(0);
+
+  const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Exposure Types", "Signal History"];
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text1, fontFamily: C.body }}>
       <style>{`
@@ -564,6 +568,26 @@ export default function CompanyDetailPage() {
               )}
             </Card>
 
+            {/* ── Tab Nav ── */}
+            <div style={{
+              display: "flex", gap: 2, borderBottom: `1px solid ${C.border}`,
+              overflowX: "auto", scrollbarWidth: "none",
+            }}>
+              {TABS.map((tab, i) => (
+                <button key={tab} onClick={() => setActiveTab(i)} style={{
+                  padding: "10px 16px", fontSize: 12, fontFamily: C.mono,
+                  fontWeight: 600, cursor: "pointer", border: "none",
+                  background: "transparent", whiteSpace: "nowrap",
+                  color: activeTab === i ? C.teal : C.text3,
+                  borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
+                  marginBottom: -1, transition: "all 0.15s",
+                }}>{tab}</button>
+              ))}
+            </div>
+
+            {/* ── Tab 0: Überblick ── */}
+            {activeTab === 0 && (<>
+
             {/* ── Industry & Product ── */}
             <Card>
               <SectionHead title="Industry & Product" />
@@ -604,6 +628,21 @@ export default function CompanyDetailPage() {
               </div>
             </Card>
 
+            </>)}
+
+            {/* ── Tab 1: Markt ── */}
+            {activeTab === 1 && (<>
+              <Card>
+                <SectionHead title="Markt" sub="TAM-Breakdown · Wachstumstreiber · Wettbewerbslandschaft" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+                  Coming soon — Marktdaten werden in Phase 2 befüllt
+                </div>
+              </Card>
+            </>)}
+
+            {/* ── Tab 2: Ownership ── */}
+            {activeTab === 2 && (<>
+
             {/* ── Ownership Structure ── */}
             <Card>
               <SectionHead title="Ownership Structure" sub="Known investors & strategic shareholders" />
@@ -638,6 +677,11 @@ export default function CompanyDetailPage() {
               </div>
             </Card>
 
+            </>)}
+
+            {/* ── Tab 3: Fundamentals ── */}
+            {activeTab === 3 && (<>
+
             {/* ── Fundamentals ── */}
             <Card>
               <SectionHead
@@ -671,6 +715,41 @@ export default function CompanyDetailPage() {
                 </>
               )}
             </Card>
+
+            </>)}
+
+            {/* ── Tab 4: Potenziale & Risiken ── */}
+            {activeTab === 4 && (<>
+              <Card>
+                <SectionHead title="Potenziale & Risiken" sub="Chancen · Risiken · Composite Score" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+                  Coming soon — 2×n Grid mit Chancen und Risiken
+                </div>
+              </Card>
+            </>)}
+
+            {/* ── Tab 5: Peer Review ── */}
+            {activeTab === 5 && (<>
+              <Card>
+                <SectionHead title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+                  Coming soon — Peer-Vergleich und Comparable Transactions
+                </div>
+              </Card>
+            </>)}
+
+            {/* ── Tab 6: Value Drivers ── */}
+            {activeTab === 6 && (<>
+              <Card>
+                <SectionHead title="Value Drivers" sub="Enabler · Contributors · Börsennotierte Proxies" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+                  Coming soon — Enabler und Contributors im 2×n Grid
+                </div>
+              </Card>
+            </>)}
+
+            {/* ── Tab 7: Exposure Types ── */}
+            {activeTab === 7 && (<>
 
             {/* ── Scoring ── */}
             <Card>
@@ -735,6 +814,18 @@ export default function CompanyDetailPage() {
                 ))}
               </div>
             )}
+
+            </>)}
+
+            {/* ── Tab 8: Signal History ── */}
+            {activeTab === 8 && (<>
+              <Card>
+                <SectionHead title="Signal History" sub="KPI-Verläufe · Bewertung · Ownership · M&A-Events" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.text3, fontFamily: C.mono, fontSize: 12 }}>
+                  Coming soon — Signal-Engine wird in Phase 4 befüllt
+                </div>
+              </Card>
+            </>)}
 
           </div>
         )}
