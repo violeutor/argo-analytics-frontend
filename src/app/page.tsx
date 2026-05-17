@@ -58,6 +58,14 @@ async function fetchCompanies(): Promise<Company[]> {
 }
 
 
+
+const RATING_LABEL: Record<string, string> = {
+  A: 'A · No-Brainer',
+  B: 'B · Solide',
+  C: 'C · Abwägen',
+  D: 'D · Uninteressant',
+};
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function Badge({
