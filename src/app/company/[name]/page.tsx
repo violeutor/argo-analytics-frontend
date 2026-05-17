@@ -58,7 +58,7 @@ const C = {
   purple: "#C084FC", purpleDim: "rgba(192,132,252,0.10)",
   text1: "#FAFAF9", text2: "#A1A1AA", text3: "#52525B",
   mono: "'DM Mono','Fira Code',monospace",
-  display: "'Syne','Space Grotesk',system-ui,sans-serif",
+  display: "'Plus Jakarta Sans','Space Grotesk',system-ui,sans-serif",
   body: "'DM Sans',system-ui,sans-serif",
 };
 
@@ -416,7 +416,7 @@ export default function CompanyDetailPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text1, fontFamily: C.body }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(0,212,160,0.2); }
         ::-webkit-scrollbar { width: 5px; }
@@ -430,20 +430,6 @@ export default function CompanyDetailPage() {
         position: "sticky", top: 0, zIndex: 100,
         background: C.bg + "EE", backdropFilter: "blur(12px)",
       }}>
-        <button
-          onClick={() => router.back()}
-          style={{
-            borderRadius: 6, color: C.text2, fontSize: 12,
-            padding: "5px 12px", cursor: "pointer", fontFamily: C.mono,
-            display: "flex", alignItems: "center", gap: 6,
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
-        >
-          ← Zurück
-        </button>
-        <div style={{ width: 1, height: 20, background: C.border }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 24, height: 24, borderRadius: 5, background: C.teal, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontFamily: C.mono, fontSize: 11, fontWeight: 700, color: "#000" }}>A</span>
@@ -460,7 +446,22 @@ export default function CompanyDetailPage() {
         )}
       </div>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 32px" }}>
+
+        {/* Zurück-Button */}
+        <button
+          onClick={() => router.back()}
+          style={{
+            marginBottom: 20, borderRadius: 6, color: C.text2, fontSize: 12,
+            padding: "5px 12px", cursor: "pointer", fontFamily: C.mono,
+            display: "flex", alignItems: "center", gap: 6, background: "transparent",
+            border: `1px solid ${C.border}`, transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = C.teal; e.currentTarget.style.color = C.teal; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}
+        >
+          ← Zurück
+        </button>
 
         {/* Loading */}
         {loading && (
