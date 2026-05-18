@@ -6,6 +6,26 @@ import { useParams, useRouter } from "next/navigation";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OwnershipItem { name: string; type: string; role?: string; notes?: string }
+interface MarketSegment { name: string; share_pct: number; note?: string }
+interface RegionalBreakdown { region: string; share_pct: number }
+interface MarketData {
+  tam_2035_usd_bn?: number;
+  cagr_pct?: number;
+  tam_segments?: MarketSegment[];
+  growth_drivers?: string[];
+  regional_breakdown?: RegionalBreakdown[];
+  regional_sources?: string[];
+  sam_usd_bn?: number;
+  sam_confidence?: string;
+  sam_note?: string;
+  sam_geo_factor?: number;
+  sam_tech_filter?: number;
+  competition_score?: string;
+  competition_note?: string;
+  market_cycle?: string;
+  market_cycle_note?: string;
+  enriched_at?: string;
+}
 interface FundingRoundItem {
   date?: string; type?: string; amount_usd_mn?: number;
   lead_investor?: string; co_investors?: string[];
@@ -44,6 +64,7 @@ interface CompanyDetail {
   supply_chain_upstream: SupplyItem[]; supply_chain_downstream: SupplyItem[];
   supply_chain_etfs: { ticker: string; name: string; relevance: number }[];
   last_signal?: string; last_signal_date?: string;
+  market_data?: MarketData;
   is_known: boolean; warnings: string[];
 }
 
@@ -472,7 +493,183 @@ export default function CompanyDetailPage() {
           )}
 
           {/* Tab 1: Markt */}
-          {activeTab === 1 && <Placeholder title="Markt" sub="TAM-Breakdown · Wachstumstreiber · Wettbewerbslandschaft — Phase 2" />}
+          {activeTab === 1 && (() => {
+            const md = data.market_data;
+            const cycleColor = (c?: string) =>
+              c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : C.t2;
+            const compColor = (c?: string) =>
+              c === "low" ? C.teal : c === "medium" ? C.amber : c === "high" ? C.red : C.t3;
+            const confColor2 = (c?: string) =>
+              c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
+
+            if (!md) return (
+              <Card>
+                <SLabel text="Marktdaten" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>
+                  Marktdaten werden im Hintergrund angereichert — bitte in ~30s neu laden.
+                </div>
+              </Card>
+            );
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                {/* Row 1: TAM · SAM · CAGR · Zyklus */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                  <FundTile
+                    label="TAM 2035"
+                    val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
+                    sub={data.tam_source}
+                    color={confColor(data.tam_confidence)}
+                  />
+                  <FundTile
+                    label="SAM (geschätzt)"
+                    val={md.sam_usd_bn != null ? `$${md.sam_usd_bn.toFixed(0)}B` : "—"}
+                    sub={md.sam_confidence ? `Konfidenz: ${md.sam_confidence}` : undefined}
+                    color={confColor2(md.sam_confidence)}
+                  />
+                  <FundTile
+                    label="CAGR"
+                    val={md.cagr_pct != null ? `${md.cagr_pct.toFixed(1)}%` : "—"}
+                    sub="p.a. bis 2035"
+                    color={md.cagr_pct != null ? C.teal : C.t3}
+                  />
+                  <FundTile
+                    label="Marktzyklus"
+                    val={md.market_cycle ? md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1) : "—"}
+                    sub={md.market_cycle_note?.split("—")[0]?.trim()}
+                    color={cycleColor(md.market_cycle)}
+                  />
+                </div>
+
+                {/* Row 2: Segmente + Wachstumstreiber */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                  {/* Segmente */}
+                  <Card>
+                    <SLabel text="Marktsegmente" />
+                    {md.tam_segments && md.tam_segments.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {md.tam_segments.map((seg, i) => (
+                          <div key={i}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, color: C.t1 }}>{seg.name}</span>
+                              <span style={{ fontSize: 12, fontFamily: C.mono, color: C.teal }}>{seg.share_pct.toFixed(0)}%</span>
+                            </div>
+                            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${seg.share_pct}%`, background: `rgba(0,212,160,${0.3 + (seg.share_pct / 200)})`, borderRadius: 99, transition: "width .4s ease" }} />
+                            </div>
+                            {seg.note && <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{seg.note}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Segmentdaten werden angereichert.</div>
+                    )}
+                  </Card>
+
+                  {/* Wachstumstreiber */}
+                  <Card>
+                    <SLabel text="Wachstumstreiber" />
+                    {md.growth_drivers && md.growth_drivers.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {md.growth_drivers.map((d, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: i < md.growth_drivers!.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                            <div style={{ width: 20, height: 20, borderRadius: 5, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontFamily: C.mono, color: C.teal, fontWeight: 700 }}>
+                              {i + 1}
+                            </div>
+                            <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{d}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Wachstumstreiber werden angereichert.</div>
+                    )}
+                  </Card>
+                </div>
+
+                {/* Row 3: Regionale Verteilung + Wettbewerb */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                  {/* Regionale Verteilung */}
+                  <Card>
+                    <SLabel text="Regionale Verteilung" />
+                    {md.regional_breakdown && md.regional_breakdown.length > 0 ? (
+                      <>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {md.regional_breakdown.slice(0, 6).map((r, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 11, fontFamily: C.mono, color: C.t2, minWidth: 28 }}>{r.region}</span>
+                              <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${r.share_pct}%`, background: C.blue, borderRadius: 99 }} />
+                              </div>
+                              <span style={{ fontSize: 11, fontFamily: C.mono, color: C.t2, minWidth: 36, textAlign: "right" }}>{r.share_pct.toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                        {md.regional_sources && (
+                          <div style={{ marginTop: 10, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                            Quelle: {md.regional_sources.join(", ")}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Regionale Daten werden angereichert.</div>
+                    )}
+                  </Card>
+
+                  {/* Wettbewerb + SAM-Detail */}
+                  <Card>
+                    <SLabel text="Wettbewerb & SAM" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {/* Competition */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Wettbewerb</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: compColor(md.competition_score), fontFamily: C.display }}>
+                            {md.competition_score ? md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1) : "—"}
+                          </span>
+                        </div>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
+                      </div>
+                      {md.competition_note && (
+                        <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
+                      )}
+                      {/* SAM detail */}
+                      {md.sam_note && (
+                        <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
+                          {md.sam_note}
+                        </div>
+                      )}
+                      {(md.sam_geo_factor != null || md.sam_tech_filter != null) && (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {md.sam_geo_factor != null && (
+                            <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Geo-Faktor</div>
+                              <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_geo_factor * 100).toFixed(0)}%</div>
+                            </div>
+                          )}
+                          {md.sam_tech_filter != null && (
+                            <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Tech-Filter</div>
+                              <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_tech_filter * 100).toFixed(0)}%</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Enriched-at */}
+                {md.enriched_at && (
+                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textAlign: "right" }}>
+                    Marktdaten: {new Date(md.enriched_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Tab 2: Ownership */}
           {activeTab === 2 && (
@@ -495,7 +692,7 @@ export default function CompanyDetailPage() {
               <Card>
                 <SLabel text="Kapitalstruktur (geschätzt)" />
                 <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", paddingTop: 8 }}>
-                  Wird via North Data (DE) und EDGAR (US) angereichert — Phase 3
+                  Wird via OpenRegister.de (DE) und EDGAR (US) angereichert — Phase 3
                 </div>
               </Card>
             </div>
