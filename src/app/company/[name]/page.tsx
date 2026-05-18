@@ -402,7 +402,7 @@ export default function CompanyDetailPage() {
           {data.last_signal && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, padding: "8px 14px", background: C.amberDim, border: `1px solid ${C.amber}22`, borderRadius: C.rMd, fontSize: 12 }}>
               <span style={{ color: C.amber, fontSize: 10 }}>◆</span>
-              <span style={{ color: C.amber, fontWeight: 600, fontFamily: C.mono }}>{data.last_signal_date}</span>
+              <span style={{ color: C.t3, fontWeight: 400, fontFamily: C.mono }}>{data.last_signal_date}</span>
               <span style={{ color: C.t2 }}>{data.last_signal}</span>
             </div>
           )}
