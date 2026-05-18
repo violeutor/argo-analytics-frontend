@@ -32,7 +32,7 @@ interface SupplyItem { ticker: string; name: string; exchange?: string; role: st
 interface CompanyDetail {
   name: string; category?: string; core_technology?: string;
   website?: string; intro: string; industry?: string; risk?: string;
-  founding_year?: number; headquarters?: string; headcount?: string;
+  founded?: string; headquarters?: string; employee_count?: string;
   product_description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
@@ -436,9 +436,9 @@ export default function CompanyDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <Card>
                   <SLabel text="Unternehmen" />
-                  {data.founding_year && <InfoRow k="Gegründet" v={String(data.founding_year)} />}
+                  {data.founded && <InfoRow k="Gegründet" v={data.founded} />}
                   {data.headquarters && <InfoRow k="Hauptsitz" v={data.headquarters} />}
-                  {data.headcount && <InfoRow k="Mitarbeiter" v={data.headcount} />}
+                  {data.employee_count && <InfoRow k="Mitarbeiter" v={data.employee_count} />}
                   <InfoRow k="Kategorie" v={data.category ?? "—"} />
                   <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
