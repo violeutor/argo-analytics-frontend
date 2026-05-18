@@ -160,6 +160,7 @@ function HeroState({
   companies: Company[];
   onSelect: (c: Company) => void;
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Company[]>([]);
   const [popular, setPopular] = useState<{ name: string; count: number }[]>([]);
@@ -198,9 +199,16 @@ function HeroState({
   };
 
   const handleSearch = () => {
+    if (!query.trim()) return;
+    // Exakter oder Partial-Match in geladenen Companies
     const match = companies.find((c) => c.name.toLowerCase() === query.toLowerCase())
       ?? companies.find((c) => c.name.toLowerCase().includes(query.toLowerCase()));
-    if (match) handleSelect(match);
+    if (match) {
+      handleSelect(match);
+    } else {
+      // Kein lokaler Match — direkt navigieren, Backend übernimmt Fuzzy-Search
+      router.push(`/company/${encodeURIComponent(query.trim())}`);
+    }
   };
 
   return (
