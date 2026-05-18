@@ -182,12 +182,18 @@ function HeroState({
     ]);
   }, []);
 
+  const matchesQuery = (c: Company, q: string) => {
+    const ql = q.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(ql) ||
+      (c.proxy ?? '').toLowerCase().includes(ql)
+    );
+  };
+
   const handleInput = (v: string) => {
     setQuery(v);
     if (v.length < 2) { setSuggestions([]); return; }
-    setSuggestions(
-      companies.filter((c) => c.name.toLowerCase().includes(v.toLowerCase())).slice(0, 6)
-    );
+    setSuggestions(companies.filter((c) => matchesQuery(c, v)).slice(0, 6));
   };
 
   const handleSelect = (c: Company) => {
@@ -200,14 +206,14 @@ function HeroState({
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    // Exakter oder Partial-Match in geladenen Companies
-    const match = companies.find((c) => c.name.toLowerCase() === query.toLowerCase())
-      ?? companies.find((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+    const q = query.trim();
+    const match =
+      companies.find((c) => c.name.toLowerCase() === q.toLowerCase()) ??
+      companies.find((c) => matchesQuery(c, q));
     if (match) {
       handleSelect(match);
     } else {
-      // Kein lokaler Match — direkt navigieren, Backend übernimmt Fuzzy-Search
-      router.push(`/company/${encodeURIComponent(query.trim())}`);
+      router.push(`/company/${encodeURIComponent(q)}`);
     }
   };
 
