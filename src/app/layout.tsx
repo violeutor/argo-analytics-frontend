@@ -4,6 +4,10 @@ export const metadata: Metadata = {
   title: "Argo Analytics · Climate Tech Intelligence",
   description:
     "M&A Deal Scoring, IPO Tracking und Investment Path Analysis für Climate Tech.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function RootLayout({

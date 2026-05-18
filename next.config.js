@@ -6,6 +6,13 @@ const nextConfig = {
   // Yahoo Finance calls gehen über interne API route
   async headers() {
     return [
+      // Alle Routen: nicht indexieren (Beta — kein öffentlicher Zugang)
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
       {
         source: "/api/:path*",
         headers: [
