@@ -68,6 +68,7 @@ interface FundamentalsData {
 interface TechReadinessDetail {
   overall: number; inputs_provided: boolean;
   factors: Record<string, number>; factor_weights: Record<string, number>;
+  confidence?: string; // listed | auto_low | auto_medium | auto_high | user
 }
 interface ScoringDetail {
   buyer_name: string; ticker?: string;
@@ -196,10 +197,49 @@ function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
   );
 }
 
-function ScoringCard({ s, rank }: { s: ScoringDetail; rank: number }) {
+function ScoringCard({ s, rank, showTR = true }: { s: ScoringDetail; rank: number; showTR?: boolean }) {
   const [open, setOpen] = useState(rank === 1);
   const rc = ratingColor(s.rating);
   const mc = mfrColor(s.mfr_signal);
+
+  const trConfidenceLabel = (conf?: string) => {
+    if (conf === "user")        return "✓ User-Input";
+    if (conf === "auto_high")   return "Auto · High";
+    if (conf === "auto_medium") return "Auto · Medium";
+    if (conf === "auto_low")    return "Auto · Low";
+    return "Auto";
+  };
+  const trConfidenceColor = (conf?: string) => {
+    if (conf === "user")        return C.teal;
+    if (conf === "auto_high")   return C.teal;
+    if (conf === "auto_medium") return C.amber;
+    return C.red;
+  };
+
+  const scoreTiles = [
+    {
+      label: "SRR — Strategic Relevance",
+      val: `${s.srr_value.toFixed(2)}×`,
+      desc: s.srr_category,
+      color: C.teal,
+      pct: Math.min(s.srr_value / 2, 1),
+    },
+    {
+      label: "MFR — M&A Feasibility",
+      val: `${s.mfr_value.toFixed(2)}×`,
+      desc: `${s.mfr_signal === "Feasible" ? "🟢" : s.mfr_signal === "Watch" ? "🟡" : "🔴"} ${s.mfr_signal}`,
+      color: mc,
+      pct: s.mfr_value < 0.15 ? 0.9 : s.mfr_value < 0.5 ? 0.55 : 0.2,
+    },
+    ...(showTR ? [{
+      label: "Tech Readiness",
+      val: s.tech_readiness.overall.toFixed(2),
+      desc: trConfidenceLabel(s.tech_readiness.confidence),
+      color: trConfidenceColor(s.tech_readiness.confidence),
+      pct: s.tech_readiness.overall,
+    }] : []),
+  ];
+
   return (
     <div style={{ background: C.bgCard, border: `1px solid ${open ? C.borderMd : C.border}`, borderRadius: C.rLg, marginBottom: 10, overflow: "hidden" }}>
       <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", cursor: "pointer" }}>
@@ -214,12 +254,8 @@ function ScoringCard({ s, rank }: { s: ScoringDetail; rank: number }) {
       </div>
       {open && (
         <div style={{ padding: "0 20px 20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
-            {[
-              { label: "SRR — Strategic Relevance", val: `${s.srr_value.toFixed(2)}×`, desc: s.srr_category, color: C.teal, pct: Math.min(s.srr_value / 2, 1) },
-              { label: "MFR — M&A Feasibility", val: `${s.mfr_value.toFixed(2)}×`, desc: `${s.mfr_signal === "Feasible" ? "🟢" : s.mfr_signal === "Watch" ? "🟡" : "🔴"} ${s.mfr_signal}`, color: mc, pct: s.mfr_value < 0.15 ? 0.9 : s.mfr_value < 0.5 ? 0.55 : 0.2 },
-              { label: "Tech Readiness", val: s.tech_readiness.overall.toFixed(2), desc: s.tech_readiness.inputs_provided ? "Inputs provided" : "Neutral fallback", color: C.blue, pct: s.tech_readiness.overall },
-            ].map(tile => (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${scoreTiles.length},1fr)`, gap: 10, marginBottom: 12 }}>
+            {scoreTiles.map(tile => (
               <div key={tile.label} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
                 <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{tile.label}</div>
                 <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: tile.color }}>{tile.val}</div>
@@ -1021,7 +1057,14 @@ export default function CompanyDetailPage() {
           {/* Tab 7: Exposure Types */}
           {activeTab === 7 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {data.scorings.map((s, i) => <ScoringCard key={s.buyer_name} s={s} rank={i + 1} />)}
+              {data.scorings.map((s, i) => (
+                <ScoringCard
+                  key={s.buyer_name}
+                  s={s}
+                  rank={i + 1}
+                  showTR={!data.fundamentals.is_listed}
+                />
+              ))}
               {(data.supply_chain_upstream.length > 0 || data.supply_chain_downstream.length > 0) && (
                 <Card>
                   <SLabel text="Supply Chain Contributors" />
