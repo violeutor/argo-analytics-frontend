@@ -1137,99 +1137,114 @@ export default function CompanyDetailPage() {
               </Card>
             );
 
-            const renderEntry = (entry: ValueDriverEntry, isEnabler: boolean) => (
-              <div key={entry.ticker} style={{
-                padding: "14px 16px", borderRadius: C.rMd,
-                background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
-                display: "flex", flexDirection: "column", gap: 8,
-              }}>
-                {/* Header: Ticker + Name + Kurs */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: isEnabler ? C.blue : C.teal }}>
+            const renderEntry = (entry: ValueDriverEntry, isEnabler: boolean) => {
+              const accent = isEnabler ? C.blue : C.teal;
+              const accentDim = isEnabler ? C.blueDim : C.tealDim;
+              return (
+                <div key={entry.ticker} style={{
+                  padding: "14px 16px", borderRadius: C.rMd,
+                  background: "rgba(255,255,255,0.025)",
+                  border: `1px solid ${C.border}`,
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}>
+
+                  {/* Row 1: Ticker + Name + Kurs */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: C.mono, fontSize: 15, fontWeight: 700, color: accent }}>
                         {entry.ticker}
                       </span>
                       {entry.exchange && (
-                        <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{entry.exchange}</span>
+                        <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, padding: "1px 6px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}` }}>
+                          {entry.exchange}
+                        </span>
                       )}
                       {(entry.partnership_likely || entry.existing_relationship) && (
-                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: C.tealDim, border: `1px solid ${C.tealBorder}`, color: C.teal, fontFamily: C.mono }}>
+                        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 99, background: C.tealDim, border: `1px solid ${C.tealBorder}`, color: C.teal, fontFamily: C.mono }}>
                           {isEnabler ? "Partnership likely" : "Rel. bekannt"}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12, color: C.t1, marginTop: 2 }}>{entry.name}</div>
-                  </div>
-                  {/* Kurs + Marktcap */}
-                  {entry.price != null && (
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.t1 }}>
-                        {fmtPrice(entry.price, entry.currency)}
-                      </div>
-                      {entry.market_cap_bn != null && (
-                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                          Mcap {fmtBn(entry.market_cap_bn)}
+                    {entry.price != null && (
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontFamily: C.mono, fontSize: 14, fontWeight: 600, color: C.t1 }}>
+                          {fmtPrice(entry.price, entry.currency)}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Rolle */}
-                <div style={{ fontSize: 11, color: C.t2 }}>{entry.role}</div>
-
-                {/* Context-Satz von Claude */}
-                {entry.context && (
-                  <div style={{
-                    fontSize: 11, color: C.t1, lineHeight: 1.55,
-                    padding: "6px 10px", borderRadius: C.rSm,
-                    background: isEnabler ? C.blueDim : C.tealDim,
-                    border: `1px solid ${isEnabler ? C.blue + "22" : C.tealBorder}`,
-                  }}>
-                    {entry.context}
+                        {entry.market_cap_bn != null && (
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                            Mcap {fmtBn(entry.market_cap_bn)}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {/* Signal-Chips */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {isEnabler ? (<>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
-                      color: depColor(entry.dependency_level), background: depColor(entry.dependency_level) + "18",
-                      border: `1px solid ${depColor(entry.dependency_level)}33`,
-                    }}>
-                      Abhängigkeit: {depLabel(entry.dependency_level)}
-                    </span>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
-                      color: mktColor(entry.market_position), background: mktColor(entry.market_position) + "18",
-                      border: `1px solid ${mktColor(entry.market_position)}33`,
-                    }}>
-                      Markt: {mktLabel(entry.market_position)}
-                    </span>
-                  </>) : (<>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
-                      color: expColor(entry.exposure_level), background: expColor(entry.exposure_level) + "18",
-                      border: `1px solid ${expColor(entry.exposure_level)}33`,
-                    }}>
-                      Exposure: {expLabel(entry.exposure_level)}
-                    </span>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
-                      color: giColor(entry.grows_independently), background: giColor(entry.grows_independently) + "18",
-                      border: `1px solid ${giColor(entry.grows_independently)}33`,
-                    }}>
-                      Unabh. Wachstum: {giLabel(entry.grows_independently)}
-                    </span>
-                  </>)}
-                  {/* Relevance Bar */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-                    <div style={{ width: 50, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${entry.relevance * 100}%`, background: isEnabler ? C.blue : C.teal, borderRadius: 99 }} />
-                    </div>
-                    <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(entry.relevance * 100)}%</span>
+                  {/* Row 2: Name + Rolle als Bullets */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{entry.name}</div>
+                    {entry.context
+                      ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          {/* Rolle als erster Bullet */}
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+                            <span style={{ color: C.t3, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
+                          </div>
+                          {/* Context als zweiter Bullet */}
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+                            <span style={{ color: accent, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{entry.context}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+                          <span style={{ color: C.t3, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
+                          <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
+                        </div>
+                      )
+                    }
                   </div>
+
+                  {/* Row 3: Signal-Chips + Relevance */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+                    {isEnabler ? (<>
+                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                        color: depColor(entry.dependency_level), background: depColor(entry.dependency_level) + "18",
+                        border: `1px solid ${depColor(entry.dependency_level)}33`,
+                      }}>
+                        {depLabel(entry.dependency_level)}
+                      </span>
+                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                        color: mktColor(entry.market_position), background: mktColor(entry.market_position) + "18",
+                        border: `1px solid ${mktColor(entry.market_position)}33`,
+                      }}>
+                        {mktLabel(entry.market_position)}
+                      </span>
+                    </>) : (<>
+                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                        color: expColor(entry.exposure_level), background: expColor(entry.exposure_level) + "18",
+                        border: `1px solid ${expColor(entry.exposure_level)}33`,
+                      }}>
+                        Exposure {expLabel(entry.exposure_level)}
+                      </span>
+                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                        color: giColor(entry.grows_independently), background: giColor(entry.grows_independently) + "18",
+                        border: `1px solid ${giColor(entry.grows_independently)}33`,
+                      }}>
+                        Unabh. {giLabel(entry.grows_independently)}
+                      </span>
+                    </>)}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: "auto" }}>
+                      <div style={{ width: 44, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${entry.relevance * 100}%`, background: accent, borderRadius: 99 }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(entry.relevance * 100)}%</span>
+                    </div>
+                  </div>
+
                 </div>
-              </div>
-            );
+              );
+            };
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1309,61 +1324,86 @@ export default function CompanyDetailPage() {
                 />
               ))}
 
-              {/* Abschnitt 2: Value Chain — Investierbare Enabler + Contributors aus Tab 6 */}
+              {/* Abschnitt 2: Value Chain — 2-Spalten Grid */}
               {valueDriversData?.status === "ready" && (
                 (() => {
-                  const listed = [
-                    ...valueDriversData.enablers,
-                    ...valueDriversData.contributors,
-                  ].filter(e => e.price != null);  // nur wenn Yahoo-Daten vorhanden
+                  const enablers     = valueDriversData.enablers.filter(e => e.price != null);
+                  const contributors = valueDriversData.contributors.filter(e => e.price != null);
+                  if (enablers.length === 0 && contributors.length === 0) return null;
 
-                  if (listed.length === 0) return null;
+                  const VCRow = ({ entry }: { entry: ValueDriverEntry }) => {
+                    const isEnabler = entry.type === "enabler";
+                    const accent = isEnabler ? C.blue : C.teal;
+                    return (
+                      <div style={{
+                        display: "flex", flexDirection: "column", gap: 6,
+                        padding: "10px 12px", borderRadius: C.rMd,
+                        background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
+                      }}>
+                        {/* Ticker + Kurs */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontFamily: C.mono, fontSize: 14, fontWeight: 700, color: accent }}>
+                            {entry.ticker}
+                          </span>
+                          {entry.price != null && (
+                            <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.t1 }}>
+                              {entry.currency === "EUR" ? "€" : "$"}{entry.price.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        {/* Name + Mcap */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 12, color: C.t1 }}>{entry.name}</span>
+                          {entry.market_cap_bn != null && (
+                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{fmtBn(entry.market_cap_bn)}</span>
+                          )}
+                        </div>
+                        {/* Bullets */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <span style={{ color: C.t3, fontSize: 11, lineHeight: "17px", flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
+                          </div>
+                          {entry.context && (
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <span style={{ color: accent, fontSize: 11, lineHeight: "17px", flexShrink: 0 }}>·</span>
+                              <span style={{ fontSize: 11, color: C.t1, lineHeight: 1.5 }}>{entry.context}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Relevance */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${entry.relevance * 100}%`, background: accent, borderRadius: 99 }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(entry.relevance * 100)}%</span>
+                        </div>
+                      </div>
+                    );
+                  };
 
                   return (
                     <Card style={{ marginTop: 8 }}>
                       <SLabel text="Value Chain · Investierbare Enabler & Contributors" />
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {listed
-                          .sort((a, b) => b.relevance - a.relevance)
-                          .map(entry => (
-                            <div key={entry.ticker} style={{
-                              display: "flex", alignItems: "center", gap: 12,
-                              padding: "8px 0", borderBottom: `1px solid ${C.border}`,
-                            }}>
-                              <div style={{ minWidth: 60 }}>
-                                <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700,
-                                  color: entry.type === "enabler" ? C.blue : C.teal,
-                                }}>{entry.ticker}</div>
-                                <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase" }}>
-                                  {entry.type === "enabler" ? "Enabler" : "Contributor"}
-                                </div>
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 12, color: C.t1 }}>{entry.name}</div>
-                                <div style={{ fontSize: 10, color: C.t3, marginTop: 1 }}>{entry.role}</div>
-                              </div>
-                              {entry.context && (
-                                <div style={{ fontSize: 10, color: C.t2, maxWidth: 200, lineHeight: 1.4 }}>
-                                  {entry.context}
-                                </div>
-                              )}
-                              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                <div style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 600, color: C.t1 }}>
-                                  {entry.currency === "EUR" ? "€" : "$"}{entry.price!.toFixed(2)}
-                                </div>
-                                {entry.market_cap_bn != null && (
-                                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                                    {fmtBn(entry.market_cap_bn)}
-                                  </div>
-                                )}
-                              </div>
-                              <div style={{ width: 40, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", flexShrink: 0 }}>
-                                <div style={{ height: "100%", width: `${entry.relevance * 100}%`,
-                                  background: entry.type === "enabler" ? C.blue : C.teal, borderRadius: 99,
-                                }} />
-                              </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        {/* Enabler Spalte */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {enablers.length > 0 && (
+                            <div style={{ fontSize: 10, color: C.blue, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
+                              Enabler
                             </div>
-                          ))}
+                          )}
+                          {enablers.sort((a, b) => b.relevance - a.relevance).map(e => <VCRow key={e.ticker} entry={e} />)}
+                        </div>
+                        {/* Contributors Spalte */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {contributors.length > 0 && (
+                            <div style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
+                              Contributors
+                            </div>
+                          )}
+                          {contributors.sort((a, b) => b.relevance - a.relevance).map(e => <VCRow key={e.ticker} entry={e} />)}
+                        </div>
                       </div>
                     </Card>
                   );
