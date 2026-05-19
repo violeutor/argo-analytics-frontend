@@ -368,7 +368,7 @@ export default function CompanyDetailPage() {
   }, [name, loading, ownershipData?.entries?.length]);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 14 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 15 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -398,7 +398,7 @@ export default function CompanyDetailPage() {
       </nav>
 
       {/* Content */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1.5rem 2rem 4rem" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "1.5rem 2.5rem 4rem" }}>
 
         {loading && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
@@ -427,10 +427,10 @@ export default function CompanyDetailPage() {
           {/* Company Header */}
           <div style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rLg, padding: "20px 24px", marginBottom: 16 }}>
 
-            {/* Row 1: Name + Public/Private + Rating */}
+            {/* Row 1: Name + Public/Private + Star + Rating */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontFamily: C.display, fontSize: 20, fontWeight: 700, color: C.t1 }}>{data.name}</span>
+                <span style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, color: C.t1 }}>{data.name}</span>
                 <span style={{
                   fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 500,
                   color: data.ipo_status === "listed" ? C.teal : C.t2,
@@ -439,8 +439,6 @@ export default function CompanyDetailPage() {
                 }}>
                   {data.ipo_status === "listed" ? "Public" : "Private"}
                 </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   onClick={() => {
                     const key = "argo_watchlist";
@@ -450,11 +448,13 @@ export default function CompanyDetailPage() {
                     localStorage.setItem(key, JSON.stringify(wl));
                     setStarred(idx < 0);
                   }}
-                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: starred ? C.amber : C.t3, padding: 4, transition: "color .15s", lineHeight: 1 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: starred ? C.amber : C.t3, padding: "2px 4px", transition: "color .15s", lineHeight: 1 }}
                   title={starred ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"}
                 >
                   {starred ? "★" : "☆"}
                 </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {data.scorings[0] && (
                   <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
                     {data.scorings[0].rating}
@@ -515,8 +515,8 @@ export default function CompanyDetailPage() {
                 { label: "Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t1 },
               ]).map(m => (
                 <div key={m.label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>{m.label}</div>
-                  <div style={{ fontSize: 12, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
+                  <div style={{ fontSize: 10, color: C.t2, textTransform: "uppercase", letterSpacing: ".06em" }}>{m.label}</div>
+                  <div style={{ fontSize: 13, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
                 </div>
               ))}
             </div>
@@ -548,41 +548,16 @@ export default function CompanyDetailPage() {
 
           {/* Tab 0: Überblick */}
           {activeTab === 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {/* Linke Spalte: Intro + Markt */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {data.intro && (
-                  <Card style={{ gridColumn: "1 / -1" }}>
+                  <Card>
                     <SLabel text="Einordnung" />
-                    <div style={{ fontSize: 13, lineHeight: 1.75, color: C.t1 }}>{data.intro}</div>
+                    <div style={{ fontSize: 14, lineHeight: 1.8, color: C.t1 }}>{data.intro}</div>
                     <div style={{ marginTop: 10, fontSize: 10, color: C.t3, fontFamily: C.mono }}>↳ Generated by Claude · Argo Analytics Intelligence Layer</div>
                   </Card>
                 )}
-                <Card>
-                  <SLabel text="Unternehmen" />
-                  <InfoRow k="Gegründet" v={data.founded ?? "—"} />
-                  <InfoRow k="Hauptsitz" v={data.headquarters ?? "—"} />
-                  <InfoRow k="Mitarbeiter" v={data.employee_count ?? "—"} />
-                  <InfoRow k="Kategorie" v={data.category ?? "—"} />
-                  <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                      <span style={{ fontSize: 12, color: C.t2, flexShrink: 0 }}>Technologie</span>
-                      <div style={{ textAlign: "right" }}>
-                        {data.technology_tags.length > 0 ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
-                            {data.technology_tags.map(tag => (
-                              <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 12, color: C.t1, fontWeight: 500 }}>
-                            {data.core_technology ?? data.product_description ?? "—"}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {data.website && <InfoRow k="Website" v={data.website} vColor={C.teal} />}
-                </Card>
                 <Card>
                   <SLabel text="Markt & Positionierung" />
                   <InfoRow k="Sektor" v={data.industry ?? "—"} />
@@ -592,6 +567,33 @@ export default function CompanyDetailPage() {
                   <InfoRow k="Funding Total" v={fmtM(data.funding_total_usd_mn)} />
                 </Card>
               </div>
+              {/* Rechte Spalte: Unternehmen */}
+              <Card>
+                <SLabel text="Unternehmen" />
+                <InfoRow k="Gegründet" v={data.founded ?? "—"} />
+                <InfoRow k="Hauptsitz" v={data.headquarters ?? "—"} />
+                <InfoRow k="Mitarbeiter" v={data.employee_count ?? "—"} />
+                <InfoRow k="Kategorie" v={data.category ?? "—"} />
+                <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                    <span style={{ fontSize: 12, color: C.t2, flexShrink: 0 }}>Technologie</span>
+                    <div style={{ textAlign: "right" }}>
+                      {data.technology_tags.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                          {data.technology_tags.map(tag => (
+                            <Badge key={tag} label={tag} color={C.teal} bg={C.tealDim} border={C.tealBorder} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: C.t1, fontWeight: 500 }}>
+                          {data.core_technology ?? data.product_description ?? "—"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {data.website && <InfoRow k="Website" v={data.website} vColor={C.teal} />}
+              </Card>
             </div>
           )}
 
