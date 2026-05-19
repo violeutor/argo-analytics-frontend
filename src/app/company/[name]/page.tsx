@@ -644,8 +644,8 @@ export default function CompanyDetailPage() {
                       {/* SAM detail */}
                       {md.sam_note && (
                         <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
-                          {/* Gleichung rausfiltern — nur Freitext-Teil anzeigen */}
-                          {md.sam_note.includes("Geo:") ? md.sam_note.replace(/^SAM\s*=\s*[^.]+\.\s*/, "") : md.sam_note}
+                          {/* Alte DB-Rows: Gleichungs-Präfix rausfiltern */}
+                          {md.sam_note.replace(/^SAM\s*=\s*[^×]+×[^=]+=\s*\$[\d.]+B\.?\s*/i, "")}
                         </div>
                       )}
                       {(md.sam_geo_factor != null || md.sam_tech_filter != null) && (
