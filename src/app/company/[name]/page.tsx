@@ -27,6 +27,29 @@ interface MarketData {
   market_cycle_note?: string;
   enriched_at?: string;
 }
+interface OwnershipEntryPipeline {
+  name: string;
+  type?: string;
+  role?: string;
+  share_pct?: number;
+  source?: string;
+  as_of_date?: string;
+  notes?: string;
+}
+interface CapTableScore {
+  score: number;
+  label: string;
+  note: string;
+}
+interface OwnershipData {
+  status: string;              // ready | manual | pending | running | error
+  region?: string;             // US | DE
+  source_used?: string;        // edgar | openregister | manual | none
+  entries: OwnershipEntryPipeline[];
+  cap_table?: CapTableScore;
+  enriched_at?: string;
+}
+
 interface FundingRoundItem {
   date?: string; type?: string; amount_usd_mn?: number;
   lead_investor?: string; co_investors?: string[];
@@ -301,6 +324,44 @@ export default function CompanyDetailPage() {
     let timer = window.setTimeout(poll, 3000); // erster Poll nach 3s
     return () => window.clearTimeout(timer);
   }, [name, loading, data?.market_data?.sam_usd_bn]);
+
+  // Ownership Polling — analog zu Market
+  const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+
+  useEffect(() => {
+    if (!name || loading) return;
+    const isReady = (od?: OwnershipData | null) =>
+      od?.status === "ready" || od?.status === "manual";
+    if (isReady(ownershipData)) return;
+
+    setOwnershipLoading(true);
+    let attempts = 0;
+    const MAX = 5;
+    const INTERVAL = 8000;
+
+    const poll = () => {
+      if (attempts >= MAX) { setOwnershipLoading(false); return; }
+      attempts++;
+      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/ownership`)
+        .then(r => r.ok ? r.json() : null)
+        .then((od: OwnershipData | null) => {
+          if (!od) return;
+          setOwnershipData(od);
+          if (isReady(od)) {
+            setOwnershipLoading(false);
+          } else if (attempts < MAX) {
+            ownershipTimer = window.setTimeout(poll, INTERVAL);
+          } else {
+            setOwnershipLoading(false);
+          }
+        })
+        .catch(() => { setOwnershipLoading(false); });
+    };
+
+    let ownershipTimer = window.setTimeout(poll, 1000);
+    return () => window.clearTimeout(ownershipTimer);
+  }, [name, loading, ownershipData?.status]);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 14 }}>
@@ -711,31 +772,145 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 2: Ownership */}
-          {activeTab === 2 && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Card>
-                <SLabel text="Bekannte Investoren" />
-                {data.ownership.map((o, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: i < data.ownership.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                    <div style={{ width: 28, height: 28, borderRadius: C.rSm, flexShrink: 0, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.t2, fontFamily: C.mono }}>
-                      {o.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: C.t1 }}>{o.name}</div>
-                      <div style={{ fontSize: 10, color: C.t3, marginTop: 1 }}>{o.type}{o.notes ? ` · ${o.notes}` : ""}</div>
-                    </div>
-                    {o.role && <span style={{ fontSize: 11, fontFamily: C.mono, color: C.teal }}>{o.role}</span>}
-                  </div>
-                ))}
-              </Card>
-              <Card>
-                <SLabel text="Kapitalstruktur (geschätzt)" />
-                <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", paddingTop: 8 }}>
-                  Wird via OpenRegister.de (DE) und EDGAR (US) angereichert — Phase 3
+          {activeTab === 2 && (() => {
+            const typeColor = (t?: string) =>
+              t === "vc" ? C.teal : t === "pe" ? C.blue : t === "corporate" ? C.amber :
+              t === "government" ? C.purple : C.t2;
+            const sourceLabel = (s?: string) =>
+              s === "edgar_form_d" ? "EDGAR Form D" :
+              s === "edgar_sc_13g" || s === "edgar_sc_13d" ? "EDGAR 13G/13D" :
+              s === "openregister_de" ? "OpenRegister DE" :
+              s === "manual" ? "Kuratiert" : s ?? "—";
+
+            // Einträge: Pipeline-Daten bevorzugen, curated als Fallback
+            const pipelineEntries = ownershipData?.entries ?? [];
+            const curatedEntries  = data.ownership ?? [];
+            const showPipeline    = pipelineEntries.length > 0;
+            const entries         = showPipeline ? pipelineEntries : curatedEntries;
+            const cap             = ownershipData?.cap_table;
+            const isPending       = ownershipLoading || (ownershipData?.status === "pending" || ownershipData?.status === "running");
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                {/* Cap Table Score + Meta */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                  <FundTile
+                    label="Cap Table Score"
+                    val={cap ? `${(cap.score * 100).toFixed(0)}` : "—"}
+                    sub={cap?.label}
+                    color={cap ? (cap.score >= 0.7 ? C.red : cap.score >= 0.4 ? C.amber : C.teal) : C.t3}
+                  />
+                  <FundTile
+                    label="Investoren"
+                    val={String(entries.length || "—")}
+                    sub={ownershipData?.region ? `Region: ${ownershipData.region}` : undefined}
+                  />
+                  <FundTile
+                    label="Datenquelle"
+                    val={ownershipData?.source_used
+                      ? ownershipData.source_used === "edgar" ? "EDGAR"
+                        : ownershipData.source_used === "openregister" ? "OpenRegister"
+                        : ownershipData.source_used === "manual" ? "Kuratiert"
+                        : "—"
+                      : showPipeline ? "Pipeline" : curatedEntries.length > 0 ? "Kuratiert" : "—"}
+                    sub={cap?.note?.split("—")[0]?.trim()}
+                  />
                 </div>
-              </Card>
-            </div>
-          )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                  {/* Investorenliste */}
+                  <Card>
+                    <SLabel text={showPipeline ? "Investoren & Gesellschafter" : "Bekannte Investoren"} />
+                    {isPending && entries.length === 0 ? (
+                      <div style={{ padding: "28px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>
+                        Ownership-Daten werden angereichert…
+                      </div>
+                    ) : entries.length === 0 ? (
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", paddingTop: 8 }}>
+                        Keine öffentlichen Ownership-Daten verfügbar.
+                      </div>
+                    ) : (
+                      entries.map((o, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: i < entries.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                          <div style={{
+                            width: 28, height: 28, borderRadius: C.rSm, flexShrink: 0,
+                            background: typeColor("type" in o ? (o as OwnershipEntryPipeline).type : undefined) + "18",
+                            border: `1px solid ${typeColor("type" in o ? (o as OwnershipEntryPipeline).type : undefined)}33`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, fontWeight: 600, color: typeColor("type" in o ? (o as OwnershipEntryPipeline).type : undefined), fontFamily: C.mono,
+                          }}>
+                            {o.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, color: C.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.name}</div>
+                            <div style={{ fontSize: 10, color: C.t3, marginTop: 1 }}>
+                              {o.type ?? ""}
+                              {"notes" in o && (o as OwnershipEntryPipeline).notes ? ` · ${(o as OwnershipEntryPipeline).notes}` : ""}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+                            {o.role && <span style={{ fontSize: 11, fontFamily: C.mono, color: C.teal }}>{o.role}</span>}
+                            {"share_pct" in o && (o as OwnershipEntryPipeline).share_pct != null && (
+                              <span style={{ fontSize: 10, fontFamily: C.mono, color: C.t2 }}>{((o as OwnershipEntryPipeline).share_pct!).toFixed(1)}%</span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </Card>
+
+                  {/* Kapitalstruktur + Cap Table Detail */}
+                  <Card>
+                    <SLabel text="Kapitalstruktur" />
+                    {cap ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {/* Score Bar */}
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, color: C.t2 }}>Komplexität</span>
+                            <span style={{ fontSize: 12, fontFamily: C.mono, fontWeight: 600,
+                              color: cap.score >= 0.7 ? C.red : cap.score >= 0.4 ? C.amber : C.teal,
+                            }}>{cap.label}</span>
+                          </div>
+                          <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%", borderRadius: 99, transition: "width .4s ease",
+                              width: `${cap.score * 100}%`,
+                              background: cap.score >= 0.7 ? C.red : cap.score >= 0.4 ? C.amber : C.teal,
+                            }} />
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{cap.note}</div>
+                        {/* Quellen-Badges */}
+                        {showPipeline && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {[...new Set(pipelineEntries.map(e => e.source).filter(Boolean))].map(src => (
+                              <span key={src} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+                                background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.t3,
+                              }}>{sourceLabel(src)}</span>
+                            ))}
+                          </div>
+                        )}
+                        {ownershipData?.enriched_at && (
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 4 }}>
+                            Stand: {new Date(ownershipData.enriched_at).toLocaleDateString("de-DE")}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic", paddingTop: 8 }}>
+                        {isPending
+                          ? "Kapitalstruktur wird angereichert…"
+                          : "Wird via OpenRegister.de (DE) und EDGAR (US) angereichert."}
+                      </div>
+                    )}
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Tab 3: Fundamentals */}
           {activeTab === 3 && (
