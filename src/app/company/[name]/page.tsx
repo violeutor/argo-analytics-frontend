@@ -9,6 +9,7 @@ interface OwnershipItem { name: string; type: string; role?: string; notes?: str
 interface MarketSegment { name: string; share_pct: number; note?: string }
 interface RegionalBreakdown { region: string; share_pct: number }
 interface MarketData {
+  status?: string;
   tam_2035_usd_bn?: number;
   cagr_pct?: number;
   tam_segments?: MarketSegment[];
@@ -269,6 +270,37 @@ export default function CompanyDetailPage() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [name]);
+
+  // Market-Data Polling: wenn market_data fehlt oder unvollständig →
+  // /market-Endpunkt alle 8s pollen (max 5 Versuche) bis status = "ready"
+  useEffect(() => {
+    if (!name || loading) return;
+    const isReady = (md?: MarketData | null) =>
+      md?.status === "ready" || (md?.sam_usd_bn != null && md?.enriched_at != null);
+    if (isReady(data?.market_data)) return;
+
+    let attempts = 0;
+    const MAX = 5;
+    const INTERVAL = 8000;
+
+    const poll = () => {
+      if (attempts >= MAX) return;
+      attempts++;
+      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/market`)
+        .then(r => r.ok ? r.json() : null)
+        .then((md: MarketData | null) => {
+          if (!md) return;
+          setData(prev => prev ? { ...prev, market_data: md } : prev);
+          if (!isReady(md) && attempts < MAX) {
+            timer = window.setTimeout(poll, INTERVAL);
+          }
+        })
+        .catch(() => { /* silent — polling läuft weiter */ });
+    };
+
+    let timer = window.setTimeout(poll, 3000); // erster Poll nach 3s
+    return () => window.clearTimeout(timer);
+  }, [name, loading, data?.market_data?.sam_usd_bn]);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 14 }}>
