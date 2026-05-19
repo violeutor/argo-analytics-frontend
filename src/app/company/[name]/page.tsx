@@ -361,7 +361,7 @@ export default function CompanyDetailPage() {
 
     let ownershipTimer = window.setTimeout(poll, 1000);
     return () => window.clearTimeout(ownershipTimer);
-  }, [name, loading, ownershipData?.status]);
+  }, [name, loading, ownershipData?.entries?.length]);
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 14 }}>
