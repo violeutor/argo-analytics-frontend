@@ -886,7 +886,7 @@ export default function CompanyDetailPage() {
                         {/* Quellen-Badges */}
                         {showPipeline && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-                            {[...new Set(pipelineEntries.map(e => e.source).filter(Boolean))].map(src => (
+                            {Array.from(new Set(pipelineEntries.map(e => e.source).filter((s): s is string => Boolean(s)))).map(src => (
                               <span key={src} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
                                 background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.t3,
                               }}>{sourceLabel(src)}</span>
