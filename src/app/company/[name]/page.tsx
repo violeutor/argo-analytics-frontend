@@ -456,9 +456,9 @@ export default function CompanyDetailPage() {
                 )}
                 <Card>
                   <SLabel text="Unternehmen" />
-                  {data.founded && <InfoRow k="Gegründet" v={data.founded} />}
-                  {data.headquarters && <InfoRow k="Hauptsitz" v={data.headquarters} />}
-                  {data.employee_count && <InfoRow k="Mitarbeiter" v={data.employee_count} />}
+                  <InfoRow k="Gegründet" v={data.founded ?? "—"} />
+                  <InfoRow k="Hauptsitz" v={data.headquarters ?? "—"} />
+                  <InfoRow k="Mitarbeiter" v={data.employee_count ?? "—"} />
                   <InfoRow k="Kategorie" v={data.category ?? "—"} />
                   <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -496,7 +496,7 @@ export default function CompanyDetailPage() {
           {activeTab === 1 && (() => {
             const md = data.market_data;
             const cycleColor = (c?: string) =>
-              c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : C.t2;
+              c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : c === "mature" ? C.purple : C.t2;
             const compColor = (c?: string) =>
               c === "low" ? C.teal : c === "medium" ? C.amber : c === "high" ? C.red : C.t3;
             const confColor2 = (c?: string) =>
@@ -638,7 +638,8 @@ export default function CompanyDetailPage() {
                       {/* SAM detail */}
                       {md.sam_note && (
                         <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
-                          {md.sam_note}
+                          {/* Gleichung rausfiltern — nur Freitext-Teil anzeigen */}
+                          {md.sam_note.includes("Geo:") ? md.sam_note.replace(/^SAM\s*=\s*[^.]+\.\s*/, "") : md.sam_note}
                         </div>
                       )}
                       {(md.sam_geo_factor != null || md.sam_tech_filter != null) && (
