@@ -60,6 +60,10 @@ interface FundamentalsData {
   price?: number; market_cap_bn?: number; pe_ratio?: number;
   revenue_bn?: number; ebitda_bn?: number; debt_ebitda?: number;
   week_52_high?: number; week_52_low?: number; currency?: string;
+  gross_margin_pct?: number; operating_margin_pct?: number; profit_margin_pct?: number;
+  revenue_growth_pct?: number; earnings_growth_pct?: number;
+  free_cashflow_bn?: number; operating_cashflow_bn?: number;
+  ev_revenue?: number; ev_ebitda?: number; enterprise_value_bn?: number;
 }
 interface TechReadinessDetail {
   overall: number; inputs_provided: boolean;
@@ -913,30 +917,93 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 3: Fundamentals */}
-          {activeTab === 3 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {data.fundamentals.is_listed ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                  <FundTile label="Kurs" val={fmt(data.fundamentals.price, 2, data.fundamentals.currency === "EUR" ? "€" : "$")} color={C.t1} />
-                  <FundTile label="Marktcap" val={fmtBn(data.fundamentals.market_cap_bn)} color={C.t1} />
-                  <FundTile label="KGV" val={fmt(data.fundamentals.pe_ratio, 1)} />
-                  <FundTile label="Revenue" val={fmtBn(data.fundamentals.revenue_bn)} />
-                  <FundTile label="EBITDA" val={fmtBn(data.fundamentals.ebitda_bn)} />
-                  <FundTile label="Debt/EBITDA" val={data.fundamentals.debt_ebitda ? `${data.fundamentals.debt_ebitda.toFixed(1)}×` : "—"} color={data.fundamentals.debt_ebitda && data.fundamentals.debt_ebitda > 3 ? C.amber : C.t1} />
-                  <FundTile label="52W High" val={fmt(data.fundamentals.week_52_high, 0, "$")} />
-                  <FundTile label="52W Low" val={fmt(data.fundamentals.week_52_low, 0, "$")} />
-                </div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                  <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
-                  <FundTile label="Letzte Runde" val={data.funding_last_round?.split(";")[0] ?? "—"} />
-                  <FundTile label="Stage" val={data.funding_stage ?? "—"} />
-                  <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
-                </div>
-              )}
-              <FundingTimeline rounds={data.funding_rounds} />
-            </div>
-          )}
+          {activeTab === 3 && (() => {
+            const f = data.fundamentals;
+            const cur = f.currency === "EUR" ? "€" : "$";
+            const fmtPct = (v?: number | null) => v != null ? `${v.toFixed(1)}%` : "—";
+            const fmtX   = (v?: number | null) => v != null ? `${v.toFixed(1)}×` : "—";
+            const growthColor = (v?: number | null) =>
+              v == null ? C.t3 : v > 0 ? C.teal : C.red;
+            const marginColor = (v?: number | null) =>
+              v == null ? C.t3 : v >= 20 ? C.teal : v >= 0 ? C.amber : C.red;
+            const cfColor = (v?: number | null) =>
+              v == null ? C.t3 : v > 0 ? C.teal : C.red;
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {f.is_listed ? (<>
+
+                  {/* Row 1: Preis + Marktstruktur */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
+                    <FundTile label="Kurs" val={f.price != null ? `${cur}${f.price.toFixed(2)}` : "—"} color={C.t1} />
+                    <FundTile label="Marktcap" val={fmtBn(f.market_cap_bn)} color={C.t1} />
+                    <FundTile label="Enterprise Value" val={fmtBn(f.enterprise_value_bn)} />
+                    <FundTile label="52W High" val={f.week_52_high != null ? `${cur}${f.week_52_high.toFixed(0)}` : "—"} />
+                    <FundTile label="52W Low"  val={f.week_52_low  != null ? `${cur}${f.week_52_low.toFixed(0)}`  : "—"} />
+                  </div>
+
+                  {/* Row 2: P&L */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                    <FundTile label="Revenue" val={fmtBn(f.revenue_bn)} sub={f.revenue_growth_pct != null ? `YoY ${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%` : undefined} color={C.t1} />
+                    <FundTile label="EBITDA"  val={fmtBn(f.ebitda_bn)} />
+                    <FundTile label="KGV (P/E)" val={fmt(f.pe_ratio, 1)} />
+                    <FundTile label="Debt/EBITDA" val={f.debt_ebitda ? `${f.debt_ebitda.toFixed(1)}×` : "—"} color={f.debt_ebitda && f.debt_ebitda > 3 ? C.amber : C.t1} />
+                  </div>
+
+                  {/* Row 3: Margen + Growth + Cashflow */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+
+                    <Card>
+                      <SLabel text="Margen" />
+                      <InfoRow k="Bruttomarge"    v={fmtPct(f.gross_margin_pct)}     vColor={marginColor(f.gross_margin_pct)} />
+                      <InfoRow k="EBIT-Marge"     v={fmtPct(f.operating_margin_pct)} vColor={marginColor(f.operating_margin_pct)} />
+                      <InfoRow k="Nettomarge"     v={fmtPct(f.profit_margin_pct)}    vColor={marginColor(f.profit_margin_pct)} />
+                    </Card>
+
+                    <Card>
+                      <SLabel text="Wachstum" />
+                      <InfoRow k="Revenue Growth" v={f.revenue_growth_pct != null ? `${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%` : "—"} vColor={growthColor(f.revenue_growth_pct)} />
+                      <InfoRow k="Earnings Growth" v={f.earnings_growth_pct != null ? `${f.earnings_growth_pct > 0 ? "+" : ""}${f.earnings_growth_pct.toFixed(1)}%` : "—"} vColor={growthColor(f.earnings_growth_pct)} />
+                    </Card>
+
+                    <Card>
+                      <SLabel text="Cashflow" />
+                      <InfoRow k="Free Cashflow"      v={fmtBn(f.free_cashflow_bn)}      vColor={cfColor(f.free_cashflow_bn)} />
+                      <InfoRow k="Operating Cashflow" v={fmtBn(f.operating_cashflow_bn)} vColor={cfColor(f.operating_cashflow_bn)} />
+                    </Card>
+                  </div>
+
+                  {/* Row 4: Multiples */}
+                  <Card>
+                    <SLabel text="Bewertungs-Multiples" />
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                      {[
+                        { label: "EV / Revenue", val: fmtX(f.ev_revenue), note: "niedriger = günstiger" },
+                        { label: "EV / EBITDA",  val: fmtX(f.ev_ebitda),  note: "Branchenmedian ~10–15×" },
+                        { label: "P/E Ratio",    val: fmt(f.pe_ratio, 1), note: "Kurs / Gewinn je Aktie" },
+                      ].map(m => (
+                        <div key={m.label} style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{m.label}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: C.t1 }}>{m.val}</div>
+                          <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{m.note}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                </>) : (
+                  /* Private Company */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                    <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
+                    <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
+                    <FundTile label="Stage"         val={data.funding_stage ?? "—"} />
+                    <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
+                  </div>
+                )}
+                <FundingTimeline rounds={data.funding_rounds} />
+              </div>
+            );
+          })()}
 
           {/* Tab 4: Potenziale & Risiken */}
           {activeTab === 4 && <Placeholder title="Potenziale & Risiken" sub="2×n Grid · Chancen links · Risiken rechts · Composite Score — Phase 2" />}
