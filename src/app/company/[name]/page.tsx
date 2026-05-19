@@ -366,10 +366,10 @@ export default function CompanyDetailPage() {
               </div>
             </div>
 
-            {/* Row 2: Ticker+Index (public) OR Technologie+Series (private) */}
-            <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>
+            {/* Row 2: Ticker+Exchange (public) OR Technologie+Series (private) */}
+            <div style={{ fontSize: 12, color: C.t2, marginBottom: 14, fontFamily: data.ipo_status === "listed" ? C.mono : C.body }}>
               {data.ipo_status === "listed"
-                ? [data.proxy_ticker].filter(Boolean).join(" · ") || "—"
+                ? [data.fundamentals?.ticker, data.fundamentals?.exchange].filter(Boolean).join(" · ") || data.proxy_ticker || "—"
                 : [data.core_technology ?? data.product_description, data.funding_stage].filter(Boolean).join(" · ") || "—"
               }
             </div>
@@ -402,15 +402,21 @@ export default function CompanyDetailPage() {
               )}
             </div>
 
-            {/* Row 4: Meta-Grid */}
+            {/* Row 4: Meta-Grid — Public vs. Private */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-              {[
+              {(data.ipo_status === "listed" ? [
+                { label: "Marktcap", val: fmtBn(data.fundamentals?.market_cap_bn), color: C.t1 },
+                { label: "Kurs", val: data.fundamentals?.price != null ? `${data.fundamentals.currency === "EUR" ? "€" : "$"}${data.fundamentals.price.toFixed(2)}` : "—", color: C.t1 },
+                { label: "Sektor", val: data.industry ?? "—" },
+                { label: "Kategorie", val: data.category ?? "—" },
+                { label: "Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t1 },
+              ] : [
                 { label: "Funding Total", val: fmtM(data.funding_total_usd_mn) },
                 { label: "Letzte Runde", val: data.funding_last_round?.split(";")[0] ?? "—" },
                 { label: "Sektor", val: data.industry ?? "—" },
                 { label: "Kategorie", val: data.category ?? "—" },
-                { label: "Attraktivster Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t1 },
-              ].map(m => (
+                { label: "Exposure", val: data.investment_path ?? "—", color: PATH_COLORS[data.investment_path ?? ""] ?? C.t1 },
+              ]).map(m => (
                 <div key={m.label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>{m.label}</div>
                   <div style={{ fontSize: 12, color: (m as any).color ?? C.t1, fontWeight: 500 }}>{m.val}</div>
