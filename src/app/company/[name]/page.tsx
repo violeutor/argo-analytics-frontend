@@ -568,13 +568,12 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!name || loading || (activeTab !== 4 && activeTab !== 8)) return;
     if (signalsData) return; // bereits geladen
+    console.log("[Argo] fetchSignals →", name, "activeTab=", activeTab);
     setSignalsLoading(true);
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/signals`)
-      .then(r => r.ok ? r.json() : null)
-      .then((sd: SignalsData | null) => {
-        if (sd) setSignalsData(sd);
-      })
-      .catch(() => {})
+      .then(r => { console.log("[Argo] signals status=", r.status); return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`); })
+      .then((sd: SignalsData) => { console.log("[Argo] signals count=", sd?.signals?.length); setSignalsData(sd); })
+      .catch((e) => { console.error("[Argo] signals error:", e); })
       .finally(() => setSignalsLoading(false));
   }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -585,11 +584,12 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!name || loading || activeTab !== 5) return;
     if (peersData) return;
+    console.log("[Argo] fetchPeers →", name, "activeTab=", activeTab);
     setPeersLoading(true);
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/peers`)
-      .then(r => r.ok ? r.json() : null)
-      .then((pd: PeersResponse | null) => { if (pd) setPeersData(pd); })
-      .catch(() => {})
+      .then(r => { console.log("[Argo] peers status=", r.status); return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`); })
+      .then((pd: PeersResponse) => { console.log("[Argo] peers count=", pd?.peers?.length); setPeersData(pd); })
+      .catch((e) => { console.error("[Argo] peers error:", e); })
       .finally(() => setPeersLoading(false));
   }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
