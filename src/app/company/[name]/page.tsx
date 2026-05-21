@@ -454,7 +454,7 @@ export default function CompanyDetailPage() {
     let attempts = 0;
     const MAX = 5;
     const INTERVAL = 8000;
-    let timer: ReturnType<typeof window.setTimeout>;
+    let timer: ReturnType<typeof window.setTimeout> | undefined;
 
     const poll = () => {
       if (attempts >= MAX) return;
