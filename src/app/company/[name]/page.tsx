@@ -78,6 +78,21 @@ interface FundamentalsData {
   revenue_growth_pct?: number; earnings_growth_pct?: number;
   free_cashflow_bn?: number; operating_cashflow_bn?: number;
   ev_revenue?: number; ev_ebitda?: number; enterprise_value_bn?: number;
+  // BA-Bridge (private DE)
+  ba_found?: boolean; ba_revenue_mn?: number; ba_equity_mn?: number;
+  ba_total_assets_mn?: number; ba_employees?: number;
+  ba_last_report_year?: string; ba_source_url?: string;
+  // Beta (YH-06)
+  beta_1y?: number; beta_3y?: number; volatility_30d?: number;
+  beta_source?: string;           // 'market' | 'damodaran'
+  beta_benchmark?: string;        // '^GDAXI', '^GSPC', 'Damodaran · Power'
+  beta_benchmark_is_fallback?: boolean;
+  beta_calculated_at?: string;    // ISO 8601
+  beta_data_quality?: string;     // 'full' | 'partial'
+  // FD-01 Routing (FD-04 Herkunfts-Badge)
+  fundamentals_source?: string;           // 'yahoo' | 'ba_bridge' | 'edgar' | 'none'
+  fundamentals_source_secondary?: string;
+  fundamentals_quality_flag?: string;     // 'partial' | 'no_data'
 }
 interface TechReadinessDetail {
   overall: number; inputs_provided: boolean;
@@ -162,6 +177,85 @@ function Badge({ label, color, bg, border }: { label: string; color: string; bg:
 
 function SLabel({ text }: { text: string }) {
   return <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>{text}</div>;
+}
+
+// FD-04 — Herkunfts-Badge je Datenblock
+function SourceBadge({ source }: { source?: string }) {
+  if (!source || source === "none") return null;
+  const map: Record<string, { label: string; color: string }> = {
+    yahoo:     { label: "Yahoo Finance", color: C.blue },
+    ba_bridge: { label: "Bundesanzeiger", color: C.teal },
+    edgar:     { label: "SEC EDGAR", color: C.purple },
+  };
+  const s = map[source];
+  if (!s) return null;
+  return (
+    <span style={{
+      fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+      color: s.color, background: s.color + "14", border: `1px solid ${s.color}33`,
+    }}>{s.label}</span>
+  );
+}
+
+// YH-06 — Beta-Badge mit Tooltip-Daten
+function BetaBadge({ fd }: { fd: FundamentalsData }) {
+  const [hover, setHover] = useState(false);
+  if (fd.beta_1y == null) return <span style={{ color: C.t3, fontFamily: C.mono, fontSize: 13 }}>—</span>;
+
+  const standDate = fd.beta_calculated_at
+    ? new Date(fd.beta_calculated_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })
+    : null;
+  const isDamodaran = fd.beta_source === "damodaran";
+  const isPartial   = fd.beta_data_quality === "partial";
+  const isFallback  = fd.beta_benchmark_is_fallback;
+  const color       = isPartial || isFallback ? C.amber : C.t1;
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color, cursor: "default", borderBottom: `1px dashed ${C.t3}` }}>
+        β {fd.beta_1y.toFixed(2)}
+        {(isPartial || isFallback) && <span style={{ color: C.amber, marginLeft: 4 }}>⚠</span>}
+      </span>
+      {hover && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 200,
+          background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rMd,
+          padding: "10px 14px", minWidth: 220, boxShadow: "0 4px 20px rgba(0,0,0,.5)",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.t1, marginBottom: 8, fontFamily: C.mono }}>
+            β {fd.beta_1y.toFixed(3)} {standDate ? `· Stand ${standDate}` : ""}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {[
+              { k: "Benchmark", v: fd.beta_benchmark ?? "—" },
+              { k: "Quelle", v: isDamodaran ? "Damodaran (Branchen-Beta)" : "yfinance" },
+              { k: "Berechnung", v: isDamodaran ? "Unlevered Beta (NYU)" : "252 Handelstage" },
+              ...(fd.beta_3y != null ? [{ k: "Beta 3Y", v: fd.beta_3y.toFixed(3) }] : []),
+              ...(fd.volatility_30d != null ? [{ k: "Volatilität 30d", v: `${(fd.volatility_30d * 100).toFixed(1)}%` }] : []),
+            ].map(row => (
+              <div key={row.k} style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                <span style={{ fontSize: 10, color: C.t3 }}>{row.k}</span>
+                <span style={{ fontSize: 10, color: C.t2, fontFamily: C.mono }}>{row.v}</span>
+              </div>
+            ))}
+            {isFallback && (
+              <div style={{ marginTop: 6, fontSize: 10, color: C.amber, borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+                ⚠ Kein lokaler Index verfügbar · S&P 500 als Fallback
+              </div>
+            )}
+            {isPartial && (
+              <div style={{ marginTop: 4, fontSize: 10, color: C.amber }}>
+                ⚠ Weniger als 200 Handelstage — Beta eingeschränkt aussagekräftig
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -1074,14 +1168,100 @@ export default function CompanyDetailPage() {
                     </div>
                   </Card>
 
+                  {/* Row 5: Beta — listed (market) */}
+                  <Card>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <SLabel text="Risiko & Volatilität" />
+                      <SourceBadge source={f.fundamentals_source} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Beta 1Y</div>
+                        <BetaBadge fd={f} />
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Beta 3Y</div>
+                        <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.t1 }}>
+                          {f.beta_3y != null ? `β ${f.beta_3y.toFixed(2)}` : "—"}
+                        </span>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Volatilität 30d</div>
+                        <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.t1 }}>
+                          {f.volatility_30d != null ? `${(f.volatility_30d * 100).toFixed(1)}%` : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    {f.fundamentals_quality_flag === "partial" && (
+                      <div style={{ marginTop: 10, fontSize: 10, color: C.amber, padding: "6px 10px", background: C.amberDim, borderRadius: C.rSm }}>
+                        ⚠ Marktdaten eingeschränkt — kleinere Börse, Yahoo Finance lückenhaft
+                      </div>
+                    )}
+                  </Card>
+
                 </>) : (
                   /* Private Company */
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                    <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
-                    <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
-                    <FundTile label="Stage"         val={data.funding_stage ?? "—"} />
-                    <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
-                  </div>
+                  <>
+                    {/* FD-02 — Keine Finanzdaten */}
+                    {f.fundamentals_source === "none" && (
+                      <Card>
+                        <div style={{ padding: "24px 0", textAlign: "center", color: C.t3, fontSize: 12, fontFamily: C.mono }}>
+                          Keine Finanzdaten öffentlich verfügbar für diese Company.
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* BA-Bridge Daten (private DE) */}
+                    {f.ba_found && (
+                      <Card>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <SLabel text="Bundesanzeiger · Finanzkennzahlen" />
+                          <SourceBadge source="ba_bridge" />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                          <FundTile label="Umsatz" val={f.ba_revenue_mn != null ? `€${f.ba_revenue_mn.toFixed(1)}M` : "—"} color={C.t1} />
+                          <FundTile label="Eigenkapital" val={f.ba_equity_mn != null ? `€${f.ba_equity_mn.toFixed(1)}M` : "—"} />
+                          <FundTile label="Bilanzsumme" val={f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—"} />
+                          <FundTile label="Mitarbeiter" val={f.ba_employees != null ? f.ba_employees.toLocaleString("de-DE") : "—"} />
+                        </div>
+                        {f.ba_last_report_year && (
+                          <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                            Letzter Jahresabschluss: {f.ba_last_report_year}
+                          </div>
+                        )}
+                      </Card>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                      <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
+                      <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
+                      <FundTile label="Stage"         val={data.funding_stage ?? "—"} />
+                      <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
+                    </div>
+
+                    {/* Beta — private (Damodaran) */}
+                    {f.beta_1y != null && (
+                      <Card>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <SLabel text="Risiko · Branchen-Beta" />
+                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Damodaran · NYU</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+                          <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Unlevered Beta</div>
+                            <BetaBadge fd={f} />
+                          </div>
+                          <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Sektor</div>
+                            <span style={{ fontSize: 11, color: C.t2 }}>{f.beta_benchmark?.replace("Damodaran · ", "") ?? "—"}</span>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                          Industriestandard für Private-Company-Bewertung (VC/PE/M&A)
+                        </div>
+                      </Card>
+                    )}
+                  </>
                 )}
                 <FundingTimeline rounds={data.funding_rounds} />
               </div>
