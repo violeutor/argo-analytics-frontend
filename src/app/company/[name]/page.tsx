@@ -448,11 +448,13 @@ export default function CompanyDetailPage() {
     if (!name || loading) return;
     const isReady = (md?: MarketData | null) =>
       md?.status === "ready" || (md?.sam_usd_bn != null && md?.enriched_at != null);
+    // Bereits vollständig — kein Poll nötig
     if (isReady(data?.market_data)) return;
 
     let attempts = 0;
     const MAX = 5;
     const INTERVAL = 8000;
+    let timer: ReturnType<typeof window.setTimeout>;
 
     const poll = () => {
       if (attempts >= MAX) return;
@@ -460,18 +462,25 @@ export default function CompanyDetailPage() {
       fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/market`)
         .then(r => r.ok ? r.json() : null)
         .then((md: MarketData | null) => {
-          if (!md) return;
+          if (!md) {
+            if (attempts < MAX) timer = window.setTimeout(poll, INTERVAL);
+            return;
+          }
           setData(prev => prev ? { ...prev, market_data: md } : prev);
           if (!isReady(md) && attempts < MAX) {
             timer = window.setTimeout(poll, INTERVAL);
           }
         })
-        .catch(() => { /* silent — polling läuft weiter */ });
+        .catch(() => {
+          if (attempts < MAX) timer = window.setTimeout(poll, INTERVAL);
+        });
     };
 
-    let timer = window.setTimeout(poll, 3000); // erster Poll nach 3s
+    // Erster Poll sofort nach 2s — nicht erst nach 3s warten
+    timer = window.setTimeout(poll, 2000);
     return () => window.clearTimeout(timer);
-  }, [name, loading, data?.market_data?.sam_usd_bn]);
+  // Nur name + loading als Dependency — sam_usd_bn als Trigger entfernt (verhinderte Re-trigger)
+  }, [name, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ownership Polling — analog zu Market
   const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
