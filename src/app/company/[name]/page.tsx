@@ -79,6 +79,8 @@ interface SignalItem {
   severity: "high" | "medium" | "low";
   raw_title?: string;
   is_read?: boolean;
+  direction?: "positive" | "negative" | "neutral";
+  signal_category?: string;
 }
 interface SignalsData {
   status: "ready" | "empty";
@@ -305,15 +307,23 @@ function InfoRow({ k, v, vColor }: { k: string; v: string; vColor?: string }) {
 
 function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
   if (!rounds || rounds.length === 0) return null;
-  const dotColor = (t?: string) =>
-    t === "IPO" ? C.teal : t?.includes("C") || t?.includes("D") ? C.teal : t?.includes("B") ? C.blue : C.t3;
+  const STAGE_LABEL: Record<string, string> = {
+    seed: "Seed", pre_seed: "Pre-Seed", series_a: "Series A", series_b: "Series B",
+    series_c: "Series C", series_d: "Series D", series_d_plus: "Series D+",
+    growth: "Growth", ipo: "IPO", debt: "Debt", grant: "Grant",
+  };
+  const normalizeType = (t?: string) => t ? (STAGE_LABEL[t.toLowerCase()] ?? STAGE_LABEL[t] ?? t) : "—";
+  const dotColor = (t?: string) => {
+    const n = normalizeType(t);
+    return n === "IPO" ? C.teal : n.includes("C") || n.includes("D") || n === "Growth" ? C.teal : n.includes("B") ? C.blue : C.t3;
+  };
   return (
     <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
       <SLabel text="Funding History" />
       {rounds.map((r, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: i < rounds.length - 1 ? `1px solid ${C.border}` : "none" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor(r.type), flexShrink: 0 }} />
-          <div style={{ fontSize: 12, color: C.t1, fontWeight: 500, minWidth: 80 }}>{r.type ?? "—"}</div>
+          <div style={{ fontSize: 12, color: C.t1, fontWeight: 500, minWidth: 80 }}>{normalizeType(r.type)}</div>
           <div style={{ fontFamily: C.mono, fontSize: 12, color: C.teal, minWidth: 80 }}>{r.amount_usd_mn ? fmtM(r.amount_usd_mn) : "—"}</div>
           {r.lead_investor && <div style={{ fontSize: 11, color: C.t2, flex: 1 }}>{r.lead_investor}</div>}
           <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginLeft: "auto" }}>{r.date ? r.date.slice(0, 7) : "—"}</div>
@@ -529,13 +539,13 @@ export default function CompanyDetailPage() {
     return () => window.clearTimeout(ownershipTimer);
   }, [name, loading, ownershipData?.entries?.length]);
 
-  // Signals — einmaliger Fetch beim ersten Tab-9-Besuch
+  // Signals — einmaliger Fetch beim ersten Tab-4- oder Tab-9-Besuch
   const [sigFilter, setSigFilter] = useState<string>("all");
   const [signalsData, setSignalsData] = useState<SignalsData | null>(null);
   const [signalsLoading, setSignalsLoading] = useState(false);
 
   useEffect(() => {
-    if (!name || loading || activeTab !== 8) return;
+    if (!name || loading || (activeTab !== 4 && activeTab !== 8)) return;
     if (signalsData) return; // bereits geladen
     setSignalsLoading(true);
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/signals`)
@@ -675,8 +685,23 @@ export default function CompanyDetailPage() {
             {/* Row 2: Ticker+Exchange (public) OR Technologie+Series (private) */}
             <div style={{ fontSize: 12, color: C.t2, marginBottom: 14, fontFamily: data.ipo_status === "listed" ? C.mono : C.body }}>
               {data.ipo_status === "listed"
-                ? [data.fundamentals?.ticker, data.fundamentals?.exchange].filter(Boolean).join(" · ") || data.proxy_ticker || "—"
-                : [data.core_technology ?? data.product_description, data.funding_stage].filter(Boolean).join(" · ") || "—"
+                ? (() => {
+                    // BUG-15: Ticker-Format normalisieren — "SIE·XETRA" → "SIE · Xetra"
+                    const ticker = data.fundamentals?.ticker?.split("·")[0]?.trim() ?? data.fundamentals?.ticker;
+                    const exchange = data.fundamentals?.exchange ?? data.fundamentals?.ticker?.split("·")[1]?.trim();
+                    return [ticker, exchange].filter(Boolean).join(" · ") || data.proxy_ticker || "—";
+                  })()
+                : (() => {
+                    // BUG-18: funding_stage Normalisierung — "series_c" → "Series C"
+                    const stageMap: Record<string, string> = {
+                      seed: "Seed", series_a: "Series A", series_b: "Series B",
+                      series_c: "Series C", series_d: "Series D", series_d_plus: "Series D+",
+                      pre_seed: "Pre-Seed", growth: "Growth", public: "Public",
+                    };
+                    const rawStage = data.funding_stage ?? "";
+                    const stage = stageMap[rawStage] ?? rawStage;
+                    return [data.core_technology ?? data.product_description, stage].filter(Boolean).join(" · ") || "—";
+                  })()
               }
             </div>
 
@@ -1271,7 +1296,7 @@ export default function CompanyDetailPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
                       <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
                       <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
-                      <FundTile label="Stage"         val={data.funding_stage ?? "—"} />
+                      <FundTile label="Stage"         val={({ seed:"Seed", series_a:"Series A", series_b:"Series B", series_c:"Series C", series_d:"Series D", series_d_plus:"Series D+", pre_seed:"Pre-Seed", growth:"Growth", public:"Public" } as Record<string,string>)[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"} />
                       <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
                     </div>
 
@@ -1305,7 +1330,182 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 4: Potenziale & Risiken */}
-          {activeTab === 4 && <Placeholder title="Potenziale & Risiken" sub="2×n Grid · Chancen links · Risiken rechts · Composite Score — Phase 2" />}
+          {activeTab === 4 && (() => {
+            const signals = signalsData?.signals ?? [];
+            const potSignals = signals.filter(s => s.direction === "positive");
+            const riskSignals = signals.filter(s => s.direction === "negative" && s.source !== "internal_absence");
+            const absenceSignals = signals.filter(s => s.direction === "negative" && s.source === "internal_absence");
+
+            // Composite Score: (Potenziale * 10 - Risiken * 8) normiert auf 0-100
+            const rawScore = Math.max(0, Math.min(100,
+              50 + (potSignals.length * 10) - (riskSignals.length * 8) - (absenceSignals.length * 3)
+            ));
+            const scoreColor = rawScore >= 65 ? C.teal : rawScore >= 40 ? C.amber : C.red;
+            const scoreLabel = rawScore >= 65 ? "Positiv" : rawScore >= 40 ? "Gemischt" : "Kritisch";
+
+            // Kategorie-Labels
+            const catLabel: Record<string, string> = {
+              funding: "Finanzierung", partnership: "Partnerschaft", ipo_progress: "IPO-Fortschritt",
+              market_growth: "Marktwachstum", patent: "Patent/IP", investor_entry: "Neuer Investor",
+              regulatory: "Regulatorik", negative_earnings: "Earnings/Verlust",
+              supply_chain: "Lieferkette", insider_selling: "Insider-Verkauf",
+              customer_concentration: "Kundenkonzentration", filing: "Transparenz/Daten",
+              ownership_entry: "Ownership", general_news: "News",
+            };
+
+            const SignalCard = ({ signal, accent }: { signal: SignalItem; accent: string }) => (
+              <div style={{
+                background: C.s1, border: `1px solid ${accent}22`,
+                borderLeft: `3px solid ${accent}`,
+                borderRadius: 6, padding: "10px 12px", marginBottom: 8,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ fontSize: 11, color: C.t1, lineHeight: 1.4, flex: 1 }}>
+                    {signal.summary.split(":").slice(1).join(":").trim() || signal.summary}
+                  </div>
+                  {signal.signal_category && (
+                    <div style={{
+                      fontSize: 9, color: accent, background: `${accent}18`,
+                      borderRadius: 3, padding: "2px 6px", whiteSpace: "nowrap",
+                      fontFamily: C.mono, flexShrink: 0,
+                    }}>
+                      {catLabel[signal.signal_category] ?? signal.signal_category}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 5, alignItems: "center" }}>
+                  <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
+                    {signal.event_date?.slice(0, 10)}
+                  </span>
+                  <span style={{ fontSize: 9, color: C.t3 }}>·</span>
+                  <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase" }}>
+                    {signal.source === "internal_absence" ? "Datenlücke" : signal.source?.replace("_", " ")}
+                  </span>
+                  {signal.source_url && (
+                    <>
+                      <span style={{ fontSize: 9, color: C.t3 }}>·</span>
+                      <a href={signal.source_url} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 9, color: C.teal, textDecoration: "none" }}>
+                        Quelle ↗
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+
+            return (
+              <div>
+                {/* Hero Score */}
+                <Card style={{ marginBottom: 16, textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>
+                    SIGNAL-SCORE
+                  </div>
+                  <div style={{ fontSize: 48, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>
+                    {rawScore}
+                  </div>
+                  <div style={{ fontSize: 12, color: scoreColor, marginTop: 4, fontFamily: C.mono }}>
+                    {scoreLabel}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 12 }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: C.teal }}>{potSignals.length}</div>
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIALE</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: C.red }}>{riskSignals.length}</div>
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKEN</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: C.amber }}>{absenceSignals.length}</div>
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>DATENLÜCKEN</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 9, color: C.t3, marginTop: 10, fontFamily: C.mono }}>
+                    Basiert auf Signal-Engine · {signals.length} Signals · Quelle: Argo Analytics
+                  </div>
+                </Card>
+
+                {/* Loading State */}
+                {signalsLoading && (
+                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 32 }}>
+                    Signals werden geladen…
+                  </div>
+                )}
+
+                {/* Kein Signal */}
+                {!signalsLoading && signals.length === 0 && (
+                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 32 }}>
+                    Noch keine Signals vorhanden — Signal-Engine läuft täglich 06:00 UTC.
+                  </div>
+                )}
+
+                {/* 2-Spalten Grid */}
+                {!signalsLoading && signals.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                    {/* Links: Potenziale */}
+                    <div>
+                      <div style={{
+                        fontSize: 10, color: C.teal, fontFamily: C.mono, fontWeight: 600,
+                        marginBottom: 10, letterSpacing: "0.08em",
+                      }}>
+                        ▲ POTENZIALE ({potSignals.length})
+                      </div>
+                      {potSignals.length === 0 ? (
+                        <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>
+                          Keine Potenzial-Signale in den letzten 30 Tagen.
+                        </div>
+                      ) : (
+                        potSignals.map((s, i) => (
+                          <SignalCard key={s.id ?? i} signal={s} accent={C.teal} />
+                        ))
+                      )}
+                    </div>
+
+                    {/* Rechts: Risiken */}
+                    <div>
+                      <div style={{
+                        fontSize: 10, color: C.red, fontFamily: C.mono, fontWeight: 600,
+                        marginBottom: 10, letterSpacing: "0.08em",
+                      }}>
+                        ▼ RISIKEN ({riskSignals.length + absenceSignals.length})
+                      </div>
+                      {riskSignals.length === 0 && absenceSignals.length === 0 ? (
+                        <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>
+                          Keine Risiko-Signale erkannt.
+                        </div>
+                      ) : (
+                        <>
+                          {riskSignals.map((s, i) => (
+                            <SignalCard key={s.id ?? i} signal={s} accent={C.red} />
+                          ))}
+                          {absenceSignals.length > 0 && (
+                            <>
+                              <div style={{
+                                fontSize: 9, color: C.amber, fontFamily: C.mono,
+                                marginTop: 12, marginBottom: 6, letterSpacing: "0.06em",
+                              }}>
+                                DATENLÜCKEN ({absenceSignals.length})
+                              </div>
+                              {absenceSignals.map((s, i) => (
+                                <SignalCard key={s.id ?? `abs-${i}`} signal={s} accent={C.amber} />
+                              ))}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Disclaimer */}
+                <div style={{ marginTop: 16, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
+                  Automatisch generiert · Keine Anlageberatung · Stand: {new Date().toLocaleDateString("de-DE")}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Tab 5: Peer Review */}
           {activeTab === 5 && <Placeholder title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions — Phase 2" />}
