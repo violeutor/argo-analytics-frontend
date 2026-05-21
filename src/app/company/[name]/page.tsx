@@ -448,13 +448,11 @@ export default function CompanyDetailPage() {
     if (!name || loading) return;
     const isReady = (md?: MarketData | null) =>
       md?.status === "ready" || (md?.sam_usd_bn != null && md?.enriched_at != null);
-    // Bereits vollständig — kein Poll nötig
     if (isReady(data?.market_data)) return;
 
     let attempts = 0;
     const MAX = 5;
     const INTERVAL = 8000;
-    let timer: number | undefined;
 
     const poll = () => {
       if (attempts >= MAX) return;
@@ -462,25 +460,18 @@ export default function CompanyDetailPage() {
       fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/market`)
         .then(r => r.ok ? r.json() : null)
         .then((md: MarketData | null) => {
-          if (!md) {
-            if (attempts < MAX) timer = window.setTimeout(poll, INTERVAL);
-            return;
-          }
+          if (!md) return;
           setData(prev => prev ? { ...prev, market_data: md } : prev);
           if (!isReady(md) && attempts < MAX) {
             timer = window.setTimeout(poll, INTERVAL);
           }
         })
-        .catch(() => {
-          if (attempts < MAX) timer = window.setTimeout(poll, INTERVAL);
-        });
+        .catch(() => { /* silent — polling läuft weiter */ });
     };
 
-    // Erster Poll sofort nach 2s — nicht erst nach 3s warten
-    timer = window.setTimeout(poll, 2000);
+    let timer = window.setTimeout(poll, 3000); // erster Poll nach 3s
     return () => window.clearTimeout(timer);
-  // Nur name + loading als Dependency — sam_usd_bn als Trigger entfernt (verhinderte Re-trigger)
-  }, [name, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, loading, data?.market_data?.sam_usd_bn]);
 
   // Ownership Polling — analog zu Market
   const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
@@ -1278,7 +1269,328 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 4: Potenziale & Risiken */}
-          {activeTab === 4 && <Placeholder title="Potenziale & Risiken" sub="2×n Grid · Chancen links · Risiken rechts · Composite Score — Phase 2" />}
+          {activeTab === 4 && (() => {
+            const md   = data.market_data;
+            const sc   = data.scorings?.[0];
+            const tr   = sc?.tech_readiness;
+            const own  = ownershipData;
+
+            // Composite Score
+            const tamScore = (() => {
+              const t = data.tam_usd_bn;
+              if (!t) return null;
+              return t >= 100 ? 9 : t >= 50 ? 7.5 : t >= 20 ? 6 : t >= 5 ? 4.5 : 3;
+            })();
+            const srrScore = (() => {
+              if (!sc) return null;
+              const cat = sc.srr_category;
+              return cat === "Transformational++" ? 10 : cat === "Transformational" ? 8 :
+                     cat === "High Strategic" ? 6 : 3;
+            })();
+            const mfrScore = (() => {
+              if (!sc) return null;
+              return sc.mfr_signal === "Feasible" ? 9 : sc.mfr_signal === "Watch" ? 6 : 2;
+            })();
+            const trScore  = tr ? Math.round(tr.overall * 10) : null;
+            const stageScore = (() => {
+              const stage = data.funding_stage?.toLowerCase() ?? "";
+              if (stage.includes("ipo") || stage.includes("public")) return 8;
+              if (stage.includes("d") || stage.includes("e"))        return 7;
+              if (stage.includes("c"))                                return 6;
+              if (stage.includes("b"))                                return 5;
+              if (stage.includes("a"))                                return 4;
+              return 3;
+            })();
+            const scores  = [tamScore, srrScore, mfrScore, trScore, stageScore].filter((x): x is number => x != null);
+            const composite = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : null;
+            const compColor = composite == null ? C.t3 : composite >= 7 ? C.teal : composite >= 4 ? C.amber : C.red;
+            const compLabel = composite == null ? "—" : composite >= 7 ? "Attraktiv" : composite >= 4 ? "Abwägen" : "Kritisch";
+
+            type PotItem = { label: string; cat: string; val: string; sub?: string; color: string; score: number | null; source: string };
+            const potentials: PotItem[] = [
+              {
+                label: "Marktchance (TAM 2035)", cat: "Markt & Wachstum",
+                val: data.tam_usd_bn ? `$${data.tam_usd_bn.toFixed(0)}B` : "—",
+                sub: md?.cagr_pct ? `CAGR ${md.cagr_pct.toFixed(1)}% p.a.` : undefined,
+                color: tamScore != null && tamScore >= 7 ? C.teal : tamScore != null && tamScore >= 5 ? C.amber : C.t2,
+                score: tamScore, source: "TAM-Scraping",
+              },
+              {
+                label: "Adressierbarer Markt (SAM)", cat: "Markt & Wachstum",
+                val: md?.sam_usd_bn ? `$${md.sam_usd_bn.toFixed(0)}B` : "—",
+                sub: md?.sam_confidence ? `Konfidenz: ${md.sam_confidence}` : undefined,
+                color: md?.sam_usd_bn ? C.teal : C.t3,
+                score: md?.sam_usd_bn ? Math.min(Math.round(md.sam_usd_bn / 5), 10) : null,
+                source: "Market Data Pipeline",
+              },
+              {
+                label: "Marktdynamik", cat: "Markt & Wachstum",
+                val: md?.market_cycle ? md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1) : "—",
+                sub: md?.market_cycle_note?.split("—")[0]?.trim(),
+                color: md?.market_cycle === "growth" ? C.teal : md?.market_cycle === "early" ? C.blue : md?.market_cycle === "mature" ? C.amber : C.t3,
+                score: md?.market_cycle === "growth" ? 8 : md?.market_cycle === "early" ? 7 : md?.market_cycle === "mature" ? 5 : null,
+                source: "Market Data Pipeline",
+              },
+              {
+                label: "M&A-Attraktivität (SRR)", cat: "Strategische Hebel",
+                val: sc ? sc.srr_category : "—",
+                sub: sc ? `SRR ${sc.srr_value.toFixed(2)}x` : undefined,
+                color: srrScore != null && srrScore >= 8 ? C.teal : srrScore != null && srrScore >= 6 ? C.blue : C.t2,
+                score: srrScore, source: "Scoring-Engine",
+              },
+              {
+                label: "Kaeufer-Fit (MFR)", cat: "Strategische Hebel",
+                val: sc ? sc.mfr_signal : "—",
+                sub: sc ? `MFR ${sc.mfr_value.toFixed(2)}x - ${sc.buyer_name}` : undefined,
+                color: mfrScore != null && mfrScore >= 8 ? C.teal : mfrScore != null && mfrScore >= 5 ? C.amber : C.red,
+                score: mfrScore, source: "Scoring-Engine",
+              },
+              {
+                label: "IPO-Readiness", cat: "Strategische Hebel",
+                val: data.ipo_potential ?? "—",
+                sub: data.ipo_status ? `Status: ${data.ipo_status}` : undefined,
+                color: data.ipo_potential === "Hoch" ? C.teal : data.ipo_potential === "Mittel-hoch" ? C.blue : C.t2,
+                score: data.ipo_potential === "Hoch" ? 9 : data.ipo_potential === "Mittel-hoch" ? 7 : data.ipo_potential === "Mittel" ? 5 : 3,
+                source: "Argo DB",
+              },
+              {
+                label: "Technologiereife (TR)", cat: "Operative Hebel",
+                val: tr ? `${(tr.overall * 10).toFixed(1)} / 10` : "—",
+                sub: tr?.confidence ? `Konfidenz: ${tr.confidence.replace("auto_", "")}` : undefined,
+                color: trScore != null && trScore >= 7 ? C.teal : trScore != null && trScore >= 5 ? C.amber : C.t2,
+                score: trScore, source: "Auto-TR Engine",
+              },
+              {
+                label: "Wettbewerbsposition", cat: "Operative Hebel",
+                val: md?.competition_score ? md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1) + " Wettbewerb" : "—",
+                sub: md?.competition_note?.split(".")[0],
+                color: md?.competition_score === "low" ? C.teal : md?.competition_score === "medium" ? C.amber : C.t2,
+                score: md?.competition_score === "low" ? 8 : md?.competition_score === "medium" ? 5 : md?.competition_score === "high" ? 3 : null,
+                source: "Market Data Pipeline",
+              },
+            ];
+
+            type Sev = "high" | "medium" | "low" | "unknown";
+            type RskItem = { label: string; cat: string; val: string; sub?: string; color: string; severity: Sev; source: string };
+            const risks: RskItem[] = [
+              {
+                label: "Finanzierungsrisiko", cat: "Finanzielle Risiken",
+                val: (() => {
+                  const stage = data.funding_stage?.toLowerCase() ?? "";
+                  const total = data.funding_total_usd_mn;
+                  if (!stage && !total) return "Keine Daten";
+                  if (stage.includes("seed") || (total && total < 10)) return "Hoch";
+                  if (stage.includes("a") || (total && total < 50))    return "Mittel";
+                  return "Niedrig";
+                })(),
+                sub: data.funding_total_usd_mn ? `Total Funding: ${fmtM(data.funding_total_usd_mn)}` : undefined,
+                color: (() => {
+                  const s = data.funding_stage?.toLowerCase() ?? "";
+                  if (s.includes("seed") || !data.funding_total_usd_mn) return C.red;
+                  if (s.includes("a") || (data.funding_total_usd_mn ?? 0) < 50) return C.amber;
+                  return C.teal;
+                })(),
+                severity: (() => {
+                  const s = data.funding_stage?.toLowerCase() ?? "";
+                  return s.includes("seed") ? "high" : s.includes("a") ? "medium" : "low";
+                })(),
+                source: "Funding-Pipeline",
+              },
+              {
+                label: "Execution Risk (M&A)", cat: "Finanzielle Risiken",
+                val: sc?.execution_warning ? "Erhoeht" : sc ? "Normal" : "—",
+                sub: sc ? `MFR ${sc.mfr_value.toFixed(2)}x - ${sc.mfr_signal}` : undefined,
+                color: sc?.execution_warning ? C.red : sc?.mfr_signal === "Watch" ? C.amber : C.teal,
+                severity: sc?.execution_warning ? "high" : sc?.mfr_signal === "Watch" ? "medium" : "low",
+                source: "Scoring-Engine",
+              },
+              {
+                label: "Margenrisiko", cat: "Finanzielle Risiken",
+                val: data.fundamentals?.gross_margin_pct != null
+                  ? data.fundamentals.gross_margin_pct >= 40 ? "Niedrig" : data.fundamentals.gross_margin_pct >= 20 ? "Mittel" : "Hoch"
+                  : "Keine Daten",
+                sub: data.fundamentals?.gross_margin_pct != null ? `Bruttomarge ${data.fundamentals.gross_margin_pct.toFixed(1)}%` : undefined,
+                color: data.fundamentals?.gross_margin_pct == null ? C.t3
+                  : data.fundamentals.gross_margin_pct >= 40 ? C.teal
+                  : data.fundamentals.gross_margin_pct >= 20 ? C.amber : C.red,
+                severity: data.fundamentals?.gross_margin_pct == null ? "unknown"
+                  : data.fundamentals.gross_margin_pct >= 40 ? "low"
+                  : data.fundamentals.gross_margin_pct >= 20 ? "medium" : "high",
+                source: "Fundamentals (Twelve Data / BA-Bridge)",
+              },
+              {
+                label: "Wettbewerbsdruck", cat: "Markt & Wettbewerb",
+                val: md?.competition_score === "high" ? "Hoch" : md?.competition_score === "medium" ? "Mittel" : md?.competition_score === "low" ? "Niedrig" : "—",
+                sub: md?.competition_note?.split(".")[0],
+                color: md?.competition_score === "high" ? C.red : md?.competition_score === "medium" ? C.amber : C.teal,
+                severity: (md?.competition_score === "high" ? "high" : md?.competition_score === "medium" ? "medium" : md?.competition_score === "low" ? "low" : "unknown") as Sev,
+                source: "Market Data Pipeline",
+              },
+              {
+                label: "Marktrisiko", cat: "Markt & Wettbewerb",
+                val: data.risk ?? "—",
+                sub: undefined,
+                color: data.risk === "Hoch" ? C.red : data.risk === "Mittel" ? C.amber : C.teal,
+                severity: (data.risk === "Hoch" ? "high" : data.risk === "Mittel" ? "medium" : "low") as Sev,
+                source: "Argo DB",
+              },
+              {
+                label: "Ownership-Transparenz", cat: "Ownership-Risiken",
+                val: (() => {
+                  const n = own?.entries?.length ?? 0;
+                  if (!own) return "—";
+                  return n === 0 ? "Opaque" : n < 3 ? "Eingeschraenkt" : "Transparent";
+                })(),
+                sub: own?.entries?.length ? `${own.entries.length} bekannte Investoren` : undefined,
+                color: (() => { const n = own?.entries?.length ?? 0; return n === 0 ? C.red : n < 3 ? C.amber : C.teal; })(),
+                severity: (() => { const n = own?.entries?.length ?? 0; return (n === 0 ? "high" : n < 3 ? "medium" : "low") as Sev; })(),
+                source: "Ownership-Pipeline (EDGAR / Wikipedia)",
+              },
+              {
+                label: "Cap-Table-Komplexitaet", cat: "Ownership-Risiken",
+                val: (() => { const ct = own?.cap_table; if (!ct) return "—"; return ct.score >= 0.7 ? "Hoch" : ct.score >= 0.4 ? "Mittel" : "Niedrig"; })(),
+                sub: own?.cap_table?.note,
+                color: (() => { const s = own?.cap_table?.score; return s == null ? C.t3 : s >= 0.7 ? C.red : s >= 0.4 ? C.amber : C.teal; })(),
+                severity: (() => { const s = own?.cap_table?.score; return (s == null ? "unknown" : s >= 0.7 ? "high" : s >= 0.4 ? "medium" : "low") as Sev; })(),
+                source: "Ownership-Pipeline",
+              },
+              {
+                label: "Skalierungsrisiko (TR)", cat: "Operative Risiken",
+                val: (() => {
+                  const conf = tr?.confidence ?? "";
+                  if (conf === "listed") return "N/A (boersennotiert)";
+                  if (conf === "auto_low") return "Hoch";
+                  if (conf === "auto_medium") return "Mittel";
+                  return tr ? "Niedrig" : "—";
+                })(),
+                sub: tr ? `TR ${(tr.overall * 10).toFixed(1)} / 10` : undefined,
+                color: (() => {
+                  const conf = tr?.confidence ?? "";
+                  return conf === "listed" ? C.t3 : conf === "auto_low" ? C.red : conf === "auto_medium" ? C.amber : C.teal;
+                })(),
+                severity: (() => {
+                  const conf = tr?.confidence ?? "";
+                  return (conf === "listed" ? "unknown" : conf === "auto_low" ? "high" : conf === "auto_medium" ? "medium" : tr ? "low" : "unknown") as Sev;
+                })(),
+                source: "Auto-TR Engine",
+              },
+            ];
+
+            const comingSoon = [
+              "Insider-Aktivitaet (Form 4 / DE-Transparenzregister)",
+              "Hedgefonds Short-Positionen (13F)",
+              "Regulatorische Signale",
+              "Supply-Chain-Fragilitaet",
+              "KPI-Trendbrueche",
+            ];
+
+            const sevScore = (s: Sev) => s === "high" ? 8 : s === "medium" ? 5 : s === "low" ? 2 : 5;
+            const knownRisks = risks.filter(r => r.severity !== "unknown");
+            const riskScore = knownRisks.length
+              ? Math.round(knownRisks.reduce((a, r) => a + sevScore(r), 0) / knownRisks.length * 10) / 10
+              : null;
+            const riskColor = riskScore == null ? C.t3 : riskScore >= 6.5 ? C.red : riskScore >= 4 ? C.amber : C.teal;
+            const riskLabel = riskScore == null ? "—" : riskScore >= 6.5 ? "Kritisch" : riskScore >= 4 ? "Erhoeht" : "Moderat";
+
+            const PotCard = ({ item }: { item: PotItem }) => (
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 2 }}>{item.cat}</div>
+                    <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{item.label}</div>
+                  </div>
+                  {item.score != null && (
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.display, color: item.color, flexShrink: 0 }}>
+                      {item.score.toFixed(0)}<span style={{ fontSize: 11, color: C.t3 }}>/10</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: item.color, fontFamily: C.mono }}>{item.val}</div>
+                {item.sub && <div style={{ fontSize: 11, color: C.t2 }}>{item.sub}</div>}
+                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 2 }}>{item.source}</div>
+              </div>
+            );
+
+            const RskCard = ({ item }: { item: RskItem }) => {
+              const sevDot = item.severity === "high" ? C.red : item.severity === "medium" ? C.amber : item.severity === "low" ? C.teal : C.t3;
+              return (
+                <div style={{ background: C.bgCard, border: `1px solid ${item.severity === "high" ? C.red + "33" : C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 2 }}>{item.cat}</div>
+                      <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{item.label}</div>
+                    </div>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: sevDot, flexShrink: 0, marginTop: 4 }} />
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: item.color, fontFamily: C.mono }}>{item.val}</div>
+                  {item.sub && <div style={{ fontSize: 11, color: C.t2 }}>{item.sub}</div>}
+                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 2 }}>{item.source}</div>
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div style={{ background: C.bgCard, border: `1px solid ${compColor}33`, borderRadius: C.rLg, padding: "18px 20px" }}>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Composite Score</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: compColor, lineHeight: 1 }}>{composite?.toFixed(1) ?? "—"}</span>
+                      <span style={{ fontSize: 12, color: C.t3 }}>/10</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: compColor, marginTop: 4, fontWeight: 500 }}>{compLabel}</div>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Aus TAM · SRR · MFR · TR · Stage</div>
+                  </div>
+                  <div style={{ background: C.bgCard, border: `1px solid ${riskColor}33`, borderRadius: C.rLg, padding: "18px 20px" }}>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Risk Score</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: riskColor, lineHeight: 1 }}>{riskScore?.toFixed(1) ?? "—"}</span>
+                      <span style={{ fontSize: 12, color: C.t3 }}>/10</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: riskColor, marginTop: 4, fontWeight: 500 }}>{riskLabel}</div>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Severity bekannter Risikofaktoren</div>
+                  </div>
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Gesamturteil</div>
+                    <div style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: sc ? ratingColor(sc.rating) : C.t3, lineHeight: 1, marginBottom: 4 }}>
+                      {sc?.rating?.split("\xb7")[0]?.trim() ?? "—"}
+                    </div>
+                    <div style={{ fontSize: 12, color: sc ? ratingColor(sc.rating) : C.t3, fontWeight: 500 }}>
+                      {sc?.rating?.split("\xb7")[1]?.trim() ?? "Kein Scoring vorhanden"}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Scoring-Engine · {sc?.buyer_name ?? "—"}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <div style={{ width: 3, height: 16, background: C.teal, borderRadius: 2 }} />
+                      <span style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 600 }}>Potenziale · Value Upside</span>
+                    </div>
+                    {potentials.map((item, i) => <PotCard key={i} item={item} />)}
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <div style={{ width: 3, height: 16, background: C.red, borderRadius: 2 }} />
+                      <span style={{ fontSize: 11, color: C.red, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 600 }}>Risiken · Downside & Fragilitaet</span>
+                    </div>
+                    {risks.map((item, i) => <RskCard key={i} item={item} />)}
+                    <div style={{ background: "transparent", border: `1px dashed ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Verfuegbar ab Signal-Engine · Phase 4</div>
+                      {comingSoon.map((label, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                          <div style={{ width: 4, height: 4, borderRadius: "50%", background: C.t3, flexShrink: 0 }} />
+                          <span style={{ fontSize: 11, color: C.t3 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Tab 5: Peer Review */}
           {activeTab === 5 && <Placeholder title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions — Phase 2" />}
