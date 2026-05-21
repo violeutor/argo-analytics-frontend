@@ -89,6 +89,27 @@ interface SignalsData {
   count: number;
 }
 
+interface PeerCompany {
+  id: string; name: string; category?: string; industry?: string;
+  region?: string; headquarters?: string; founding_year?: number;
+  headcount?: number; funding_total_usd_mn?: number; funding_stage?: string;
+  funding_last_round?: string; ipo_status?: string; ipo_potential?: string;
+  investment_path?: string; revenue_usd_mn?: number; description?: string;
+  website?: string; ticker?: string; exchange?: string; stage_normalized?: string;
+}
+interface PeerBenchmark {
+  metric: string; company_value?: string; peer_median?: string;
+  unit?: string; note?: string;
+}
+interface PeersResponse {
+  status: "ready" | "generating" | "empty";
+  company_name: string;
+  peers: PeerCompany[];
+  benchmark: PeerBenchmark[];
+  generated_at?: string;
+  from_cache: boolean;
+}
+
 interface FundamentalsData {
   is_listed: boolean; ticker?: string; exchange?: string;
   price?: number; market_cap_bn?: number; pe_ratio?: number;
@@ -555,6 +576,21 @@ export default function CompanyDetailPage() {
       })
       .catch(() => {})
       .finally(() => setSignalsLoading(false));
+  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Peers — einmaliger Fetch beim ersten Tab-5-Besuch (Claude generiert on-demand)
+  const [peersData, setPeersData] = useState<PeersResponse | null>(null);
+  const [peersLoading, setPeersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!name || loading || activeTab !== 5) return;
+    if (peersData) return;
+    setPeersLoading(true);
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/peers`)
+      .then(r => r.ok ? r.json() : null)
+      .then((pd: PeersResponse | null) => { if (pd) setPeersData(pd); })
+      .catch(() => {})
+      .finally(() => setPeersLoading(false));
   }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Value Drivers Polling — analog zu Market + Ownership
@@ -1508,7 +1544,164 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 5: Peer Review */}
-          {activeTab === 5 && <Placeholder title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions — Phase 2" />}
+          {activeTab === 5 && (() => {
+            const peers = peersData?.peers ?? [];
+            const benchmark = peersData?.benchmark ?? [];
+
+            const stageOrder: Record<string, number> = {
+              "Pre-Seed": 0, "Seed": 1, "Series A": 2, "Series B": 3,
+              "Series C": 4, "Series D": 5, "Series D+": 6, "Growth": 7, "Public": 8,
+            };
+            const stageColor = (s?: string | null) =>
+              !s ? C.t3 : stageOrder[s] >= 6 ? C.teal : stageOrder[s] >= 3 ? C.blue : C.amber;
+
+            const regionFlag = (r?: string | null) =>
+              r === "US" ? "🇺🇸" : r === "DE" ? "🇩🇪" : r === "EU" ? "🇪🇺" : r === "UK" ? "🇬🇧" : "🌐";
+
+            return (
+              <div>
+                {/* Loading */}
+                {peersLoading && (
+                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 48 }}>
+                    Peer-Analyse wird generiert…
+                  </div>
+                )}
+
+                {/* Kein Ergebnis */}
+                {!peersLoading && peers.length === 0 && (
+                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 48 }}>
+                    Keine Peer-Daten verfügbar.
+                  </div>
+                )}
+
+                {!peersLoading && peers.length > 0 && (
+                  <>
+                    {/* Cache-Badge */}
+                    {peersData?.from_cache && (
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 10, textAlign: "right" }}>
+                        Cached · {peersData.generated_at?.slice(0, 10)}
+                      </div>
+                    )}
+
+                    {/* Block 1: Peer-Gruppe */}
+                    <Card style={{ marginBottom: 12 }}>
+                      <SLabel text={`Wettbewerber (${peers.length})`} />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {peers.map(p => (
+                          <div key={p.id} style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 80px 80px 90px",
+                            alignItems: "center", gap: 8,
+                            padding: "8px 0",
+                            borderBottom: `1px solid ${C.border}`,
+                          }}>
+                            {/* Name + Beschreibung */}
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: C.t1 }}>
+                                {regionFlag(p.region)} {p.name}
+                                {p.ticker && (
+                                  <span style={{ fontSize: 9, color: C.teal, fontFamily: C.mono, marginLeft: 6 }}>
+                                    {p.ticker}
+                                  </span>
+                                )}
+                              </div>
+                              {p.description && (
+                                <div style={{ fontSize: 10, color: C.t3, marginTop: 2, lineHeight: 1.4 }}>
+                                  {p.description.slice(0, 100)}{p.description.length > 100 ? "…" : ""}
+                                </div>
+                              )}
+                            </div>
+                            {/* Stage */}
+                            <div style={{
+                              fontSize: 9, fontFamily: C.mono,
+                              color: stageColor(p.stage_normalized),
+                              background: stageColor(p.stage_normalized) + "18",
+                              borderRadius: 3, padding: "2px 6px", textAlign: "center",
+                            }}>
+                              {p.stage_normalized ?? "—"}
+                            </div>
+                            {/* Funding */}
+                            <div style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textAlign: "right" }}>
+                              {p.funding_total_usd_mn
+                                ? p.funding_total_usd_mn >= 1000
+                                  ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
+                                  : `$${p.funding_total_usd_mn.toFixed(0)}M`
+                                : "—"}
+                            </div>
+                            {/* Headcount */}
+                            <div style={{ fontSize: 11, color: C.t2, textAlign: "right" }}>
+                              {p.headcount ? `${p.headcount.toLocaleString()} MA` : "—"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+
+                    {/* Block 2: Benchmark */}
+                    {benchmark.length > 0 && (
+                      <Card style={{ marginBottom: 12 }}>
+                        <SLabel text="Benchmark vs. Peer-Median" />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                          {/* Header */}
+                          <div style={{
+                            display: "grid", gridTemplateColumns: "1fr 110px 110px",
+                            gap: 8, padding: "0 0 6px",
+                            borderBottom: `1px solid ${C.border}`,
+                          }}>
+                            {["Metrik", data.name, "Peer-Median"].map(h => (
+                              <div key={h} style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, fontWeight: 600 }}>
+                                {h}
+                              </div>
+                            ))}
+                          </div>
+                          {benchmark.map((b, i) => (
+                            <div key={i} style={{
+                              display: "grid", gridTemplateColumns: "1fr 110px 110px",
+                              gap: 8, padding: "8px 0",
+                              borderBottom: i < benchmark.length - 1 ? `1px solid ${C.border}` : "none",
+                              alignItems: "center",
+                            }}>
+                              <div>
+                                <div style={{ fontSize: 11, color: C.t1 }}>{b.metric}</div>
+                                {b.note && <div style={{ fontSize: 9, color: C.t3, marginTop: 1 }}>{b.note}</div>}
+                              </div>
+                              <div style={{ fontSize: 12, color: C.teal, fontFamily: C.mono }}>
+                                {b.company_value ?? "—"}
+                              </div>
+                              <div style={{ fontSize: 12, color: C.t2, fontFamily: C.mono }}>
+                                {b.peer_median ?? "—"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Block 3: Comparable Transactions Placeholder */}
+                    <Card>
+                      <SLabel text="Comparable Transactions" />
+                      <div style={{
+                        border: `1px dashed ${C.border}`, borderRadius: 6,
+                        padding: 16, textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 11, color: C.t3 }}>
+                          Comparable Transactions — Phase 3
+                        </div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 4 }}>
+                          Ähnliche abgeschlossene M&A-Deals · EV/Revenue · EV/EBITDA Multiples
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Disclaimer */}
+                    <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
+                      Peers generiert via Claude · Keine Anlageberatung · Stand: {peersData?.generated_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Tab 6: Value Drivers */}
           {activeTab === 6 && (() => {
