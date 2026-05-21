@@ -1391,7 +1391,7 @@ export default function CompanyDetailPage() {
 
             const SignalCard = ({ signal, accent }: { signal: SignalItem; accent: string }) => (
               <div style={{
-                background: C.s1, border: `1px solid ${accent}22`,
+                background: C.bgCard, border: `1px solid ${accent}22`,
                 borderLeft: `3px solid ${accent}`,
                 borderRadius: 6, padding: "10px 12px", marginBottom: 8,
               }}>
