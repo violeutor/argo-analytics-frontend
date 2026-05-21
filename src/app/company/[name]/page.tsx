@@ -69,6 +69,24 @@ interface FundingRoundItem {
   lead_investor?: string; co_investors?: string[];
   source?: string; notes?: string;
 }
+interface SignalItem {
+  id?: string;
+  event_type: string;
+  event_date: string;
+  summary: string;
+  source: string;
+  source_url?: string;
+  severity: "high" | "medium" | "low";
+  raw_title?: string;
+  is_read?: boolean;
+}
+interface SignalsData {
+  status: "ready" | "empty";
+  company_name: string;
+  signals: SignalItem[];
+  count: number;
+}
+
 interface FundamentalsData {
   is_listed: boolean; ticker?: string; exchange?: string;
   price?: number; market_cap_bn?: number; pe_ratio?: number;
@@ -510,6 +528,24 @@ export default function CompanyDetailPage() {
     let ownershipTimer = window.setTimeout(poll, 1000);
     return () => window.clearTimeout(ownershipTimer);
   }, [name, loading, ownershipData?.entries?.length]);
+
+  // Signals — einmaliger Fetch beim ersten Tab-9-Besuch
+  const [sigFilter, setSigFilter] = useState<string>("all");
+  const [signalsData, setSignalsData] = useState<SignalsData | null>(null);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!name || loading || activeTab !== 8) return;
+    if (signalsData) return; // bereits geladen
+    setSignalsLoading(true);
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/signals`)
+      .then(r => r.ok ? r.json() : null)
+      .then((sd: SignalsData | null) => {
+        if (sd) setSignalsData(sd);
+      })
+      .catch(() => {})
+      .finally(() => setSignalsLoading(false));
+  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Value Drivers Polling — analog zu Market + Ownership
   const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
@@ -1269,328 +1305,7 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 4: Potenziale & Risiken */}
-          {activeTab === 4 && (() => {
-            const md   = data.market_data;
-            const sc   = data.scorings?.[0];
-            const tr   = sc?.tech_readiness;
-            const own  = ownershipData;
-
-            // Composite Score
-            const tamScore = (() => {
-              const t = data.tam_usd_bn;
-              if (!t) return null;
-              return t >= 100 ? 9 : t >= 50 ? 7.5 : t >= 20 ? 6 : t >= 5 ? 4.5 : 3;
-            })();
-            const srrScore = (() => {
-              if (!sc) return null;
-              const cat = sc.srr_category;
-              return cat === "Transformational++" ? 10 : cat === "Transformational" ? 8 :
-                     cat === "High Strategic" ? 6 : 3;
-            })();
-            const mfrScore = (() => {
-              if (!sc) return null;
-              return sc.mfr_signal === "Feasible" ? 9 : sc.mfr_signal === "Watch" ? 6 : 2;
-            })();
-            const trScore  = tr ? Math.round(tr.overall * 10) : null;
-            const stageScore = (() => {
-              const stage = data.funding_stage?.toLowerCase() ?? "";
-              if (stage.includes("ipo") || stage.includes("public")) return 8;
-              if (stage.includes("d") || stage.includes("e"))        return 7;
-              if (stage.includes("c"))                                return 6;
-              if (stage.includes("b"))                                return 5;
-              if (stage.includes("a"))                                return 4;
-              return 3;
-            })();
-            const scores  = [tamScore, srrScore, mfrScore, trScore, stageScore].filter((x): x is number => x != null);
-            const composite = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : null;
-            const compColor = composite == null ? C.t3 : composite >= 7 ? C.teal : composite >= 4 ? C.amber : C.red;
-            const compLabel = composite == null ? "—" : composite >= 7 ? "Attraktiv" : composite >= 4 ? "Abwägen" : "Kritisch";
-
-            type PotItem = { label: string; cat: string; val: string; sub?: string; color: string; score: number | null; source: string };
-            const potentials: PotItem[] = [
-              {
-                label: "Marktchance (TAM 2035)", cat: "Markt & Wachstum",
-                val: data.tam_usd_bn ? `$${data.tam_usd_bn.toFixed(0)}B` : "—",
-                sub: md?.cagr_pct ? `CAGR ${md.cagr_pct.toFixed(1)}% p.a.` : undefined,
-                color: tamScore != null && tamScore >= 7 ? C.teal : tamScore != null && tamScore >= 5 ? C.amber : C.t2,
-                score: tamScore, source: "TAM-Scraping",
-              },
-              {
-                label: "Adressierbarer Markt (SAM)", cat: "Markt & Wachstum",
-                val: md?.sam_usd_bn ? `$${md.sam_usd_bn.toFixed(0)}B` : "—",
-                sub: md?.sam_confidence ? `Konfidenz: ${md.sam_confidence}` : undefined,
-                color: md?.sam_usd_bn ? C.teal : C.t3,
-                score: md?.sam_usd_bn ? Math.min(Math.round(md.sam_usd_bn / 5), 10) : null,
-                source: "Market Data Pipeline",
-              },
-              {
-                label: "Marktdynamik", cat: "Markt & Wachstum",
-                val: md?.market_cycle ? md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1) : "—",
-                sub: md?.market_cycle_note?.split("—")[0]?.trim(),
-                color: md?.market_cycle === "growth" ? C.teal : md?.market_cycle === "early" ? C.blue : md?.market_cycle === "mature" ? C.amber : C.t3,
-                score: md?.market_cycle === "growth" ? 8 : md?.market_cycle === "early" ? 7 : md?.market_cycle === "mature" ? 5 : null,
-                source: "Market Data Pipeline",
-              },
-              {
-                label: "M&A-Attraktivität (SRR)", cat: "Strategische Hebel",
-                val: sc ? sc.srr_category : "—",
-                sub: sc ? `SRR ${sc.srr_value.toFixed(2)}x` : undefined,
-                color: srrScore != null && srrScore >= 8 ? C.teal : srrScore != null && srrScore >= 6 ? C.blue : C.t2,
-                score: srrScore, source: "Scoring-Engine",
-              },
-              {
-                label: "Kaeufer-Fit (MFR)", cat: "Strategische Hebel",
-                val: sc ? sc.mfr_signal : "—",
-                sub: sc ? `MFR ${sc.mfr_value.toFixed(2)}x - ${sc.buyer_name}` : undefined,
-                color: mfrScore != null && mfrScore >= 8 ? C.teal : mfrScore != null && mfrScore >= 5 ? C.amber : C.red,
-                score: mfrScore, source: "Scoring-Engine",
-              },
-              {
-                label: "IPO-Readiness", cat: "Strategische Hebel",
-                val: data.ipo_potential ?? "—",
-                sub: data.ipo_status ? `Status: ${data.ipo_status}` : undefined,
-                color: data.ipo_potential === "Hoch" ? C.teal : data.ipo_potential === "Mittel-hoch" ? C.blue : C.t2,
-                score: data.ipo_potential === "Hoch" ? 9 : data.ipo_potential === "Mittel-hoch" ? 7 : data.ipo_potential === "Mittel" ? 5 : 3,
-                source: "Argo DB",
-              },
-              {
-                label: "Technologiereife (TR)", cat: "Operative Hebel",
-                val: tr ? `${(tr.overall * 10).toFixed(1)} / 10` : "—",
-                sub: tr?.confidence ? `Konfidenz: ${tr.confidence.replace("auto_", "")}` : undefined,
-                color: trScore != null && trScore >= 7 ? C.teal : trScore != null && trScore >= 5 ? C.amber : C.t2,
-                score: trScore, source: "Auto-TR Engine",
-              },
-              {
-                label: "Wettbewerbsposition", cat: "Operative Hebel",
-                val: md?.competition_score ? md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1) + " Wettbewerb" : "—",
-                sub: md?.competition_note?.split(".")[0],
-                color: md?.competition_score === "low" ? C.teal : md?.competition_score === "medium" ? C.amber : C.t2,
-                score: md?.competition_score === "low" ? 8 : md?.competition_score === "medium" ? 5 : md?.competition_score === "high" ? 3 : null,
-                source: "Market Data Pipeline",
-              },
-            ];
-
-            type Sev = "high" | "medium" | "low" | "unknown";
-            type RskItem = { label: string; cat: string; val: string; sub?: string; color: string; severity: Sev; source: string };
-            const risks: RskItem[] = [
-              {
-                label: "Finanzierungsrisiko", cat: "Finanzielle Risiken",
-                val: (() => {
-                  const stage = data.funding_stage?.toLowerCase() ?? "";
-                  const total = data.funding_total_usd_mn;
-                  if (!stage && !total) return "Keine Daten";
-                  if (stage.includes("seed") || (total && total < 10)) return "Hoch";
-                  if (stage.includes("a") || (total && total < 50))    return "Mittel";
-                  return "Niedrig";
-                })(),
-                sub: data.funding_total_usd_mn ? `Total Funding: ${fmtM(data.funding_total_usd_mn)}` : undefined,
-                color: (() => {
-                  const s = data.funding_stage?.toLowerCase() ?? "";
-                  if (s.includes("seed") || !data.funding_total_usd_mn) return C.red;
-                  if (s.includes("a") || (data.funding_total_usd_mn ?? 0) < 50) return C.amber;
-                  return C.teal;
-                })(),
-                severity: (() => {
-                  const s = data.funding_stage?.toLowerCase() ?? "";
-                  return s.includes("seed") ? "high" : s.includes("a") ? "medium" : "low";
-                })(),
-                source: "Funding-Pipeline",
-              },
-              {
-                label: "Execution Risk (M&A)", cat: "Finanzielle Risiken",
-                val: sc?.execution_warning ? "Erhoeht" : sc ? "Normal" : "—",
-                sub: sc ? `MFR ${sc.mfr_value.toFixed(2)}x - ${sc.mfr_signal}` : undefined,
-                color: sc?.execution_warning ? C.red : sc?.mfr_signal === "Watch" ? C.amber : C.teal,
-                severity: sc?.execution_warning ? "high" : sc?.mfr_signal === "Watch" ? "medium" : "low",
-                source: "Scoring-Engine",
-              },
-              {
-                label: "Margenrisiko", cat: "Finanzielle Risiken",
-                val: data.fundamentals?.gross_margin_pct != null
-                  ? data.fundamentals.gross_margin_pct >= 40 ? "Niedrig" : data.fundamentals.gross_margin_pct >= 20 ? "Mittel" : "Hoch"
-                  : "Keine Daten",
-                sub: data.fundamentals?.gross_margin_pct != null ? `Bruttomarge ${data.fundamentals.gross_margin_pct.toFixed(1)}%` : undefined,
-                color: data.fundamentals?.gross_margin_pct == null ? C.t3
-                  : data.fundamentals.gross_margin_pct >= 40 ? C.teal
-                  : data.fundamentals.gross_margin_pct >= 20 ? C.amber : C.red,
-                severity: data.fundamentals?.gross_margin_pct == null ? "unknown"
-                  : data.fundamentals.gross_margin_pct >= 40 ? "low"
-                  : data.fundamentals.gross_margin_pct >= 20 ? "medium" : "high",
-                source: "Fundamentals (Twelve Data / BA-Bridge)",
-              },
-              {
-                label: "Wettbewerbsdruck", cat: "Markt & Wettbewerb",
-                val: md?.competition_score === "high" ? "Hoch" : md?.competition_score === "medium" ? "Mittel" : md?.competition_score === "low" ? "Niedrig" : "—",
-                sub: md?.competition_note?.split(".")[0],
-                color: md?.competition_score === "high" ? C.red : md?.competition_score === "medium" ? C.amber : C.teal,
-                severity: (md?.competition_score === "high" ? "high" : md?.competition_score === "medium" ? "medium" : md?.competition_score === "low" ? "low" : "unknown") as Sev,
-                source: "Market Data Pipeline",
-              },
-              {
-                label: "Marktrisiko", cat: "Markt & Wettbewerb",
-                val: data.risk ?? "—",
-                sub: undefined,
-                color: data.risk === "Hoch" ? C.red : data.risk === "Mittel" ? C.amber : C.teal,
-                severity: (data.risk === "Hoch" ? "high" : data.risk === "Mittel" ? "medium" : "low") as Sev,
-                source: "Argo DB",
-              },
-              {
-                label: "Ownership-Transparenz", cat: "Ownership-Risiken",
-                val: (() => {
-                  const n = own?.entries?.length ?? 0;
-                  if (!own) return "—";
-                  return n === 0 ? "Opaque" : n < 3 ? "Eingeschraenkt" : "Transparent";
-                })(),
-                sub: own?.entries?.length ? `${own.entries.length} bekannte Investoren` : undefined,
-                color: (() => { const n = own?.entries?.length ?? 0; return n === 0 ? C.red : n < 3 ? C.amber : C.teal; })(),
-                severity: (() => { const n = own?.entries?.length ?? 0; return (n === 0 ? "high" : n < 3 ? "medium" : "low") as Sev; })(),
-                source: "Ownership-Pipeline (EDGAR / Wikipedia)",
-              },
-              {
-                label: "Cap-Table-Komplexitaet", cat: "Ownership-Risiken",
-                val: (() => { const ct = own?.cap_table; if (!ct) return "—"; return ct.score >= 0.7 ? "Hoch" : ct.score >= 0.4 ? "Mittel" : "Niedrig"; })(),
-                sub: own?.cap_table?.note,
-                color: (() => { const s = own?.cap_table?.score; return s == null ? C.t3 : s >= 0.7 ? C.red : s >= 0.4 ? C.amber : C.teal; })(),
-                severity: (() => { const s = own?.cap_table?.score; return (s == null ? "unknown" : s >= 0.7 ? "high" : s >= 0.4 ? "medium" : "low") as Sev; })(),
-                source: "Ownership-Pipeline",
-              },
-              {
-                label: "Skalierungsrisiko (TR)", cat: "Operative Risiken",
-                val: (() => {
-                  const conf = tr?.confidence ?? "";
-                  if (conf === "listed") return "N/A (boersennotiert)";
-                  if (conf === "auto_low") return "Hoch";
-                  if (conf === "auto_medium") return "Mittel";
-                  return tr ? "Niedrig" : "—";
-                })(),
-                sub: tr ? `TR ${(tr.overall * 10).toFixed(1)} / 10` : undefined,
-                color: (() => {
-                  const conf = tr?.confidence ?? "";
-                  return conf === "listed" ? C.t3 : conf === "auto_low" ? C.red : conf === "auto_medium" ? C.amber : C.teal;
-                })(),
-                severity: (() => {
-                  const conf = tr?.confidence ?? "";
-                  return (conf === "listed" ? "unknown" : conf === "auto_low" ? "high" : conf === "auto_medium" ? "medium" : tr ? "low" : "unknown") as Sev;
-                })(),
-                source: "Auto-TR Engine",
-              },
-            ];
-
-            const comingSoon = [
-              "Insider-Aktivitaet (Form 4 / DE-Transparenzregister)",
-              "Hedgefonds Short-Positionen (13F)",
-              "Regulatorische Signale",
-              "Supply-Chain-Fragilitaet",
-              "KPI-Trendbrueche",
-            ];
-
-            const sevScore = (s: Sev) => s === "high" ? 8 : s === "medium" ? 5 : s === "low" ? 2 : 5;
-            const knownRisks = risks.filter(r => r.severity !== "unknown");
-            const riskScore = knownRisks.length
-              ? Math.round(knownRisks.reduce((a, r) => a + sevScore(r), 0) / knownRisks.length * 10) / 10
-              : null;
-            const riskColor = riskScore == null ? C.t3 : riskScore >= 6.5 ? C.red : riskScore >= 4 ? C.amber : C.teal;
-            const riskLabel = riskScore == null ? "—" : riskScore >= 6.5 ? "Kritisch" : riskScore >= 4 ? "Erhoeht" : "Moderat";
-
-            const PotCard = ({ item }: { item: PotItem }) => (
-              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 2 }}>{item.cat}</div>
-                    <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{item.label}</div>
-                  </div>
-                  {item.score != null && (
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.display, color: item.color, flexShrink: 0 }}>
-                      {item.score.toFixed(0)}<span style={{ fontSize: 11, color: C.t3 }}>/10</span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: item.color, fontFamily: C.mono }}>{item.val}</div>
-                {item.sub && <div style={{ fontSize: 11, color: C.t2 }}>{item.sub}</div>}
-                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 2 }}>{item.source}</div>
-              </div>
-            );
-
-            const RskCard = ({ item }: { item: RskItem }) => {
-              const sevDot = item.severity === "high" ? C.red : item.severity === "medium" ? C.amber : item.severity === "low" ? C.teal : C.t3;
-              return (
-                <div style={{ background: C.bgCard, border: `1px solid ${item.severity === "high" ? C.red + "33" : C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 2 }}>{item.cat}</div>
-                      <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{item.label}</div>
-                    </div>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: sevDot, flexShrink: 0, marginTop: 4 }} />
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: item.color, fontFamily: C.mono }}>{item.val}</div>
-                  {item.sub && <div style={{ fontSize: 11, color: C.t2 }}>{item.sub}</div>}
-                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 2 }}>{item.source}</div>
-                </div>
-              );
-            };
-
-            return (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                  <div style={{ background: C.bgCard, border: `1px solid ${compColor}33`, borderRadius: C.rLg, padding: "18px 20px" }}>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Composite Score</div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <span style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: compColor, lineHeight: 1 }}>{composite?.toFixed(1) ?? "—"}</span>
-                      <span style={{ fontSize: 12, color: C.t3 }}>/10</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: compColor, marginTop: 4, fontWeight: 500 }}>{compLabel}</div>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Aus TAM · SRR · MFR · TR · Stage</div>
-                  </div>
-                  <div style={{ background: C.bgCard, border: `1px solid ${riskColor}33`, borderRadius: C.rLg, padding: "18px 20px" }}>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Risk Score</div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <span style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: riskColor, lineHeight: 1 }}>{riskScore?.toFixed(1) ?? "—"}</span>
-                      <span style={{ fontSize: 12, color: C.t3 }}>/10</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: riskColor, marginTop: 4, fontWeight: 500 }}>{riskLabel}</div>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Severity bekannter Risikofaktoren</div>
-                  </div>
-                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Gesamturteil</div>
-                    <div style={{ fontSize: 36, fontWeight: 700, fontFamily: C.display, color: sc ? ratingColor(sc.rating) : C.t3, lineHeight: 1, marginBottom: 4 }}>
-                      {sc?.rating?.split("\xb7")[0]?.trim() ?? "—"}
-                    </div>
-                    <div style={{ fontSize: 12, color: sc ? ratingColor(sc.rating) : C.t3, fontWeight: 500 }}>
-                      {sc?.rating?.split("\xb7")[1]?.trim() ?? "Kein Scoring vorhanden"}
-                    </div>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 8 }}>Scoring-Engine · {sc?.buyer_name ?? "—"}</div>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                      <div style={{ width: 3, height: 16, background: C.teal, borderRadius: 2 }} />
-                      <span style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 600 }}>Potenziale · Value Upside</span>
-                    </div>
-                    {potentials.map((item, i) => <PotCard key={i} item={item} />)}
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                      <div style={{ width: 3, height: 16, background: C.red, borderRadius: 2 }} />
-                      <span style={{ fontSize: 11, color: C.red, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 600 }}>Risiken · Downside & Fragilitaet</span>
-                    </div>
-                    {risks.map((item, i) => <RskCard key={i} item={item} />)}
-                    <div style={{ background: "transparent", border: `1px dashed ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Verfuegbar ab Signal-Engine · Phase 4</div>
-                      {comingSoon.map((label, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                          <div style={{ width: 4, height: 4, borderRadius: "50%", background: C.t3, flexShrink: 0 }} />
-                          <span style={{ fontSize: 11, color: C.t3 }}>{label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+          {activeTab === 4 && <Placeholder title="Potenziale & Risiken" sub="2×n Grid · Chancen links · Risiken rechts · Composite Score — Phase 2" />}
 
           {/* Tab 5: Peer Review */}
           {activeTab === 5 && <Placeholder title="Peer Review" sub="Wettbewerber-Benchmarking · Comparable Transactions — Phase 2" />}
@@ -1934,7 +1649,162 @@ export default function CompanyDetailPage() {
           )}
 
           {/* Tab 8: Signal History */}
-          {activeTab === 8 && <Placeholder title="Signal History" sub="KPI-Verläufe · Bewertungs-Verläufe · M&A-Events — Phase 4 (Signal-Engine)" />}
+          {activeTab === 8 && (() => {
+            const EVENT_LABELS: Record<string, string> = {
+              ipo_status_change: "IPO",
+              funding_round:     "Funding",
+              m_and_a_event:     "M&A",
+              earnings:          "Earnings",
+              ownership_change:  "Ownership",
+              kpi_breakout:      "KPI",
+              news:              "News",
+            };
+            const EVENT_COLORS: Record<string, string> = {
+              ipo_status_change: C.teal,
+              funding_round:     C.blue,
+              m_and_a_event:     C.purple,
+              earnings:          C.amber,
+              ownership_change:  C.amber,
+              kpi_breakout:      C.teal,
+              news:              C.t3,
+            };
+            const SOURCE_LABELS: Record<string, string> = {
+              edgar:       "SEC EDGAR",
+              google_news: "Google News",
+              techcrunch:  "TechCrunch",
+              internal:    "Argo Intern",
+            };
+
+            const sevDot = (s: string) =>
+              s === "high" ? C.red : s === "medium" ? C.amber : C.teal;
+            const sevLabel = (s: string) =>
+              s === "high" ? "HIGH" : s === "medium" ? "MED" : "LOW";
+
+            const signals = signalsData?.signals ?? [];
+            const filterTypes = ["all", ...Array.from(new Set(signals.map(s => s.event_type)))];
+            const filtered = sigFilter === "all"
+              ? signals
+              : signals.filter(s => s.event_type === sigFilter);
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* Filter-Chips */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {filterTypes.map(ft => (
+                    <button
+                      key={ft}
+                      onClick={() => setSigFilter(ft)}
+                      style={{
+                        padding: "5px 14px", borderRadius: 99, fontSize: 11,
+                        fontFamily: C.mono, fontWeight: 500, cursor: "pointer",
+                        border: `1px solid ${sigFilter === ft ? C.teal : C.border}`,
+                        background: sigFilter === ft ? C.tealDim : "transparent",
+                        color: sigFilter === ft ? C.teal : C.t2,
+                        transition: "all .15s",
+                      }}
+                    >
+                      {ft === "all" ? "Alle" : (EVENT_LABELS[ft] ?? ft)}
+                      {ft !== "all" && (
+                        <span style={{ marginLeft: 6, color: C.t3 }}>
+                          {signals.filter(s => s.event_type === ft).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Signal-Timeline */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
+                  <SLabel text={`Signal History · ${filtered.length} Events`} />
+
+                  {signalsLoading && (
+                    <div style={{ padding: "24px 0", textAlign: "center", color: C.t3, fontSize: 12, fontFamily: C.mono }}>
+                      Lade Signals…
+                    </div>
+                  )}
+
+                  {!signalsLoading && filtered.length === 0 && (
+                    <div style={{ padding: "24px 0", textAlign: "center" }}>
+                      <div style={{ color: C.t2, fontSize: 13, marginBottom: 6 }}>
+                        {signals.length === 0
+                          ? "Noch keine Signals vorhanden."
+                          : `Keine Events für Filter "${sigFilter === "all" ? "Alle" : EVENT_LABELS[sigFilter] ?? sigFilter}".`}
+                      </div>
+                      {signals.length === 0 && (
+                        <div style={{ color: C.t3, fontSize: 11, fontFamily: C.mono }}>
+                          Signal-Engine läuft täglich 06:00 UTC — erste Signale erscheinen nach dem nächsten Cron-Run.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {filtered.map((sig, i) => (
+                    <div
+                      key={sig.id ?? i}
+                      style={{
+                        display: "flex", gap: 14, padding: "12px 0",
+                        borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none",
+                        borderLeft: sig.severity === "high" ? `3px solid ${C.red}` : "none",
+                        paddingLeft: sig.severity === "high" ? 12 : 0,
+                      }}
+                    >
+                      {/* Severity Dot + Label */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 36, paddingTop: 2 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: sevDot(sig.severity) }} />
+                        <span style={{ fontSize: 9, color: sevDot(sig.severity), fontFamily: C.mono, fontWeight: 600 }}>
+                          {sevLabel(sig.severity)}
+                        </span>
+                      </div>
+
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                          {/* Datum */}
+                          <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>
+                            {sig.event_date}
+                          </span>
+                          {/* Event-Type Badge */}
+                          <span style={{
+                            fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+                            color: EVENT_COLORS[sig.event_type] ?? C.t2,
+                            background: (EVENT_COLORS[sig.event_type] ?? C.t2) + "18",
+                            border: `1px solid ${(EVENT_COLORS[sig.event_type] ?? C.t2)}33`,
+                          }}>
+                            {EVENT_LABELS[sig.event_type] ?? sig.event_type}
+                          </span>
+                          {/* Source Badge */}
+                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                            {SOURCE_LABELS[sig.source] ?? sig.source}
+                          </span>
+                        </div>
+
+                        {/* Summary */}
+                        <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5, marginBottom: 4 }}>
+                          {sig.summary}
+                        </div>
+
+                        {/* Source Link */}
+                        {sig.source_url && (
+                          <a
+                            href={sig.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textDecoration: "none" }}
+                          >
+                            Quelle → {sig.source_url.length > 60 ? sig.source_url.slice(0, 60) + "…" : sig.source_url}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Funding History — immer anzeigen */}
+                <FundingTimeline rounds={data.funding_rounds} />
+              </div>
+            );
+          })()}
 
           {/* Warnings */}
           {data.warnings.length > 0 && (
