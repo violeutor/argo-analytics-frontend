@@ -2202,14 +2202,14 @@ export default function CompanyDetailPage() {
               { key: "risk_score",         label: "Risk",      color: C.red    },
               { key: "ownership_score",    label: "Ownership", color: C.amber  },
               { key: "value_driver_score", label: "Val.Driver",color: C.teal   },
-            ] as const;
+            ];
 
             const PATH_SCORES = [
               { key: "ipo_score",     heroKey: "ipo",     label: "IPO",       color: C.teal,   icon: "📈" },
               { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue,   icon: "🤝" },
               { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber,  icon: "📊" },
               { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple, icon: "⚡" },
-            ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed")) as const;
+            ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed"));
 
             const scVal = (key: keyof CompanyScores) =>
               (sc[key] as number | undefined) ?? 0;
@@ -2482,7 +2482,7 @@ export default function CompanyDetailPage() {
                         },
                         color: C.amber,
                       },
-                    ] as const).map(prof => {
+                    ]).map(prof => {
                       const v = sc[prof.scoreKey] as number | undefined;
                       return (
                         <div key={prof.segment} style={{
