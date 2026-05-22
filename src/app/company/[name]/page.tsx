@@ -99,6 +99,7 @@ interface PeerCompany {
   funding_last_round?: string; ipo_status?: string; ipo_potential?: string;
   investment_path?: string; revenue_usd_mn?: number; description?: string;
   website?: string; ticker?: string; exchange?: string; stage_normalized?: string;
+  positioning_note?: string;   // R-10: Claude-generiert, relativ zu Subject Company
 }
 interface PeerBenchmark {
   metric: string; company_value?: string; peer_median?: string;
@@ -1844,58 +1845,115 @@ export default function CompanyDetailPage() {
                       </div>
                     )}
 
-                    {/* Block 1: Peer-Gruppe */}
-                    <Card style={{ marginBottom: 12 }}>
-                      <SLabel text={`Wettbewerber (${peers.length})`} />
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {peers.map(p => (
+                    {/* Block 1: Peer-Karten */}
+                    <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden" }}>
+                      <div style={{ padding: "14px 20px 6px", borderBottom: `1px solid ${C.border}` }}>
+                        <SLabel text={`Wettbewerber (${peers.length})`} />
+                      </div>
+                      {peers.map((p, idx) => {
+                        const pathColor = PATH_COLORS[p.investment_path ?? ""] ?? C.t3;
+                        const isListed  = p.ipo_status === "listed";
+                        return (
                           <div key={p.id} style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 80px 80px 90px",
-                            alignItems: "center", gap: 8,
-                            padding: "8px 0",
-                            borderBottom: `1px solid ${C.border}`,
+                            padding: "16px 20px",
+                            borderBottom: idx < peers.length - 1 ? `1px solid ${C.border}` : "none",
                           }}>
-                            {/* Name + Beschreibung */}
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: C.t1 }}>
-                                {regionFlag(p.region)} {p.name}
-                                {p.ticker && (
-                                  <span style={{ fontSize: 9, color: C.teal, fontFamily: C.mono, marginLeft: 6 }}>
-                                    {p.ticker}
-                                  </span>
+                            {/* Row 1: Name + Ticker + Funding */}
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <span>{regionFlag(p.region)} {p.name}</span>
+                                  {p.ticker && (
+                                    <span style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, background: C.tealDim, border: `1px solid ${C.tealBorder}`, borderRadius: 4, padding: "1px 6px" }}>
+                                      {p.ticker}{p.exchange ? ` · ${p.exchange}` : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Badges Row */}
+                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                                  {p.stage_normalized && (
+                                    <span style={{
+                                      fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px",
+                                      color: stageColor(p.stage_normalized),
+                                      background: stageColor(p.stage_normalized) + "18",
+                                      border: `1px solid ${stageColor(p.stage_normalized)}33`,
+                                    }}>
+                                      {p.stage_normalized}
+                                    </span>
+                                  )}
+                                  {isListed && (
+                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}` }}>
+                                      Public
+                                    </span>
+                                  )}
+                                  {p.investment_path && p.investment_path !== "Beobachten" && (
+                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: pathColor, background: pathColor + "18", border: `1px solid ${pathColor}33` }}>
+                                      {p.investment_path}
+                                    </span>
+                                  )}
+                                  {p.headquarters && (
+                                    <span style={{ fontSize: 10, color: C.t3, display: "flex", alignItems: "center", gap: 3 }}>
+                                      <span>📍</span>{p.headquarters}
+                                    </span>
+                                  )}
+                                  {p.founding_year && (
+                                    <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                                      Gegr. {p.founding_year}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Funding + Headcount */}
+                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                <div style={{ fontSize: 13, color: C.teal, fontFamily: C.mono, fontWeight: 600 }}>
+                                  {p.funding_total_usd_mn
+                                    ? p.funding_total_usd_mn >= 1000
+                                      ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
+                                      : `$${p.funding_total_usd_mn.toFixed(0)}M`
+                                    : "—"}
+                                </div>
+                                {p.headcount && (
+                                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
+                                    {p.headcount.toLocaleString("de-DE")} MA
+                                  </div>
                                 )}
                               </div>
-                              {p.description && (
-                                <div style={{ fontSize: 10, color: C.t3, marginTop: 2, lineHeight: 1.4 }}>
-                                  {p.description.slice(0, 100)}{p.description.length > 100 ? "…" : ""}
-                                </div>
-                              )}
                             </div>
-                            {/* Stage */}
-                            <div style={{
-                              fontSize: 9, fontFamily: C.mono,
-                              color: stageColor(p.stage_normalized),
-                              background: stageColor(p.stage_normalized) + "18",
-                              borderRadius: 3, padding: "2px 6px", textAlign: "center",
-                            }}>
-                              {p.stage_normalized ?? "—"}
-                            </div>
-                            {/* Funding */}
-                            <div style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textAlign: "right" }}>
-                              {p.funding_total_usd_mn
-                                ? p.funding_total_usd_mn >= 1000
-                                  ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
-                                  : `$${p.funding_total_usd_mn.toFixed(0)}M`
-                                : "—"}
-                            </div>
-                            {/* Headcount */}
-                            <div style={{ fontSize: 11, color: C.t2, textAlign: "right" }}>
-                              {p.headcount ? `${p.headcount.toLocaleString()} MA` : "—"}
-                            </div>
+
+                            {/* Positioning Note — prominente Hauptaussage */}
+                            {p.positioning_note && (
+                              <div style={{
+                                padding: "9px 12px", marginBottom: 8,
+                                background: "rgba(0,212,160,0.06)",
+                                border: `1px solid ${C.tealBorder}`,
+                                borderLeft: `3px solid ${C.teal}`,
+                                borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
+                                fontSize: 12, color: C.t1, lineHeight: 1.55,
+                              }}>
+                                {p.positioning_note}
+                              </div>
+                            )}
+
+                            {/* Description als Kontext-Ergänzung */}
+                            {p.description && (
+                              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 6 }}>
+                                {p.description.slice(0, 180)}{p.description.length > 180 ? "…" : ""}
+                              </div>
+                            )}
+
+                            {/* Website Link */}
+                            {p.website && (
+                              <a
+                                href={p.website.startsWith("http") ? p.website : `https://${p.website}`}
+                                target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, textDecoration: "none", opacity: 0.7 }}
+                              >
+                                {p.website.replace(/^https?:\/\//, "")} →
+                              </a>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </Card>
 
                     {/* Block 2: Benchmark */}
