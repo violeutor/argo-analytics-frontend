@@ -2263,10 +2263,10 @@ export default function CompanyDetailPage() {
             ];
 
             const PATH_SCORES = [
-              { key: "ipo_score",     heroKey: "ipo",     label: "IPO",       color: C.teal,   icon: "📈" },
-              { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue,   icon: "🤝" },
-              { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber,  icon: "📊" },
-              { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple, icon: "⚡" },
+              { key: "ipo_score",     heroKey: "ipo",     label: "IPO",       color: C.teal   },
+              { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue   },
+              { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber  },
+              { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple },
             ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed"));
 
             const scVal = (key: keyof CompanyScores) =>
@@ -2274,8 +2274,21 @@ export default function CompanyDetailPage() {
             const scoreColor = (v?: number) =>
               v == null ? C.t3 : v >= 7 ? C.teal : v >= 4 ? C.amber : C.red;
 
-            const heroScore   = sc.hero_score;
-            const heroLabel   = sc.hero_path_label ?? sc.hero_path ?? "—";
+            // Fervo-Fix: listed Company kann keinen IPO-Hero haben — nächstbesten Pfad ableiten
+            const effectiveHero = (() => {
+              if (!data.fundamentals.is_listed || sc.hero_path !== "ipo") {
+                return { path: sc.hero_path, label: sc.hero_path_label, score: sc.hero_score };
+              }
+              const alts = [
+                { path: "m_and_a", label: "M&A",       score: sc.m_and_a_score },
+                { path: "etf",     label: "ETF-Proxy", score: sc.etf_score     },
+                { path: "enabler", label: "Enabler",   score: sc.enabler_score },
+              ].filter(a => a.score != null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+              return alts[0] ?? { path: sc.hero_path, label: sc.hero_path_label, score: sc.hero_score };
+            })();
+
+            const heroScore   = effectiveHero.score;
+            const heroLabel   = effectiveHero.label ?? effectiveHero.path ?? "—";
             const heroRating  = sc.rating ?? "—";
             const composite   = sc.composite_score;
 
@@ -2453,7 +2466,8 @@ export default function CompanyDetailPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {PATH_SCORES.map(p => {
                         const v = sc[p.key as keyof CompanyScores] as number | undefined;
-                        const isHero = sc.hero_path === p.heroKey;
+                        const isHero = sc.hero_path === p.heroKey && !(data.fundamentals.is_listed && p.heroKey === "ipo")
+                                    || effectiveHero.path === p.heroKey && data.fundamentals.is_listed;
                         return (
                           <div key={p.key} style={{
                             padding: "12px 14px", borderRadius: C.rMd,
@@ -2462,7 +2476,6 @@ export default function CompanyDetailPage() {
                           }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                                <span style={{ fontSize: 14 }}>{p.icon}</span>
                                 <span style={{ fontSize: 12, fontWeight: 600, color: isHero ? p.color : C.t1, fontFamily: C.display }}>
                                   {p.label}
                                 </span>
@@ -2591,7 +2604,6 @@ export default function CompanyDetailPage() {
                 score:       sc?.ipo_score,
                 label:       "IPO · Direktinvestment",
                 color:       C.teal,
-                icon:        "📈",
                 condition:   isListed
                   ? "Direkter Kauf über Börse — sofortige Liquidität"
                   : "Attraktiv wenn: IPO-Potential hoch · TechReadiness ≥ 0.7 · Stage Series B+",
@@ -2604,7 +2616,6 @@ export default function CompanyDetailPage() {
                 score:       sc?.m_and_a_score,
                 label:       "M&A · Käufer-Proxy",
                 color:       C.blue,
-                icon:        "🤝",
                 condition:   "Attraktiv wenn: SRR Transformational · MFR Feasible · Strategischer Käufer identifiziert",
                 description: "Indirektes Engagement — profitiert wenn M&A-Deal eintritt.",
               },
@@ -2613,7 +2624,6 @@ export default function CompanyDetailPage() {
                 score:       sc?.etf_score,
                 label:       "ETF-Proxy · Thematisch",
                 color:       C.amber,
-                icon:        "📊",
                 condition:   "Attraktiv wenn: Sektor in Themen-ETF abgebildet · Diversifiziertes Marktengagement",
                 description: "Breite Sektor-Exposition ohne Einzelwert-Risiko.",
               },
@@ -2622,7 +2632,6 @@ export default function CompanyDetailPage() {
                 score:       sc?.enabler_score,
                 label:       "Enabler · Value Chain",
                 color:       C.purple,
-                icon:        "⚡",
                 condition:   "Attraktiv wenn: Kritische Abhängigkeit von börsennotierten Enablerern · Hoher Dependency-Score",
                 description: "Investition in Schlüssel-Enabler der Value Chain.",
               },
@@ -2754,7 +2763,6 @@ export default function CompanyDetailPage() {
                     }}>
                       {/* Card Header */}
                       <div style={{ padding: "13px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 18, lineHeight: 1 }}>{path.icon}</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: isHero ? pc : C.t1, fontFamily: C.display }}>
