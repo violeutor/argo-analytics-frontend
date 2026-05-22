@@ -525,7 +525,7 @@ function TabScoreBar({ label, score, tooltip }: { label: string; score?: number;
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
-const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Scoring & Investmentprofil", "Exposure Types", "Signal History"];
+const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Scoring & Investmentprofil", "Investitionspfade", "Signal History"];
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -2573,129 +2573,338 @@ export default function CompanyDetailPage() {
             );
           })()}
 
-          {activeTab === 8 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Tab 8: Investitionspfade */}
+          {activeTab === 8 && (() => {
+            const sc       = data.scores;
+            const isListed = data.fundamentals.is_listed;
+            const vdReady  = valueDriversData?.status === "ready";
+            const enablers     = vdReady ? valueDriversData!.enablers.filter(e => e.price != null) : [];
+            const contributors = vdReady ? valueDriversData!.contributors.filter(e => e.price != null) : [];
+            const etfs         = vdReady ? valueDriversData!.etfs : [];
 
-              {/* Abschnitt 1: Direkt / Käufer-Proxy Scoring */}
-              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
-                Käufer-Proxies · M&A Feasibility Scoring
-              </div>
-              {data.scorings.map((s, i) => (
-                <ScoringCard
-                  key={s.buyer_name}
-                  s={s}
-                  rank={i + 1}
-                  showTR={!data.fundamentals.is_listed}
-                />
-              ))}
+            const scoreColor = (v?: number) =>
+              v == null ? C.t3 : v >= 7 ? C.teal : v >= 4 ? C.amber : C.red;
 
-              {/* Abschnitt 2: Value Chain — 2-Spalten Grid */}
-              {valueDriversData?.status === "ready" && (
-                (() => {
-                  const enablers     = valueDriversData.enablers.filter(e => e.price != null);
-                  const contributors = valueDriversData.contributors.filter(e => e.price != null);
-                  if (enablers.length === 0 && contributors.length === 0) return null;
+            const ALL_PATHS = [
+              {
+                key:         "ipo",
+                score:       sc?.ipo_score,
+                label:       "IPO · Direktinvestment",
+                color:       C.teal,
+                icon:        "📈",
+                condition:   isListed
+                  ? "Direkter Kauf über Börse — sofortige Liquidität"
+                  : "Attraktiv wenn: IPO-Potential hoch · TechReadiness ≥ 0.7 · Stage Series B+",
+                description: isListed
+                  ? "Company ist bereits börsennotiert."
+                  : "Pre-IPO via Sekundärmarkt oder Abwarten des Börsengangs.",
+              },
+              {
+                key:         "m_and_a",
+                score:       sc?.m_and_a_score,
+                label:       "M&A · Käufer-Proxy",
+                color:       C.blue,
+                icon:        "🤝",
+                condition:   "Attraktiv wenn: SRR Transformational · MFR Feasible · Strategischer Käufer identifiziert",
+                description: "Indirektes Engagement — profitiert wenn M&A-Deal eintritt.",
+              },
+              {
+                key:         "etf",
+                score:       sc?.etf_score,
+                label:       "ETF-Proxy · Thematisch",
+                color:       C.amber,
+                icon:        "📊",
+                condition:   "Attraktiv wenn: Sektor in Themen-ETF abgebildet · Diversifiziertes Marktengagement",
+                description: "Breite Sektor-Exposition ohne Einzelwert-Risiko.",
+              },
+              {
+                key:         "enabler",
+                score:       sc?.enabler_score,
+                label:       "Enabler · Value Chain",
+                color:       C.purple,
+                icon:        "⚡",
+                condition:   "Attraktiv wenn: Kritische Abhängigkeit von börsennotierten Enablerern · Hoher Dependency-Score",
+                description: "Investition in Schlüssel-Enabler der Value Chain.",
+              },
+            ]
+              .filter(p => !(p.key === "ipo" && isListed))
+              .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-                  const VCRow = ({ entry }: { entry: ValueDriverEntry }) => {
-                    const isEnabler = entry.type === "enabler";
-                    const accent = isEnabler ? C.blue : C.teal;
-                    return (
-                      <div style={{
-                        display: "flex", flexDirection: "column", gap: 6,
-                        padding: "10px 12px", borderRadius: C.rMd,
-                        background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
-                      }}>
-                        {/* Ticker + Kurs */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontFamily: C.mono, fontSize: 14, fontWeight: 700, color: accent }}>
-                            {entry.ticker}
-                          </span>
-                          {entry.price != null && (
-                            <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 600, color: C.t1 }}>
-                              {entry.currency === "EUR" ? "€" : "$"}{entry.price.toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-                        {/* Name + Mcap */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 12, color: C.t1 }}>{entry.name}</span>
-                          {entry.market_cap_bn != null && (
-                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{fmtBn(entry.market_cap_bn)}</span>
-                          )}
-                        </div>
-                        {/* Bullets */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <span style={{ color: C.t3, fontSize: 11, lineHeight: "17px", flexShrink: 0 }}>·</span>
-                            <span style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
-                          </div>
-                          {entry.context && (
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <span style={{ color: accent, fontSize: 11, lineHeight: "17px", flexShrink: 0 }}>·</span>
-                              <span style={{ fontSize: 11, color: C.t1, lineHeight: 1.5 }}>{entry.context}</span>
-                            </div>
-                          )}
-                        </div>
-                        {/* Relevance */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${entry.relevance * 100}%`, background: accent, borderRadius: 99 }} />
-                          </div>
-                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(entry.relevance * 100)}%</span>
-                        </div>
+            const heroPath = sc?.hero_path;
+            const sigs     = signalsData?.signals ?? [];
+            const posSigs  = sigs.filter(s => s.direction === "positive").slice(0, 2);
+            const negSigs  = sigs.filter(s => s.direction === "negative" && s.source !== "internal_absence").slice(0, 1);
+
+            const STAGE_MAP: Record<string, string> = {
+              seed: "Seed", series_a: "Series A", series_b: "Series B",
+              series_c: "Series C", series_d: "Series D", series_d_plus: "Series D+",
+              pre_seed: "Pre-Seed", growth: "Growth",
+            };
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                {/* ── Hero Banner ── */}
+                {isListed ? (
+                  <div style={{
+                    padding: "16px 20px",
+                    background: `${C.teal}08`,
+                    border: `1px solid ${C.tealBorder}`,
+                    borderLeft: `4px solid ${C.teal}`,
+                    borderRadius: C.rLg,
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".08em", marginBottom: 6 }}>
+                        DIREKTINVESTMENT · BÖRSENNOTIERT
                       </div>
-                    );
-                  };
-
-                  return (
-                    <Card style={{ marginTop: 8 }}>
-                      <SLabel text="Value Chain · Investierbare Enabler & Contributors" />
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        {/* Enabler Spalte */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {enablers.length > 0 && (
-                            <div style={{ fontSize: 10, color: C.blue, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
-                              Enabler
-                            </div>
-                          )}
-                          {enablers.sort((a, b) => b.relevance - a.relevance).map(e => <VCRow key={e.ticker} entry={e} />)}
-                        </div>
-                        {/* Contributors Spalte */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {contributors.length > 0 && (
-                            <div style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>
-                              Contributors
-                            </div>
-                          )}
-                          {contributors.sort((a, b) => b.relevance - a.relevance).map(e => <VCRow key={e.ticker} entry={e} />)}
-                        </div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.teal, fontFamily: C.display }}>
+                        {data.fundamentals.ticker ?? data.name} · {data.fundamentals.exchange ?? "—"}
                       </div>
-                    </Card>
-                  );
-                })()
-              )}
-
-              {/* Abschnitt 3: ETF-Proxies */}
-              {valueDriversData?.status === "ready" && valueDriversData.etfs.length > 0 && (
-                <Card>
-                  <SLabel text="ETF-Proxies · Thematische Exposure" />
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {valueDriversData.etfs.map(etf => (
-                      <div key={etf.ticker} style={{
-                        padding: "6px 14px", borderRadius: C.rMd,
-                        background: C.purpleDim, border: `1px solid ${C.purple}33`,
-                        display: "flex", alignItems: "center", gap: 8,
+                      <div style={{ fontSize: 12, color: C.t2, marginTop: 4 }}>
+                        Direkter Kauf über Börse möglich — sofortige Liquidität.
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      {data.fundamentals.price != null && (
+                        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: C.mono, color: C.t1 }}>
+                          {data.fundamentals.currency === "EUR" ? "€" : "$"}{data.fundamentals.price.toFixed(2)}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>
+                        Mcap {fmtBn(data.fundamentals.market_cap_bn)}
+                      </div>
+                    </div>
+                  </div>
+                ) : sc?.hero_path_label ? (
+                  <div style={{
+                    padding: "16px 20px",
+                    background: `${scoreColor(sc.hero_score)}08`,
+                    border: `1px solid ${scoreColor(sc.hero_score)}33`,
+                    borderLeft: `4px solid ${scoreColor(sc.hero_score)}`,
+                    borderRadius: C.rLg,
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".08em", marginBottom: 6 }}>
+                        STÄRKSTER INVESTITIONSPFAD
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: scoreColor(sc.hero_score), fontFamily: C.display }}>
+                        {sc.hero_path_label}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.t2, marginTop: 4 }}>
+                        {ALL_PATHS.find(p => p.key === heroPath)?.description ?? ""}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 32, fontWeight: 700, fontFamily: C.mono, color: scoreColor(sc.hero_score) }}>
+                        {sc.hero_score?.toFixed(1)}<span style={{ fontSize: 14, color: C.t3, fontWeight: 400 }}>/10</span>
+                      </div>
+                      <span style={{
+                        fontSize: 12, padding: "3px 12px", borderRadius: 99, fontWeight: 700,
+                        color: ratingColor(sc.rating ?? ""), background: ratingColor(sc.rating ?? "") + "18",
+                        border: `1px solid ${ratingColor(sc.rating ?? "")}33`, fontFamily: C.mono,
+                        display: "inline-block", marginTop: 6,
                       }}>
-                        <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
-                        <span style={{ fontSize: 11, color: C.t2 }}>{etf.name}</span>
-                        <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(etf.relevance * 100)}%</span>
+                        {sc.rating}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* ── Signal-Kontext ── */}
+                {(posSigs.length > 0 || negSigs.length > 0) && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {posSigs.map((s, i) => (
+                      <div key={i} style={{
+                        flex: 1, minWidth: 180, padding: "7px 12px",
+                        background: `${C.teal}06`, border: `1px solid ${C.teal}20`,
+                        borderLeft: `3px solid ${C.teal}`, borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
+                        fontSize: 11, color: C.t2, lineHeight: 1.45,
+                      }}>
+                        <span style={{ color: C.teal, fontFamily: C.mono, fontSize: 9, display: "block", marginBottom: 2 }}>↑ SIGNAL</span>
+                        {s.summary.length > 90 ? s.summary.slice(0, 90) + "…" : s.summary}
+                      </div>
+                    ))}
+                    {negSigs.map((s, i) => (
+                      <div key={i} style={{
+                        flex: 1, minWidth: 180, padding: "7px 12px",
+                        background: `${C.red}05`, border: `1px solid ${C.red}15`,
+                        borderLeft: `3px solid ${C.red}44`, borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
+                        fontSize: 11, color: C.t2, lineHeight: 1.45,
+                      }}>
+                        <span style={{ color: C.red, fontFamily: C.mono, fontSize: 9, display: "block", marginBottom: 2 }}>↓ SIGNAL</span>
+                        {s.summary.length > 90 ? s.summary.slice(0, 90) + "…" : s.summary}
                       </div>
                     ))}
                   </div>
-                </Card>
-              )}
-            </div>
-          )}
+                )}
+
+                {/* ── Pfad-Karten — ranked by score ── */}
+                {ALL_PATHS.map((path, rank) => {
+                  const isHero = path.key === heroPath && !isListed;
+                  const pc     = path.color;
+
+                  return (
+                    <div key={path.key} style={{
+                      border:       `1px solid ${isHero ? pc + "44" : C.border}`,
+                      borderRadius: C.rLg,
+                      overflow:     "hidden",
+                      background:   isHero ? pc + "06" : C.bgCard,
+                    }}>
+                      {/* Card Header */}
+                      <div style={{ padding: "13px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 18, lineHeight: 1 }}>{path.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isHero ? pc : C.t1, fontFamily: C.display }}>
+                              {path.label}
+                            </span>
+                            {isHero && (
+                              <span style={{ fontSize: 9, padding: "1px 7px", borderRadius: 99, fontFamily: C.mono, color: pc, background: pc + "18", border: `1px solid ${pc}33`, fontWeight: 700 }}>
+                                HERO
+                              </span>
+                            )}
+                            <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>#{rank + 1}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: C.t3, marginTop: 3, lineHeight: 1.4 }}>
+                            {path.condition}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.mono, color: scoreColor(path.score) }}>
+                            {path.score != null ? path.score.toFixed(1) : "—"}
+                          </div>
+                          <div style={{ width: 56, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", marginTop: 4, marginLeft: "auto" }}>
+                            <div style={{ height: "100%", width: `${((path.score ?? 0) / 10) * 100}%`, background: scoreColor(path.score), borderRadius: 99 }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Instruments */}
+                      <div style={{ padding: "14px 20px" }}>
+
+                        {path.key === "ipo" && (
+                          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
+                            {data.ipo_potential === "Hoch"
+                              ? `IPO-Potential: Hoch — Sekundärmarkt oder Pre-IPO-Runden evaluieren. Stage: ${STAGE_MAP[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"}.`
+                              : `IPO-Potential: ${data.ipo_potential ?? "—"} — Zeitpunkt beobachten, Stage ${STAGE_MAP[data.funding_stage ?? ""] ?? "—"}.`
+                            }
+                          </div>
+                        )}
+
+                        {path.key === "m_and_a" && (
+                          data.scorings.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                              {data.scorings.slice(0, 4).map(s => (
+                                <div key={s.buyer_name} style={{
+                                  display: "flex", alignItems: "center", gap: 12,
+                                  padding: "9px 14px", borderRadius: C.rMd,
+                                  background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
+                                }}>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: C.t1 }}>{s.buyer_name}</div>
+                                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 1 }}>
+                                      SRR {s.srr_value.toFixed(2)}× · MFR {s.mfr_value.toFixed(2)}× · {s.mfr_signal}
+                                    </div>
+                                  </div>
+                                  {s.ticker && (
+                                    <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.blue }}>{s.ticker}</span>
+                                  )}
+                                  <span style={{
+                                    fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 600,
+                                    color: ratingColor(s.rating), background: ratingColor(s.rating) + "18",
+                                    border: `1px solid ${ratingColor(s.rating)}33`, fontFamily: C.mono,
+                                  }}>
+                                    {s.rating}
+                                  </span>
+                                </div>
+                              ))}
+                              {data.scorings.length > 4 && (
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, paddingLeft: 4 }}>
+                                  +{data.scorings.length - 4} weitere — Details in Tab Scoring & Investmentprofil
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: C.t3 }}>Kein strategischer Käufer mit Scoring identifiziert.</div>
+                          )
+                        )}
+
+                        {path.key === "etf" && (
+                          etfs.length > 0 ? (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {etfs.map(etf => (
+                                <div key={etf.ticker} style={{
+                                  padding: "8px 14px", borderRadius: C.rMd,
+                                  background: C.purpleDim, border: `1px solid ${C.purple}33`,
+                                  display: "flex", alignItems: "center", gap: 10,
+                                }}>
+                                  <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
+                                  <span style={{ fontSize: 11, color: C.t2 }}>{etf.name}</span>
+                                  <div style={{ width: 30, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${etf.relevance * 100}%`, background: C.purple, borderRadius: 99 }} />
+                                  </div>
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(etf.relevance * 100)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: C.t3 }}>
+                              {vdReady ? "Kein direkter ETF-Treffer identifiziert." : "ETF-Daten werden geladen…"}
+                            </div>
+                          )
+                        )}
+
+                        {path.key === "enabler" && (
+                          (enablers.length > 0 || contributors.length > 0) ? (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+                              {[...enablers, ...contributors]
+                                .sort((a, b) => b.relevance - a.relevance)
+                                .slice(0, 6)
+                                .map(e => {
+                                  const ac = e.type === "enabler" ? C.blue : C.teal;
+                                  return (
+                                    <div key={e.ticker} style={{
+                                      padding: "10px 12px", borderRadius: C.rMd,
+                                      background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
+                                      display: "flex", alignItems: "center", gap: 10,
+                                    }}>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: ac }}>{e.ticker}</div>
+                                        <div style={{ fontSize: 10, color: C.t3, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                                      </div>
+                                      {e.price != null && (
+                                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                          <div style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 600, color: C.t1 }}>
+                                            {e.currency === "EUR" ? "€" : "$"}{e.price.toFixed(2)}
+                                          </div>
+                                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>{Math.round(e.relevance * 100)}%</div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: C.t3 }}>
+                              {vdReady ? "Keine börsennotierten Enabler verfügbar." : "Value Chain wird geladen…"}
+                            </div>
+                          )
+                        )}
+
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center", marginTop: 4 }}>
+                  Rangfolge nach Argo Score Engine · Keine Anlageberatung
+                </div>
+
+              </div>
+            );
+          })()}
 
           {activeTab === 9 && (() => {
             const EVENT_LABELS: Record<string, string> = {
