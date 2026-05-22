@@ -154,7 +154,7 @@ interface CompanyDetail {
   name: string; category?: string; core_technology?: string;
   website?: string; intro: string; industry?: string; risk?: string;
   founded?: string; headquarters?: string; employee_count?: string;
-  product_description?: string; technology_tags: string[];
+  product_description?: string; description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
   investment_path?: string; proxy_ticker?: string;
