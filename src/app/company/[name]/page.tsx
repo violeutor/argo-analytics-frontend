@@ -597,6 +597,23 @@ export default function CompanyDetailPage() {
       .finally(() => setPeersLoading(false));
   }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
+
+  // Assessments — on-demand Claude-Call beim ersten Tab-4-Besuch
+  const [assessmentsData, setAssessmentsData] = useState<any | null>(null);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!name || loading || activeTab !== 4) return;
+    if (assessmentsData) return;
+    console.log("[Argo] fetchAssessments →", name);
+    setAssessmentsLoading(true);
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/assessments`)
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then((d: any) => { console.log("[Argo] assessments source=", d?.source); setAssessmentsData(d); })
+      .catch((e) => { console.error("[Argo] assessments error:", e); })
+      .finally(() => setAssessmentsLoading(false));
+  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Value Drivers Polling — analog zu Market + Ownership
   const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
 
@@ -1373,260 +1390,204 @@ export default function CompanyDetailPage() {
 
           {/* Tab 4: Potenziale & Risiken */}
           {activeTab === 4 && (() => {
-            const signals = signalsData?.signals ?? [];
-            const potSignals = signals.filter(s => s.direction === "positive");
-            const riskSignals = signals.filter(s => s.direction === "negative" && s.source !== "internal_absence");
-            const absenceSignals = signals.filter(s => s.direction === "negative" && s.source === "internal_absence");
+            const signals   = signalsData?.signals ?? [];
+            const dims      = assessmentsData?.dimensions ?? [];
+            const compOpp   = assessmentsData?.composite_opportunity;
+            const compRisk  = assessmentsData?.composite_risk;
 
-            // Composite Score: (Potenziale * 10 - Risiken * 8) normiert auf 0-100
+            // Signal-Score Hero (Signal-Engine basiert)
+            const potSignals     = signals.filter((s: SignalItem) => s.direction === "positive");
+            const riskSignals    = signals.filter((s: SignalItem) => s.direction === "negative" && s.source !== "internal_absence");
+            const absenceSignals = signals.filter((s: SignalItem) => s.direction === "negative" && s.source === "internal_absence");
             const rawScore = Math.max(0, Math.min(100,
               50 + (potSignals.length * 10) - (riskSignals.length * 8) - (absenceSignals.length * 3)
             ));
             const scoreColor = rawScore >= 65 ? C.teal : rawScore >= 40 ? C.amber : C.red;
             const scoreLabel = rawScore >= 65 ? "Positiv" : rawScore >= 40 ? "Gemischt" : "Kritisch";
 
-            // Kategorie-Labels
+            // Signal-Kategorien für Dimension-Mapping
             const catLabel: Record<string, string> = {
-              funding: "Finanzierung", partnership: "Partnerschaft", ipo_progress: "IPO-Fortschritt",
-              market_growth: "Marktwachstum", patent: "Patent/IP", investor_entry: "Neuer Investor",
-              regulatory: "Regulatorik", negative_earnings: "Earnings/Verlust",
-              supply_chain: "Lieferkette", insider_selling: "Insider-Verkauf",
-              customer_concentration: "Kundenkonzentration", filing: "Transparenz/Daten",
-              ownership_entry: "Ownership", general_news: "News",
+              funding: "Finanzierung", partnership: "Partnerschaft", ipo_progress: "IPO",
+              market_growth: "Marktwachstum", patent: "Patent/IP", investor_entry: "Investor",
+              regulatory: "Regulatorik", regulatory_positive: "Regulatorik +",
+              regulatory_intervention: "Regulatorik ⚠", policy_support: "Policy +",
+              policy_risk: "Policy ⚠", subsidy: "Förderung",
+              negative_earnings: "Earnings", supply_chain: "Lieferkette",
+              insider_selling: "Insider-Verkauf", customer_concentration: "Kundenkonzentration",
+              filing: "Transparenz", ownership_entry: "Ownership", general_news: "News",
+              headcount_growth: "Headcount +", tech_milestone: "Tech-Meilenstein",
             };
 
-            const SignalCard = ({ signal, accent }: { signal: SignalItem; accent: string }) => (
+            // Signals nach signal_category gruppieren für Dimension
+            const sigsByCategory = (cats: string[]) =>
+              signals.filter((s: SignalItem) => cats.includes(s.signal_category ?? "")).slice(0, 3);
+
+            const DIM_CONFIG = [
+              { id: "market",     oppCats: ["market_growth", "new_customer", "new_partnership"], rskCats: ["market_decline", "competitive_pressure"] },
+              { id: "financials", oppCats: ["funding_round", "revenue_growth"],                  rskCats: ["negative_earnings", "high_burn", "debt_increase"] },
+              { id: "strategy",   oppCats: ["new_partnership", "expansion", "acquisition"],      rskCats: ["leadership_change", "strategy_pivot"] },
+              { id: "political",  oppCats: ["regulatory_positive", "subsidy", "policy_support"], rskCats: ["regulatory_intervention", "policy_risk", "sanctions"] },
+              { id: "technology", oppCats: ["patent", "new_product", "tech_milestone"],          rskCats: ["ip_risk", "tech_obsolescence"] },
+              { id: "operations", oppCats: ["headcount_growth", "revenue_per_fte"],              rskCats: ["supply_chain", "customer_concentration", "filing"] },
+            ];
+
+            const ScoreBadge = ({ score, side }: { score: number; side: "opp" | "rsk" }) => {
+              const color = side === "opp"
+                ? (score >= 7 ? C.teal : score >= 4 ? C.amber : C.t3)
+                : (score >= 7 ? C.red  : score >= 4 ? C.amber : C.teal);
+              return (
+                <div style={{
+                  fontFamily: C.mono, fontSize: 18, fontWeight: 700, color,
+                  minWidth: 32, textAlign: "center", lineHeight: 1,
+                }}>
+                  {score.toFixed(1)}
+                </div>
+              );
+            };
+
+            const MiniSignal = ({ s, accent }: { s: SignalItem; accent: string }) => (
               <div style={{
-                background: C.bgCard, border: `1px solid ${accent}22`,
-                borderLeft: `3px solid ${accent}`,
-                borderRadius: 6, padding: "10px 12px", marginBottom: 8,
+                fontSize: 10, color: C.t2, borderLeft: `2px solid ${accent}55`,
+                paddingLeft: 7, marginTop: 5, lineHeight: 1.4,
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                  <div style={{ fontSize: 11, color: C.t1, lineHeight: 1.4, flex: 1 }}>
-                    {signal.summary.split(":").slice(1).join(":").trim() || signal.summary}
-                  </div>
-                  {signal.signal_category && (
-                    <div style={{
-                      fontSize: 9, color: accent, background: `${accent}18`,
-                      borderRadius: 3, padding: "2px 6px", whiteSpace: "nowrap",
-                      fontFamily: C.mono, flexShrink: 0,
-                    }}>
-                      {catLabel[signal.signal_category] ?? signal.signal_category}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 5, alignItems: "center" }}>
-                  <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
-                    {signal.event_date?.slice(0, 10)}
-                  </span>
-                  <span style={{ fontSize: 9, color: C.t3 }}>·</span>
-                  <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase" }}>
-                    {signal.source === "internal_absence" ? "Datenlücke" : signal.source?.replace("_", " ")}
-                  </span>
-                  {signal.source_url && (
-                    <>
-                      <span style={{ fontSize: 9, color: C.t3 }}>·</span>
-                      <a href={signal.source_url} target="_blank" rel="noreferrer"
-                        style={{ fontSize: 9, color: C.teal, textDecoration: "none" }}>
-                        Quelle ↗
-                      </a>
-                    </>
-                  )}
-                </div>
+                <span style={{ color: accent, fontFamily: C.mono, fontSize: 9, marginRight: 4 }}>
+                  {catLabel[s.signal_category ?? ""] ?? s.signal_category}
+                </span>
+                {s.summary?.split(":").slice(1).join(":").trim() || s.summary}
               </div>
             );
 
+            const DimRow = ({ dim }: { dim: typeof DIM_CONFIG[0] }) => {
+              const assessed = dims.find((d: any) => d.id === dim.id);
+              const oppSigs  = sigsByCategory(dim.oppCats);
+              const rskSigs  = sigsByCategory(dim.rskCats);
+              const oppScore = assessed?.opportunity_score ?? null;
+              const rskScore = assessed?.risk_score ?? null;
+              const label    = assessed?.label ?? dim.id;
+
+              return (
+                <div style={{
+                  display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
+                  gap: 0, borderBottom: `1px solid ${C.border}`,
+                }}>
+                  {/* Links: Potenzial */}
+                  <div style={{ padding: "14px 16px", borderRight: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      {oppScore !== null && <ScoreBadge score={oppScore} side="opp" />}
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: C.teal, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                          {label.toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIAL</div>
+                      </div>
+                    </div>
+                    {assessed?.opportunity_note
+                      ? <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{assessed.opportunity_note}</div>
+                      : <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
+                    }
+                    {oppSigs.map((s: SignalItem, i: number) => <MiniSignal key={i} s={s} accent={C.teal} />)}
+                  </div>
+
+                  {/* Rechts: Risiko */}
+                  <div style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      {rskScore !== null && <ScoreBadge score={rskScore} side="rsk" />}
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: C.red, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                          {label.toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKO</div>
+                      </div>
+                    </div>
+                    {assessed?.risk_note
+                      ? <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{assessed.risk_note}</div>
+                      : <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
+                    }
+                    {rskSigs.map((s: SignalItem, i: number) => <MiniSignal key={i} s={s} accent={C.red} />)}
+                  </div>
+                </div>
+              );
+            };
+
             return (
               <div>
-                {/* Hard Facts Layer — R-18 Phase 2 */}
-                {(() => {
-                  const md   = data.market_data as any;
-                  const fd   = data.fundamentals;
-                  const sc   = data.scorings?.[0];
-
-                  // EBITDA-Marge berechnen wenn BA-Daten vorhanden
-                  const ebitdaMargin = fd?.ba_ebitda_mn != null && fd?.ba_revenue_mn != null && fd.ba_revenue_mn > 0
-                    ? (fd.ba_ebitda_mn / fd.ba_revenue_mn * 100).toFixed(1) + "%"
-                    : null;
-                  const equityRatio = fd?.ba_equity_mn != null && fd?.ba_total_assets_mn != null && fd.ba_total_assets_mn > 0
-                    ? (fd.ba_equity_mn / fd.ba_total_assets_mn * 100).toFixed(1) + "%"
-                    : null;
-
-                  const hasMarket = md && (md.cagr_pct != null || md.competition_score || md.market_cycle);
-                  const hasFundamentals = fd?.ba_found && (fd.ba_revenue_mn != null || ebitdaMargin || equityRatio);
-                  const hasScoring = sc != null;
-
-                  if (!hasMarket && !hasFundamentals && !hasScoring) return null;
-
-                  const HFTile = ({ label, val, sub, color }: { label: string; val: string; sub?: string; color?: string }) => (
-                    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "10px 14px" }}>
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: color ?? C.t1, fontFamily: C.display }}>{val}</div>
-                      {sub && <div style={{ fontSize: 10, color: C.t2, marginTop: 3 }}>{sub}</div>}
-                    </div>
-                  );
-
-                  const mfrColor = (s?: string) => s === "Feasible" ? C.teal : s === "Watch" ? C.amber : C.red;
-                  const compColor2 = (s?: string) => s === "low" ? C.teal : s === "medium" ? C.amber : s === "high" ? C.red : C.t3;
-                  const cycleColor2 = (s?: string) => s === "early" || s === "growth" ? C.teal : s === "mature" ? C.amber : C.t3;
-
-                  return (
-                    <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".06em" }}>HARD FACTS</div>
-
-                      {/* Markt-Block */}
-                      {hasMarket && (
-                        <div>
-                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>MARKT</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
-                            {md.cagr_pct != null && <HFTile label="CAGR" val={`${md.cagr_pct.toFixed(1)}%`} sub="Marktwachstum p.a." color={C.teal} />}
-                            {md.tam_2035_usd_bn != null && <HFTile label="TAM 2035" val={`$${md.tam_2035_usd_bn.toFixed(0)}B`} sub={md.tam_source?.split(" ")[0]} />}
-                            {md.competition_score && <HFTile label="Wettbewerb" val={md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1)} color={compColor2(md.competition_score)} sub={md.competition_note?.slice(0, 40)} />}
-                            {md.market_cycle && <HFTile label="Marktphase" val={md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1)} color={cycleColor2(md.market_cycle)} sub={md.market_cycle_note?.split("—")[0]?.trim().slice(0, 40)} />}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Fundamentals-Block (BA-Bridge) */}
-                      {hasFundamentals && (
-                        <div>
-                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>
-                            FUNDAMENTALS · Bundesanzeiger {fd.ba_last_report_year ? `FY${fd.ba_last_report_year}` : ""}
-                          </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
-                            {fd.ba_revenue_mn != null && <HFTile label="Umsatz" val={`€${fd.ba_revenue_mn.toFixed(1)}M`} color={C.t1} />}
-                            {ebitdaMargin && <HFTile label="EBITDA-Marge" val={ebitdaMargin} color={parseFloat(ebitdaMargin) >= 10 ? C.teal : parseFloat(ebitdaMargin) >= 0 ? C.amber : C.red} />}
-                            {equityRatio && <HFTile label="Eigenkapitalquote" val={equityRatio} color={parseFloat(equityRatio) >= 30 ? C.teal : C.amber} />}
-                            {fd.ba_employees != null && <HFTile label="Mitarbeiter" val={fd.ba_employees.toLocaleString("de-DE")} sub="Bundesanzeiger" />}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Scoring-Block */}
-                      {hasScoring && (
-                        <div>
-                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>SCORING · SRR × MFR × TECHREADINESS</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
-                            <HFTile label="Gesamtwertung" val={sc.rating.split("·")[0].trim()} sub={sc.rating.split("·")[1]?.trim()} color={sc.rating.startsWith("A") ? C.teal : sc.rating.startsWith("B") ? C.blue : sc.rating.startsWith("C") ? C.amber : C.red} />
-                            <HFTile label="SRR" val={sc.srr_value.toFixed(2)} sub={sc.srr_category} color={sc.srr_category.includes("Transformational") ? C.teal : C.t2} />
-                            <HFTile label="MFR" val={sc.mfr_value.toFixed(2)} sub={sc.mfr_signal} color={mfrColor(sc.mfr_signal)} />
-                            {data.fundamentals?.is_listed === false && sc.tech_readiness?.overall != null && (
-                              <HFTile label="TechReadiness" val={(sc.tech_readiness.overall * 100).toFixed(0) + "%"} sub={sc.tech_readiness.confidence ?? undefined} color={sc.tech_readiness.overall >= 0.6 ? C.teal : sc.tech_readiness.overall >= 0.4 ? C.amber : C.red} />
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ borderBottom: `1px solid ${C.border}`, marginTop: 4 }} />
-                    </div>
-                  );
-                })()}
-
                 {/* Hero Score */}
                 <Card style={{ marginBottom: 16, textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>
-                    SIGNAL-SCORE
-                  </div>
-                  <div style={{ fontSize: 48, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>
-                    {rawScore}
-                  </div>
-                  <div style={{ fontSize: 12, color: scoreColor, marginTop: 4, fontFamily: C.mono }}>
-                    {scoreLabel}
+                  <div style={{ display: "flex", justifyContent: "center", gap: 48, alignItems: "center" }}>
+                    {/* Signal Score */}
+                    <div>
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>SIGNAL-SCORE</div>
+                      <div style={{ fontSize: 42, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{rawScore}</div>
+                      <div style={{ fontSize: 11, color: scoreColor, marginTop: 3, fontFamily: C.mono }}>{scoreLabel}</div>
+                    </div>
+                    {/* Composite Opportunity */}
+                    {compOpp != null && (
+                      <div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>OPP. SCORE</div>
+                        <div style={{ fontSize: 42, fontWeight: 700, color: C.teal, lineHeight: 1 }}>{Number(compOpp).toFixed(1)}</div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>/ 10</div>
+                      </div>
+                    )}
+                    {/* Composite Risk */}
+                    {compRisk != null && (
+                      <div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>RISK SCORE</div>
+                        <div style={{ fontSize: 42, fontWeight: 700, color: C.red, lineHeight: 1 }}>{Number(compRisk).toFixed(1)}</div>
+                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>/ 10</div>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 12 }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: C.teal }}>{potSignals.length}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.teal }}>{potSignals.length}</div>
                       <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIALE</div>
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: C.red }}>{riskSignals.length}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.red }}>{riskSignals.length}</div>
                       <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKEN</div>
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: C.amber }}>{absenceSignals.length}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.amber }}>{absenceSignals.length}</div>
                       <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>DATENLÜCKEN</div>
                     </div>
                   </div>
                   <div style={{ fontSize: 9, color: C.t3, marginTop: 10, fontFamily: C.mono }}>
-                    Basiert auf Signal-Engine · {signals.length} Signals · Quelle: Argo Analytics
+                    Signal-Engine · {signals.length} Signals · Assessment: {assessmentsData ? `${assessmentsData.source} · ${assessmentsData.model?.replace("claude-", "Claude ")}` : "lädt…"}
                   </div>
                 </Card>
 
-                {/* Loading State */}
-                {signalsLoading && (
-                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 32 }}>
-                    Signals werden geladen…
-                  </div>
-                )}
-
-                {/* Kein Signal */}
-                {!signalsLoading && signals.length === 0 && (
-                  <div style={{ textAlign: "center", color: C.t3, fontSize: 12, padding: 32 }}>
-                    Noch keine Signals vorhanden — Signal-Engine läuft täglich 06:00 UTC.
-                  </div>
-                )}
-
-                {/* 2-Spalten Grid */}
-                {!signalsLoading && signals.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-
-                    {/* Links: Potenziale */}
-                    <div>
-                      <div style={{
-                        fontSize: 10, color: C.teal, fontFamily: C.mono, fontWeight: 600,
-                        marginBottom: 10, letterSpacing: "0.08em",
-                      }}>
-                        ▲ POTENZIALE ({potSignals.length})
-                      </div>
-                      {potSignals.length === 0 ? (
-                        <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>
-                          Keine Potenzial-Signale in den letzten 30 Tagen.
-                        </div>
-                      ) : (
-                        potSignals.map((s, i) => (
-                          <SignalCard key={s.id ?? i} signal={s} accent={C.teal} />
-                        ))
-                      )}
+                {/* Assessment Loading */}
+                {assessmentsLoading && (
+                  <Card style={{ textAlign: "center", padding: 32 }}>
+                    <div style={{ fontSize: 12, color: C.teal, fontFamily: C.mono, marginBottom: 8 }}>
+                      ◎ Assessment wird generiert…
                     </div>
-
-                    {/* Rechts: Risiken */}
-                    <div>
-                      <div style={{
-                        fontSize: 10, color: C.red, fontFamily: C.mono, fontWeight: 600,
-                        marginBottom: 10, letterSpacing: "0.08em",
-                      }}>
-                        ▼ RISIKEN ({riskSignals.length + absenceSignals.length})
-                      </div>
-                      {riskSignals.length === 0 && absenceSignals.length === 0 ? (
-                        <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>
-                          Keine Risiko-Signale erkannt.
-                        </div>
-                      ) : (
-                        <>
-                          {riskSignals.map((s, i) => (
-                            <SignalCard key={s.id ?? i} signal={s} accent={C.red} />
-                          ))}
-                          {absenceSignals.length > 0 && (
-                            <>
-                              <div style={{
-                                fontSize: 9, color: C.amber, fontFamily: C.mono,
-                                marginTop: 12, marginBottom: 6, letterSpacing: "0.06em",
-                              }}>
-                                DATENLÜCKEN ({absenceSignals.length})
-                              </div>
-                              {absenceSignals.map((s, i) => (
-                                <SignalCard key={s.id ?? `abs-${i}`} signal={s} accent={C.amber} />
-                              ))}
-                            </>
-                          )}
-                        </>
-                      )}
+                    <div style={{ fontSize: 11, color: C.t3 }}>
+                      Claude analysiert Markt, Finanzen, Strategie, Political Environment, Technologie und operative Stärke.
                     </div>
-                  </div>
+                  </Card>
                 )}
 
-                {/* Disclaimer */}
-                <div style={{ marginTop: 16, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
+                {/* 6-Dimensionen Grid */}
+                {!assessmentsLoading && (
+                  <Card style={{ padding: 0, overflow: "hidden" }}>
+                    {/* Header */}
+                    <div style={{
+                      display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
+                      borderBottom: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ padding: "10px 16px", fontSize: 9, color: C.teal, fontFamily: C.mono, fontWeight: 600, letterSpacing: ".08em", borderRight: `1px solid ${C.border}` }}>
+                        ▲ POTENZIALE
+                      </div>
+                      <div style={{ padding: "10px 16px", fontSize: 9, color: C.red, fontFamily: C.mono, fontWeight: 600, letterSpacing: ".08em" }}>
+                        ▼ RISIKEN
+                      </div>
+                    </div>
+                    {DIM_CONFIG.map(dim => <DimRow key={dim.id} dim={dim} />)}
+                  </Card>
+                )}
+
+                <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
                   Automatisch generiert · Keine Anlageberatung · Stand: {new Date().toLocaleDateString("de-DE")}
                 </div>
               </div>
