@@ -139,6 +139,7 @@ interface FundamentalsData {
   fundamentals_source?: string;           // 'yahoo' | 'ba_bridge' | 'edgar' | 'none'
   fundamentals_source_secondary?: string;
   fundamentals_quality_flag?: string;     // 'partial' | 'no_data'
+  extraction_confidence?: string;         // BA-09: 'full' | 'partial' | 'balance_only' | 'not_found'
 }
 interface TechReadinessDetail {
   overall: number; inputs_provided: boolean;
@@ -169,7 +170,28 @@ interface CompanyDetail {
   supply_chain_etfs: { ticker: string; name: string; relevance: number }[];
   last_signal?: string; last_signal_date?: string;
   market_data?: MarketData;
+  scores?: CompanyScores;
   is_known: boolean; warnings: string[];
+}
+
+interface CompanyScores {
+  financial_score?: number;
+  strategic_score?: number;
+  market_score?: number;
+  risk_score?: number;
+  ownership_score?: number;
+  value_driver_score?: number;
+  ipo_score?: number;
+  m_and_a_score?: number;
+  etf_score?: number;
+  enabler_score?: number;
+  composite_score?: number;
+  hero_path?: string;       // 'ipo' | 'm_and_a' | 'etf' | 'enabler'
+  hero_score?: number;
+  hero_path_label?: string; // 'IPO' | 'M&A' | 'ETF-Proxy' | 'Enabler'
+  rating?: string;          // 'A' | 'B' | 'C' | 'D'
+  confidence?: string;
+  computed_at?: string;
 }
 
 // ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
@@ -468,7 +490,7 @@ function Placeholder({ title, sub }: { title: string; sub: string }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
-const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Exposure Types", "Signal History"];
+const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & Risiken", "Peer Review", "Value Drivers", "Scoring & Investmentprofil", "Exposure Types", "Signal History"];
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -576,7 +598,7 @@ export default function CompanyDetailPage() {
   const [signalsLoading, setSignalsLoading] = useState(false);
 
   useEffect(() => {
-    if (!name || loading || (activeTab !== 4 && activeTab !== 8)) return;
+    if (!name || loading || (activeTab !== 4 && activeTab !== 9)) return;
     if (signalsData) return; // bereits geladen
     console.log("[Argo] fetchSignals →", name, "activeTab=", activeTab);
     setSignalsLoading(true);
@@ -740,11 +762,24 @@ export default function CompanyDetailPage() {
                 </button>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {data.scorings[0] && (
-                  <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: ratingColor(data.scorings[0].rating), background: ratingColor(data.scorings[0].rating) + "18", border: `1px solid ${ratingColor(data.scorings[0].rating)}33` }}>
-                    {data.scorings[0].rating}
-                  </span>
-                )}
+                {(data.scores?.rating ?? data.scorings[0]?.rating) && (() => {
+                  const rating   = data.scores?.rating ?? data.scorings[0]?.rating ?? "";
+                  const heroLbl  = data.scores?.hero_path_label;
+                  const heroScr  = data.scores?.hero_score;
+                  const rc = ratingColor(rating);
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {heroLbl && heroScr != null && (
+                        <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>
+                          {heroLbl} · {heroScr.toFixed(1)}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: rc, background: rc + "18", border: `1px solid ${rc}33` }}>
+                        {rating}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -834,19 +869,55 @@ export default function CompanyDetailPage() {
           )}
 
           {/* Tab Nav */}
-          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
-            {TABS.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(i)} style={{
-                padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
-                border: "none", background: "none", whiteSpace: "nowrap",
-                color: activeTab === i ? C.teal : C.t2,
-                borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
-                marginBottom: -1, transition: "all .15s", fontFamily: C.body,
-              }}>
-                {tab}
-              </button>
-            ))}
-          </div>
+          {(() => {
+            const sc = data.scores;
+            // SC-10: Score je Tab (Index 0–9)
+            const TAB_SCORE_KEYS: (keyof CompanyScores | null)[] = [
+              "composite_score",    // 0 Überblick
+              "market_score",       // 1 Markt
+              "ownership_score",    // 2 Ownership
+              "financial_score",    // 3 Fundamentals
+              null,                 // 4 Potenziale (eigener Composite)
+              "strategic_score",    // 5 Peer Review
+              "value_driver_score", // 6 Value Drivers
+              "composite_score",    // 7 Scoring & Investmentprofil
+              null,                 // 8 Exposure Types
+              null,                 // 9 Signal History
+            ];
+            const tabScoreColor = (v: number) =>
+              v >= 7 ? C.teal : v >= 4 ? C.amber : C.red;
+            return (
+              <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
+                {TABS.map((tab, i) => {
+                  const key = TAB_SCORE_KEYS[i];
+                  const scoreVal = key && sc ? (sc[key] as number | undefined) : undefined;
+                  return (
+                    <button key={tab} onClick={() => setActiveTab(i)} style={{
+                      padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                      border: "none", background: "none", whiteSpace: "nowrap",
+                      color: activeTab === i ? C.teal : C.t2,
+                      borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
+                      marginBottom: -1, transition: "all .15s", fontFamily: C.body,
+                      display: "flex", alignItems: "center", gap: 6,
+                    }}>
+                      {tab}
+                      {scoreVal != null && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, fontFamily: C.mono,
+                          color: tabScoreColor(scoreVal),
+                          background: tabScoreColor(scoreVal) + "18",
+                          border: `1px solid ${tabScoreColor(scoreVal)}33`,
+                          borderRadius: 99, padding: "1px 6px", lineHeight: 1.4,
+                        }}>
+                          {scoreVal.toFixed(1)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Tab 0: Überblick */}
           {activeTab === 0 && (
@@ -912,6 +983,8 @@ export default function CompanyDetailPage() {
               c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : c === "mature" ? C.purple : C.t2;
             const compColor = (c?: string) =>
               c === "low" ? C.teal : c === "medium" ? C.amber : c === "high" ? C.red : C.t3;
+            const compDisplay = (c?: string) =>
+              !c || c === "unknown" ? "—" : c.charAt(0).toUpperCase() + c.slice(1);
             const confColor2 = (c?: string) =>
               c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
 
@@ -1040,7 +1113,7 @@ export default function CompanyDetailPage() {
                         <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
                           <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Wettbewerb</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: compColor(md.competition_score), fontFamily: C.display }}>
-                            {md.competition_score ? md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1) : "—"}
+                            {compDisplay(md.competition_score)}
                           </span>
                         </div>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
@@ -1358,8 +1431,27 @@ export default function CompanyDetailPage() {
                           <FundTile label="Mitarbeiter" val={f.ba_employees != null ? f.ba_employees.toLocaleString("de-DE") : "—"} />
                         </div>
                         {f.ba_last_report_year && (
-                          <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                            Letzter Jahresabschluss: {f.ba_last_report_year}
+                          <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span>Letzter Jahresabschluss: {f.ba_last_report_year}</span>
+                            {f.extraction_confidence && (() => {
+                              const confMap: Record<string, { label: string; color: string }> = {
+                                full:         { label: "GuV vollständig", color: C.teal  },
+                                partial:      { label: "GuV teilweise",   color: C.amber },
+                                balance_only: { label: "Nur Bilanz",      color: C.amber },
+                                not_found:    { label: "Keine Daten",     color: C.red   },
+                              };
+                              const conf = confMap[f.extraction_confidence!];
+                              if (!conf) return null;
+                              return (
+                                <span style={{
+                                  fontSize: 9, padding: "1px 7px", borderRadius: 99, fontFamily: C.mono,
+                                  color: conf.color, background: conf.color + "18",
+                                  border: `1px solid ${conf.color}33`,
+                                }}>
+                                  {conf.label}
+                                </span>
+                              );
+                            })()}
                           </div>
                         )}
                       </Card>
@@ -2057,7 +2149,339 @@ export default function CompanyDetailPage() {
           })()}
 
           {/* Tab 7: Exposure Types */}
-          {activeTab === 7 && (
+          {activeTab === 7 && (() => {
+            const sc = data.scores;
+
+            if (!sc) return (
+              <Card>
+                <SLabel text="Scoring & Investmentprofil" />
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>
+                  Scores werden berechnet — bitte kurz warten und Seite neu laden.
+                </div>
+              </Card>
+            );
+
+            // Sub-Score-Dimensionen in Radar-Reihenfolge (oben → im Uhrzeigersinn)
+            const SUB_SCORES = [
+              { key: "market_score",       label: "Market",    color: C.teal   },
+              { key: "strategic_score",    label: "Strategic", color: C.blue   },
+              { key: "financial_score",    label: "Financial", color: C.purple },
+              { key: "risk_score",         label: "Risk",      color: C.red    },
+              { key: "ownership_score",    label: "Ownership", color: C.amber  },
+              { key: "value_driver_score", label: "Val.Driver",color: C.teal   },
+            ] as const;
+
+            const PATH_SCORES = [
+              { key: "ipo_score",     heroKey: "ipo",     label: "IPO",       color: C.teal,   icon: "📈" },
+              { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue,   icon: "🤝" },
+              { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber,  icon: "📊" },
+              { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple, icon: "⚡" },
+            ] as const;
+
+            const scVal = (key: keyof CompanyScores) =>
+              (sc[key] as number | undefined) ?? 0;
+            const scoreColor = (v?: number) =>
+              v == null ? C.t3 : v >= 7 ? C.teal : v >= 4 ? C.amber : C.red;
+
+            const heroScore   = sc.hero_score;
+            const heroLabel   = sc.hero_path_label ?? sc.hero_path ?? "—";
+            const heroRating  = sc.rating ?? "—";
+            const composite   = sc.composite_score;
+
+            // ── Radar SVG ──────────────────────────────────────────────────
+            const W = 280, H = 280, cx = 140, cy = 140, R = 92;
+            const N = 6;
+            const aOff = -Math.PI / 2; // start top
+
+            const getP = (i: number, r: number) => ({
+              x: cx + r * Math.cos(aOff + (2 * Math.PI * i) / N),
+              y: cy + r * Math.sin(aOff + (2 * Math.PI * i) / N),
+            });
+
+            const gridPoly = (level: number) => {
+              const r = (level / 10) * R;
+              return Array.from({ length: N }, (_, i) => {
+                const p = getP(i, r);
+                return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+              }).join(" ");
+            };
+
+            const dataPoly = SUB_SCORES.map((s, i) => {
+              const v = Math.min(scVal(s.key as keyof CompanyScores), 10);
+              const r = (v / 10) * R;
+              const p = getP(i, r);
+              return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+            }).join(" ");
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* ── Row 1: Hero Path + Composite ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                  {/* Hero Path Card */}
+                  <Card>
+                    <SLabel text="Hero Investitionspfad" />
+                    <div style={{ textAlign: "center", padding: "10px 0 6px" }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".08em", marginBottom: 8 }}>
+                        STÄRKSTER PFAD
+                      </div>
+                      <div style={{ fontSize: 26, fontWeight: 700, color: scoreColor(heroScore), fontFamily: C.display, lineHeight: 1 }}>
+                        {heroLabel}
+                      </div>
+                      {heroScore != null && (
+                        <div style={{ fontSize: 36, fontWeight: 700, color: scoreColor(heroScore), fontFamily: C.mono, marginTop: 6 }}>
+                          {heroScore.toFixed(1)}
+                          <span style={{ fontSize: 14, color: C.t3, fontWeight: 400 }}>/10</span>
+                        </div>
+                      )}
+                      <div style={{ marginTop: 12 }}>
+                        <span style={{
+                          fontSize: 13, padding: "5px 20px", borderRadius: 99, fontWeight: 700,
+                          color: ratingColor(heroRating),
+                          background: ratingColor(heroRating) + "18",
+                          border: `1px solid ${ratingColor(heroRating)}33`,
+                          fontFamily: C.mono,
+                        }}>
+                          {heroRating}
+                        </span>
+                      </div>
+                    </div>
+                    {sc.computed_at && (
+                      <div style={{ marginTop: 14, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
+                        Berechnet: {new Date(sc.computed_at).toLocaleDateString("de-DE")}
+                        {sc.confidence && <span> · Konfidenz: {sc.confidence}</span>}
+                      </div>
+                    )}
+                  </Card>
+
+                  {/* Composite + Sub-Score Bars */}
+                  <Card>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <SLabel text="Composite Score" />
+                      <span style={{ fontSize: 26, fontWeight: 700, fontFamily: C.mono, color: scoreColor(composite) }}>
+                        {composite != null ? composite.toFixed(1) : "—"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {SUB_SCORES.map(s => {
+                        const v = scVal(s.key as keyof CompanyScores);
+                        const isRisk = s.key === "risk_score";
+                        const barColor = isRisk
+                          ? (v >= 7 ? C.red : v >= 4 ? C.amber : C.teal)
+                          : scoreColor(v);
+                        return (
+                          <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, minWidth: 80 }}>
+                              {s.label}{isRisk && " ↓"}
+                            </span>
+                            <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${(v / 10) * 100}%`, background: barColor, borderRadius: 99, transition: "width .4s ease" }} />
+                            </div>
+                            <span style={{ fontSize: 11, fontFamily: C.mono, color: barColor, minWidth: 30, textAlign: "right" }}>
+                              {v > 0 ? v.toFixed(1) : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* ── Row 2: Radar + Path Scores ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+                  {/* Radar Chart */}
+                  <Card>
+                    <SLabel text="Score-Profil · 6 Dimensionen" />
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+                        {/* Grid polygons */}
+                        {[2, 4, 6, 8, 10].map(lvl => (
+                          <polygon
+                            key={lvl}
+                            points={gridPoly(lvl)}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.06)"
+                            strokeWidth={lvl === 10 ? 1.5 : 1}
+                          />
+                        ))}
+                        {/* Axis lines */}
+                        {Array.from({ length: N }, (_, i) => {
+                          const p = getP(i, R);
+                          return <line key={i} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />;
+                        })}
+                        {/* Data polygon */}
+                        <polygon points={dataPoly} fill={`${C.teal}20`} stroke={C.teal} strokeWidth={1.5} />
+                        {/* Data dots */}
+                        {SUB_SCORES.map((s, i) => {
+                          const v = Math.min(scVal(s.key as keyof CompanyScores), 10);
+                          const r = (v / 10) * R;
+                          const p = getP(i, r);
+                          return <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={4} fill={s.color} stroke={C.bg} strokeWidth={1.5} />;
+                        })}
+                        {/* Labels */}
+                        {SUB_SCORES.map((s, i) => {
+                          const lp = getP(i, R + 20);
+                          const scoreV = scVal(s.key as keyof CompanyScores);
+                          // Adjust anchor for left/right sides
+                          const angle = aOff + (2 * Math.PI * i) / N;
+                          const anchor = Math.cos(angle) < -0.3 ? "end" : Math.cos(angle) > 0.3 ? "start" : "middle";
+                          return (
+                            <g key={i}>
+                              <text
+                                x={lp.x.toFixed(1)} y={lp.y.toFixed(1)}
+                                textAnchor={anchor}
+                                dominantBaseline="middle"
+                                fill={s.color} fontSize={9}
+                                fontFamily="DM Mono, monospace" fontWeight={600}
+                              >
+                                {s.label}
+                              </text>
+                              {scoreV > 0 && (
+                                <text
+                                  x={lp.x.toFixed(1)} y={(lp.y + 11).toFixed(1)}
+                                  textAnchor={anchor}
+                                  dominantBaseline="middle"
+                                  fill={scoreColor(scoreV)} fontSize={8}
+                                  fontFamily="DM Mono, monospace"
+                                >
+                                  {scoreV.toFixed(1)}
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </Card>
+
+                  {/* Path Score Vergleich */}
+                  <Card>
+                    <SLabel text="Investitionspfade · Score-Vergleich" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {PATH_SCORES.map(p => {
+                        const v = sc[p.key as keyof CompanyScores] as number | undefined;
+                        const isHero = sc.hero_path === p.heroKey;
+                        return (
+                          <div key={p.key} style={{
+                            padding: "12px 14px", borderRadius: C.rMd,
+                            background: isHero ? p.color + "12" : "rgba(255,255,255,0.025)",
+                            border: `1px solid ${isHero ? p.color + "44" : C.border}`,
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                <span style={{ fontSize: 14 }}>{p.icon}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: isHero ? p.color : C.t1, fontFamily: C.display }}>
+                                  {p.label}
+                                </span>
+                                {isHero && (
+                                  <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, fontFamily: C.mono, color: p.color, background: p.color + "18", border: `1px solid ${p.color}33` }}>
+                                    HERO
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: 20, fontWeight: 700, fontFamily: C.mono, color: scoreColor(v) }}>
+                                {v != null ? v.toFixed(1) : "—"}
+                              </span>
+                            </div>
+                            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${((v ?? 0) / 10) * 100}%`, background: scoreColor(v), borderRadius: 99, transition: "width .4s ease" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* ── Row 3: Segmentspezifisches Investmentprofil ── */}
+                <Card>
+                  <SLabel text="Segmentspezifisches Investmentprofil" />
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+                    {([
+                      {
+                        segment: "VC Funds",
+                        scoreKey: "ipo_score" as keyof CompanyScores,
+                        focus: "IPO-Readiness · TechReadiness · Time-to-Market",
+                        note: () => {
+                          const v = sc.ipo_score ?? 0;
+                          return v >= 7 ? "Hohes IPO-Potenzial — relevant für Pre-IPO-Runden und Secondary-Märkte."
+                            : v >= 4 ? "Moderates IPO-Potenzial — Stage und TechReadiness prüfen."
+                            : "Geringes IPO-Potenzial — M&A- oder Enabler-Pfad wahrscheinlicher.";
+                        },
+                        color: C.teal,
+                      },
+                      {
+                        segment: "M&A-Boutiquen",
+                        scoreKey: "m_and_a_score" as keyof CompanyScores,
+                        focus: "SRR × MFR × TechReadiness · Käufer-Universum",
+                        note: () => {
+                          const v = sc.m_and_a_score ?? 0;
+                          return v >= 7 ? "Attraktives M&A-Target — Feasibility-Fenster und Käufer-Fit prüfen."
+                            : v >= 4 ? "Bedingt M&A-relevant — Stage und Buyer-Matching beachten."
+                            : "Geringe M&A-Eignung — zu früh, zu teuer oder kein Käufer identifiziert.";
+                        },
+                        color: C.blue,
+                      },
+                      {
+                        segment: "PE Funds",
+                        scoreKey: "financial_score" as keyof CompanyScores,
+                        focus: "Financial Score · Ownership-Transparenz · Buy-and-Build",
+                        note: () => {
+                          const v = sc.financial_score ?? 0;
+                          return v >= 7 ? "Solide Finanz-Basis — für PE-Einstieg und Buy-and-Build prüfen."
+                            : v >= 4 ? "Begrenzte Finanztransparenz — private Company, BA-Bridge prüfen."
+                            : "Finanzdaten nicht öffentlich — Stage zu früh für klassisches PE.";
+                        },
+                        color: C.purple,
+                      },
+                      {
+                        segment: "Asset Manager",
+                        scoreKey: "etf_score" as keyof CompanyScores,
+                        focus: "ETF-Exposure · Listed Proxies · Korrelation",
+                        note: () => {
+                          const v = sc.etf_score ?? 0;
+                          return v >= 7 ? "Starke ETF-Exposure — im Themen-ETF oder Käufer-Proxy investierbar."
+                            : v >= 4 ? "Indirekte Exposure via Käufer-Proxy — Marktdaten in Tab 2 prüfen."
+                            : "Kein direkter ETF-Zugang — Enabler-Pfad oder Watch-Liste empfohlen.";
+                        },
+                        color: C.amber,
+                      },
+                    ] as const).map(prof => {
+                      const v = sc[prof.scoreKey] as number | undefined;
+                      return (
+                        <div key={prof.segment} style={{
+                          padding: "14px 16px", borderRadius: C.rMd,
+                          background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: prof.color, fontFamily: C.display }}>{prof.segment}</span>
+                            <span style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: scoreColor(v) }}>
+                              {v != null ? v.toFixed(1) : "—"}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginBottom: 8 }}>{prof.focus}</div>
+                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{prof.note()}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+
+                {/* Disclaimer */}
+                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textAlign: "center", lineHeight: 1.7 }}>
+                  Scores basieren auf öffentlichen Daten · Automatisch berechnet via Argo Score Engine · Keine Anlageberatung.
+                  {sc.computed_at && (
+                    <span> · Stand: {new Date(sc.computed_at).toLocaleDateString("de-DE")}</span>
+                  )}
+                </div>
+
+              </div>
+            );
+          })()}
+
+          {activeTab === 8 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
               {/* Abschnitt 1: Direkt / Käufer-Proxy Scoring */}
@@ -2181,7 +2605,7 @@ export default function CompanyDetailPage() {
             </div>
           )}
 
-          {activeTab === 8 && (() => {
+          {activeTab === 9 && (() => {
             const EVENT_LABELS: Record<string, string> = {
               ipo_status_change: "IPO",
               funding_round:     "Funding",
