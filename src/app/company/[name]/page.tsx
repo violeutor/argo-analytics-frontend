@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -529,17 +529,20 @@ export default function CompanyDetailPage() {
   // Ownership Polling — analog zu Market
   const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
   const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const ownershipFetchedRef = useRef(false);
 
   useEffect(() => {
     if (!name || loading) return;
     const isReady = (od?: OwnershipData | null) =>
       od?.status === "ready" || od?.status === "manual";
-    if (isReady(ownershipData)) return;
+    // Nicht neu starten wenn bereits ready oder Fetch läuft
+    if (isReady(ownershipData) || ownershipFetchedRef.current) return;
 
+    ownershipFetchedRef.current = true;
     setOwnershipLoading(true);
     let attempts = 0;
     const MAX = 5;
-    const INTERVAL = 8000;
+    const INTERVAL = 10000;  // 10s statt 8s — weniger Requests
 
     const poll = () => {
       if (attempts >= MAX) { setOwnershipLoading(false); return; }
@@ -560,9 +563,9 @@ export default function CompanyDetailPage() {
         .catch(() => { setOwnershipLoading(false); });
     };
 
-    let ownershipTimer = window.setTimeout(poll, 1000);
+    let ownershipTimer = window.setTimeout(poll, 2000);  // 2s statt 1s — BA-Bridge Zeit lassen
     return () => window.clearTimeout(ownershipTimer);
-  }, [name, loading, ownershipData?.entries?.length]);
+  }, [name, loading]);  // entries.length raus — verhindert Neustart bei Daten-Update
 
   // Signals — einmaliger Fetch beim ersten Tab-4- oder Tab-9-Besuch
   const [sigFilter, setSigFilter] = useState<string>("all");
