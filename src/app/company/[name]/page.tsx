@@ -727,7 +727,9 @@ export default function CompanyDetailPage() {
               {data.ipo_status === "listed"
                 ? (() => {
                     // BUG-15: Ticker-Format normalisieren — "SIE·XETRA" → "SIE · Xetra"
-                    const ticker = data.fundamentals?.ticker?.split("·")[0]?.trim() ?? data.fundamentals?.ticker;
+                    // Yahoo-Suffix (.F, .DE, .L, .PA etc.) strippen — nur reinen Ticker zeigen
+                    const rawTicker = data.fundamentals?.ticker?.split("·")[0]?.trim() ?? data.fundamentals?.ticker;
+                    const ticker = rawTicker?.replace(/\.[A-Z]{1,2}$/i, "") ?? rawTicker;
                     const exchange = data.fundamentals?.exchange ?? data.fundamentals?.ticker?.split("·")[1]?.trim();
                     return [ticker, exchange].filter(Boolean).join(" · ") || data.proxy_ticker || "—";
                   })()
