@@ -608,9 +608,12 @@ export default function CompanyDetailPage() {
     console.log("[Argo] fetchAssessments →", name);
     setAssessmentsLoading(true);
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/assessments`)
-      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then((d: any) => { console.log("[Argo] assessments source=", d?.source); setAssessmentsData(d); })
-      .catch((e) => { console.error("[Argo] assessments error:", e); })
+      .then(r => {
+        if (r.status === 503) return { _error: "overloaded" };
+        return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`);
+      })
+      .then((d: any) => { console.log("[Argo] assessments source=", d?.source ?? d?._error); setAssessmentsData(d); })
+      .catch((e) => { console.error("[Argo] assessments error:", e); setAssessmentsData({ _error: "failed" }); })
       .finally(() => setAssessmentsLoading(false));
   }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1560,7 +1563,7 @@ export default function CompanyDetailPage() {
                   </div>
                 </Card>
 
-                {/* Assessment Loading */}
+                {/* Assessment Loading / Error */}
                 {assessmentsLoading && (
                   <Card style={{ textAlign: "center", padding: 32 }}>
                     <div style={{ fontSize: 12, color: C.teal, fontFamily: C.mono, marginBottom: 8 }}>
@@ -1569,6 +1572,16 @@ export default function CompanyDetailPage() {
                     <div style={{ fontSize: 11, color: C.t3 }}>
                       Claude analysiert Markt, Finanzen, Strategie, Political Environment, Technologie und operative Stärke.
                     </div>
+                  </Card>
+                )}
+                {!assessmentsLoading && assessmentsData?._error && (
+                  <Card style={{ textAlign: "center", padding: 24 }}>
+                    <div style={{ fontSize: 11, color: C.amber, fontFamily: C.mono, marginBottom: 6 }}>
+                      {assessmentsData._error === "overloaded"
+                        ? "⚠ Claude momentan ausgelastet — bitte Tab neu laden."
+                        : "⚠ Assessment konnte nicht generiert werden."}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.t3 }}>Signals und Scoring bleiben verfügbar.</div>
                   </Card>
                 )}
 
