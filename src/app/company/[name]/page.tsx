@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -468,6 +468,8 @@ const TABS = ["Überblick", "Markt", "Ownership", "Fundamentals", "Potenziale & 
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPage = searchParams?.get("from") ?? "watchlist";
   const name = decodeURIComponent((params?.name ?? "") as string);
 
   const [data, setData] = useState<CompanyDetail | null>(null);
@@ -673,7 +675,7 @@ export default function CompanyDetailPage() {
 
           {/* Back + breadcrumb */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-            <button onClick={() => router.back()} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
+            <button onClick={() => fromPage === "research" ? router.back() : router.push("/")} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
               ← Zurück
             </button>
             <span style={{ fontSize: 11, color: C.t3 }}>ANALYSE · {data.name.toUpperCase()}</span>
@@ -818,7 +820,7 @@ export default function CompanyDetailPage() {
 
           {/* Tab 0: Überblick */}
           {activeTab === 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12 }}>
               {/* Linke Spalte: Intro */}
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {data.intro && (

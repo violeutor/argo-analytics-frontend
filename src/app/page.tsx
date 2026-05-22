@@ -213,7 +213,7 @@ function HeroState({
     if (match) {
       handleSelect(match);
     } else {
-      router.push(`/company/${encodeURIComponent(q)}`);
+      router.push(`/company/${encodeURIComponent(q)}?from=search`);
     }
   };
 
@@ -425,7 +425,7 @@ export default function Page() {
   }, []);
 
   const handleSelectCompany = useCallback((company: Company) => {
-    router.push(`/company/${encodeURIComponent(company.name)}`);
+    router.push(`/company/${encodeURIComponent(company.name)}?from=watchlist`);
   }, [router]);
 
   const handleSelectFromWatchlist = (c: Company) => {
