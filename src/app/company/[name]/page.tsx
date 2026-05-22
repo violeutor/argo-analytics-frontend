@@ -487,6 +487,40 @@ function Placeholder({ title, sub }: { title: string; sub: string }) {
   );
 }
 
+// SC-10 — Tab-interner Score-Header mit Hover-Tooltip
+function TabScoreBar({ label, score, tooltip }: { label: string; score?: number; tooltip: string }) {
+  const [hover, setHover] = useState(false);
+  if (score == null) return null;
+  const color = score >= 7 ? C.teal : score >= 4 ? C.amber : C.red;
+  return (
+    <div
+      style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "default", alignSelf: "flex-start" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em" }}>{label}</span>
+      <span style={{
+        fontSize: 12, fontWeight: 700, fontFamily: C.mono,
+        color, background: color + "18", border: `1px solid ${color}33`,
+        borderRadius: 99, padding: "2px 10px",
+      }}>
+        {score.toFixed(1)}
+      </span>
+      <span style={{ fontSize: 10, color: C.t3, opacity: 0.5 }}>ⓘ</span>
+      {hover && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 200,
+          background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rMd,
+          padding: "10px 14px", width: 240, boxShadow: "0 4px 20px rgba(0,0,0,.5)",
+          fontSize: 11, color: C.t2, lineHeight: 1.6, pointerEvents: "none",
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
@@ -766,12 +800,25 @@ export default function CompanyDetailPage() {
                   const rating   = data.scores?.rating ?? data.scorings[0]?.rating ?? "";
                   const heroLbl  = data.scores?.hero_path_label;
                   const heroScr  = data.scores?.hero_score;
+                  const heroPath = data.scores?.hero_path;
                   const rc = ratingColor(rating);
+                  // Pfad-Farbe je hero_path
+                  const HERO_PATH_COLOR: Record<string, string> = {
+                    ipo: C.teal, m_and_a: C.blue, etf: C.amber, enabler: C.purple,
+                  };
+                  const hc = HERO_PATH_COLOR[heroPath ?? ""] ?? C.t2;
                   return (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       {heroLbl && heroScr != null && (
-                        <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>
-                          {heroLbl} · {heroScr.toFixed(1)}
+                        <span style={{
+                          fontSize: 11, padding: "3px 10px", borderRadius: 99,
+                          fontFamily: C.mono, fontWeight: 600, letterSpacing: ".02em",
+                          color: hc, background: hc + "18", border: `1px solid ${hc}33`,
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                        }}>
+                          {heroLbl}
+                          <span style={{ opacity: 0.5 }}>·</span>
+                          {heroScr.toFixed(1)}
                         </span>
                       )}
                       <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontWeight: 600, color: rc, background: rc + "18", border: `1px solid ${rc}33` }}>
@@ -869,55 +916,19 @@ export default function CompanyDetailPage() {
           )}
 
           {/* Tab Nav */}
-          {(() => {
-            const sc = data.scores;
-            // SC-10: Score je Tab (Index 0–9)
-            const TAB_SCORE_KEYS: (keyof CompanyScores | null)[] = [
-              "composite_score",    // 0 Überblick
-              "market_score",       // 1 Markt
-              "ownership_score",    // 2 Ownership
-              "financial_score",    // 3 Fundamentals
-              null,                 // 4 Potenziale (eigener Composite)
-              "strategic_score",    // 5 Peer Review
-              "value_driver_score", // 6 Value Drivers
-              "composite_score",    // 7 Scoring & Investmentprofil
-              null,                 // 8 Exposure Types
-              null,                 // 9 Signal History
-            ];
-            const tabScoreColor = (v: number) =>
-              v >= 7 ? C.teal : v >= 4 ? C.amber : C.red;
-            return (
-              <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
-                {TABS.map((tab, i) => {
-                  const key = TAB_SCORE_KEYS[i];
-                  const scoreVal = key && sc ? (sc[key] as number | undefined) : undefined;
-                  return (
-                    <button key={tab} onClick={() => setActiveTab(i)} style={{
-                      padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
-                      border: "none", background: "none", whiteSpace: "nowrap",
-                      color: activeTab === i ? C.teal : C.t2,
-                      borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
-                      marginBottom: -1, transition: "all .15s", fontFamily: C.body,
-                      display: "flex", alignItems: "center", gap: 6,
-                    }}>
-                      {tab}
-                      {scoreVal != null && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, fontFamily: C.mono,
-                          color: tabScoreColor(scoreVal),
-                          background: tabScoreColor(scoreVal) + "18",
-                          border: `1px solid ${tabScoreColor(scoreVal)}33`,
-                          borderRadius: 99, padding: "1px 6px", lineHeight: 1.4,
-                        }}>
-                          {scoreVal.toFixed(1)}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
+            {TABS.map((tab, i) => (
+              <button key={tab} onClick={() => setActiveTab(i)} style={{
+                padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: "none", background: "none", whiteSpace: "nowrap",
+                color: activeTab === i ? C.teal : C.t2,
+                borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
+                marginBottom: -1, transition: "all .15s", fontFamily: C.body,
+              }}>
+                {tab}
+              </button>
+            ))}
+          </div>
 
           {/* Tab 0: Überblick */}
           {activeTab === 0 && (
@@ -999,7 +1010,11 @@ export default function CompanyDetailPage() {
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
+                <TabScoreBar
+                  label="Market Score"
+                  score={data.scores?.market_score}
+                  tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
+                />
                 {/* Row 1: TAM · SAM · CAGR · Zyklus */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
                   <FundTile
@@ -1179,7 +1194,11 @@ export default function CompanyDetailPage() {
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
+                <TabScoreBar
+                  label="Ownership Score"
+                  score={data.scores?.ownership_score}
+                  tooltip="Investorenqualität (Tier 1–3) · Diversifikation · Transparenz der Cap Table-Daten. Bewertet Stabilität und Governance-Qualität der Eigentümerstruktur."
+                />
                 {/* Cap Table Score + Meta */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                   <FundTile
@@ -1314,6 +1333,11 @@ export default function CompanyDetailPage() {
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <TabScoreBar
+                  label="Financial Score"
+                  score={data.scores?.financial_score}
+                  tooltip="Funding-Stage-Proxy · Multiples-Basis · BA-Bridge / EDGAR-Fundamentals. Für private Companies stark von der Datenverfügbarkeit abhängig."
+                />
                 {f.is_listed ? (<>
 
                   {/* Row 1: Preis + Marktstruktur */}
@@ -1808,6 +1832,11 @@ export default function CompanyDetailPage() {
 
                 {!peersLoading && peers.length > 0 && (
                   <>
+                    <TabScoreBar
+                      label="Strategic Score"
+                      score={data.scores?.strategic_score}
+                      tooltip="SRR × TechReadiness × Käufer-Universum. Misst strategische Attraktivität für M&A, Partnerschaften und Peer-Positionierung."
+                    />
                     {/* Cache-Badge */}
                     {peersData?.from_cache && (
                       <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 10, textAlign: "right" }}>
@@ -2089,7 +2118,11 @@ export default function CompanyDetailPage() {
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
+                <TabScoreBar
+                  label="Value Driver Score"
+                  score={data.scores?.value_driver_score}
+                  tooltip="Abhängigkeitsgrad der Enabler · Marktposition (Leader/Dominant/Contested) · TechReadiness. Misst die Stärke der Value Chain um diese Company."
+                />
                 {/* 2-Spalten Grid: Enabler links, Contributors rechts */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
 
@@ -2176,7 +2209,7 @@ export default function CompanyDetailPage() {
               { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue,   icon: "🤝" },
               { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber,  icon: "📊" },
               { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple, icon: "⚡" },
-            ] as const;
+            ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed")) as const;
 
             const scVal = (key: keyof CompanyScores) =>
               (sc[key] as number | undefined) ?? 0;
@@ -2400,7 +2433,8 @@ export default function CompanyDetailPage() {
                   <SLabel text="Segmentspezifisches Investmentprofil" />
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
                     {([
-                      {
+                      // VC Funds / IPO — nur wenn noch nicht listed
+                      ...(data.ipo_status !== "listed" ? [{
                         segment: "VC Funds",
                         scoreKey: "ipo_score" as keyof CompanyScores,
                         focus: "IPO-Readiness · TechReadiness · Time-to-Market",
@@ -2411,7 +2445,7 @@ export default function CompanyDetailPage() {
                             : "Geringes IPO-Potenzial — M&A- oder Enabler-Pfad wahrscheinlicher.";
                         },
                         color: C.teal,
-                      },
+                      }] : []),
                       {
                         segment: "M&A-Boutiquen",
                         scoreKey: "m_and_a_score" as keyof CompanyScores,
