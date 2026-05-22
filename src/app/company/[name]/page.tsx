@@ -1434,6 +1434,90 @@ export default function CompanyDetailPage() {
 
             return (
               <div>
+                {/* Hard Facts Layer — R-18 Phase 2 */}
+                {(() => {
+                  const md   = data.market_data as any;
+                  const fd   = data.fundamentals;
+                  const sc   = data.scorings?.[0];
+
+                  // EBITDA-Marge berechnen wenn BA-Daten vorhanden
+                  const ebitdaMargin = fd?.ba_ebitda_mn != null && fd?.ba_revenue_mn != null && fd.ba_revenue_mn > 0
+                    ? (fd.ba_ebitda_mn / fd.ba_revenue_mn * 100).toFixed(1) + "%"
+                    : null;
+                  const equityRatio = fd?.ba_equity_mn != null && fd?.ba_total_assets_mn != null && fd.ba_total_assets_mn > 0
+                    ? (fd.ba_equity_mn / fd.ba_total_assets_mn * 100).toFixed(1) + "%"
+                    : null;
+
+                  const hasMarket = md && (md.cagr_pct != null || md.competition_score || md.market_cycle);
+                  const hasFundamentals = fd?.ba_found && (fd.ba_revenue_mn != null || ebitdaMargin || equityRatio);
+                  const hasScoring = sc != null;
+
+                  if (!hasMarket && !hasFundamentals && !hasScoring) return null;
+
+                  const HFTile = ({ label, val, sub, color }: { label: string; val: string; sub?: string; color?: string }) => (
+                    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "10px 14px" }}>
+                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: color ?? C.t1, fontFamily: C.display }}>{val}</div>
+                      {sub && <div style={{ fontSize: 10, color: C.t2, marginTop: 3 }}>{sub}</div>}
+                    </div>
+                  );
+
+                  const mfrColor = (s?: string) => s === "Feasible" ? C.teal : s === "Watch" ? C.amber : C.red;
+                  const compColor2 = (s?: string) => s === "low" ? C.teal : s === "medium" ? C.amber : s === "high" ? C.red : C.t3;
+                  const cycleColor2 = (s?: string) => s === "early" || s === "growth" ? C.teal : s === "mature" ? C.amber : C.t3;
+
+                  return (
+                    <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".06em" }}>HARD FACTS</div>
+
+                      {/* Markt-Block */}
+                      {hasMarket && (
+                        <div>
+                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>MARKT</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
+                            {md.cagr_pct != null && <HFTile label="CAGR" val={`${md.cagr_pct.toFixed(1)}%`} sub="Marktwachstum p.a." color={C.teal} />}
+                            {md.tam_2035_usd_bn != null && <HFTile label="TAM 2035" val={`$${md.tam_2035_usd_bn.toFixed(0)}B`} sub={md.tam_source?.split(" ")[0]} />}
+                            {md.competition_score && <HFTile label="Wettbewerb" val={md.competition_score.charAt(0).toUpperCase() + md.competition_score.slice(1)} color={compColor2(md.competition_score)} sub={md.competition_note?.slice(0, 40)} />}
+                            {md.market_cycle && <HFTile label="Marktphase" val={md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1)} color={cycleColor2(md.market_cycle)} sub={md.market_cycle_note?.split("—")[0]?.trim().slice(0, 40)} />}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fundamentals-Block (BA-Bridge) */}
+                      {hasFundamentals && (
+                        <div>
+                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>
+                            FUNDAMENTALS · Bundesanzeiger {fd.ba_last_report_year ? `FY${fd.ba_last_report_year}` : ""}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
+                            {fd.ba_revenue_mn != null && <HFTile label="Umsatz" val={`€${fd.ba_revenue_mn.toFixed(1)}M`} color={C.t1} />}
+                            {ebitdaMargin && <HFTile label="EBITDA-Marge" val={ebitdaMargin} color={parseFloat(ebitdaMargin) >= 10 ? C.teal : parseFloat(ebitdaMargin) >= 0 ? C.amber : C.red} />}
+                            {equityRatio && <HFTile label="Eigenkapitalquote" val={equityRatio} color={parseFloat(equityRatio) >= 30 ? C.teal : C.amber} />}
+                            {fd.ba_employees != null && <HFTile label="Mitarbeiter" val={fd.ba_employees.toLocaleString("de-DE")} sub="Bundesanzeiger" />}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Scoring-Block */}
+                      {hasScoring && (
+                        <div>
+                          <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".05em" }}>SCORING · SRR × MFR × TECHREADINESS</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
+                            <HFTile label="Gesamtwertung" val={sc.rating.split("·")[0].trim()} sub={sc.rating.split("·")[1]?.trim()} color={sc.rating.startsWith("A") ? C.teal : sc.rating.startsWith("B") ? C.blue : sc.rating.startsWith("C") ? C.amber : C.red} />
+                            <HFTile label="SRR" val={sc.srr_value.toFixed(2)} sub={sc.srr_category} color={sc.srr_category.includes("Transformational") ? C.teal : C.t2} />
+                            <HFTile label="MFR" val={sc.mfr_value.toFixed(2)} sub={sc.mfr_signal} color={mfrColor(sc.mfr_signal)} />
+                            {data.fundamentals?.is_listed === false && sc.tech_readiness?.overall != null && (
+                              <HFTile label="TechReadiness" val={(sc.tech_readiness.overall * 100).toFixed(0) + "%"} sub={sc.tech_readiness.confidence ?? undefined} color={sc.tech_readiness.overall >= 0.6 ? C.teal : sc.tech_readiness.overall >= 0.4 ? C.amber : C.red} />
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ borderBottom: `1px solid ${C.border}`, marginTop: 4 }} />
+                    </div>
+                  );
+                })()}
+
                 {/* Hero Score */}
                 <Card style={{ marginBottom: 16, textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>
