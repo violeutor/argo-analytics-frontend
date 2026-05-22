@@ -1504,6 +1504,14 @@ export default function CompanyDetailPage() {
               const rskScore = assessed?.risk_score ?? null;
               const label    = assessed?.label ?? dim.id;
 
+              // BUG-05: Farbe der Dimensionsüberschrift folgt dem Score
+              const oppHeaderColor = oppScore !== null
+                ? (oppScore >= 7 ? C.teal : oppScore >= 4 ? C.amber : C.t3)
+                : C.teal;
+              const rskHeaderColor = rskScore !== null
+                ? (rskScore >= 7 ? C.red : rskScore >= 4 ? C.amber : C.teal)
+                : C.red;
+
               return (
                 <div style={{
                   display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
@@ -1514,7 +1522,7 @@ export default function CompanyDetailPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                       {oppScore !== null && <ScoreBadge score={oppScore} side="opp" />}
                       <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: C.teal, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: oppHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
                           {label.toUpperCase()}
                         </div>
                         <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIAL</div>
@@ -1532,7 +1540,7 @@ export default function CompanyDetailPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                       {rskScore !== null && <ScoreBadge score={rskScore} side="rsk" />}
                       <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: C.red, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: rskHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
                           {label.toUpperCase()}
                         </div>
                         <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKO</div>
