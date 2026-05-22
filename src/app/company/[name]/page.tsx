@@ -81,6 +81,9 @@ interface SignalItem {
   is_read?: boolean;
   direction?: "positive" | "negative" | "neutral";
   signal_category?: string;
+  relevance_score?: number;    // 0.0–1.0 aus Claude-NER confidence
+  source_domain?: string;      // z.B. 'techcrunch.com'
+  funding_amount_usd_mn?: number;  // B-05: extrahierter Betrag
 }
 interface SignalsData {
   status: "ready" | "empty";
@@ -2170,7 +2173,6 @@ export default function CompanyDetailPage() {
             </div>
           )}
 
-          {/* Tab 8: Signal History */}
           {activeTab === 8 && (() => {
             const EVENT_LABELS: Record<string, string> = {
               ipo_status_change: "IPO",
@@ -2191,27 +2193,39 @@ export default function CompanyDetailPage() {
               news:              C.t3,
             };
             const SOURCE_LABELS: Record<string, string> = {
-              edgar:       "SEC EDGAR",
-              google_news: "Google News",
-              techcrunch:  "TechCrunch",
-              internal:    "Argo Intern",
+              edgar:            "SEC EDGAR",
+              google_news:      "Google News",
+              techcrunch:       "TechCrunch",
+              internal:         "Argo Intern",
+              internal_absence: "Argo Intern",
             };
 
+            const dirColor = (d?: string) =>
+              d === "positive" ? C.teal : d === "negative" ? C.red : C.t3;
+            const dirLabel = (d?: string) =>
+              d === "positive" ? "↑" : d === "negative" ? "↓" : "→";
             const sevDot = (s: string) =>
               s === "high" ? C.red : s === "medium" ? C.amber : C.teal;
             const sevLabel = (s: string) =>
               s === "high" ? "HIGH" : s === "medium" ? "MED" : "LOW";
 
             const signals = signalsData?.signals ?? [];
+
+            // Filter-Optionen: event_type + direction
+            const [dirFilter, setDirFilter] = [sigFilter.startsWith("dir:") ? sigFilter.slice(4) : "", (v: string) => setSigFilter(v ? `dir:${v}` : "all")];
+            const activeTypeFilter = sigFilter.startsWith("dir:") ? "all" : sigFilter;
             const filterTypes = ["all", ...Array.from(new Set(signals.map(s => s.event_type)))];
-            const filtered = sigFilter === "all"
-              ? signals
-              : signals.filter(s => s.event_type === sigFilter);
+
+            const filtered = signals.filter(s => {
+              const typeOk   = activeTypeFilter === "all" || s.event_type === activeTypeFilter;
+              const dirOk    = !dirFilter || s.direction === dirFilter;
+              return typeOk && dirOk;
+            });
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-                {/* Filter-Chips */}
+                {/* Filter-Chips Zeile 1: Event-Type */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {filterTypes.map(ft => (
                     <button
@@ -2220,9 +2234,9 @@ export default function CompanyDetailPage() {
                       style={{
                         padding: "5px 14px", borderRadius: 99, fontSize: 11,
                         fontFamily: C.mono, fontWeight: 500, cursor: "pointer",
-                        border: `1px solid ${sigFilter === ft ? C.teal : C.border}`,
-                        background: sigFilter === ft ? C.tealDim : "transparent",
-                        color: sigFilter === ft ? C.teal : C.t2,
+                        border: `1px solid ${activeTypeFilter === ft ? C.teal : C.border}`,
+                        background: activeTypeFilter === ft ? C.tealDim : "transparent",
+                        color: activeTypeFilter === ft ? C.teal : C.t2,
                         transition: "all .15s",
                       }}
                     >
@@ -2230,6 +2244,32 @@ export default function CompanyDetailPage() {
                       {ft !== "all" && (
                         <span style={{ marginLeft: 6, color: C.t3 }}>
                           {signals.filter(s => s.event_type === ft).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Filter-Chips Zeile 2: Direction */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Richtung</span>
+                  {(["", "positive", "negative", "neutral"] as const).map(d => (
+                    <button
+                      key={d || "all"}
+                      onClick={() => setDirFilter(d)}
+                      style={{
+                        padding: "4px 12px", borderRadius: 99, fontSize: 10,
+                        fontFamily: C.mono, cursor: "pointer",
+                        border: `1px solid ${dirFilter === d ? dirColor(d || undefined) : C.border}`,
+                        background: dirFilter === d ? (dirColor(d || undefined) + "15") : "transparent",
+                        color: dirFilter === d ? dirColor(d || undefined) : C.t3,
+                        transition: "all .15s",
+                      }}
+                    >
+                      {d === "" ? "Alle" : d === "positive" ? "↑ Potenzial" : d === "negative" ? "↓ Risiko" : "→ Neutral"}
+                      {d !== "" && (
+                        <span style={{ marginLeft: 5, opacity: 0.6 }}>
+                          {signals.filter(s => s.direction === d).length}
                         </span>
                       )}
                     </button>
@@ -2251,7 +2291,7 @@ export default function CompanyDetailPage() {
                       <div style={{ color: C.t2, fontSize: 13, marginBottom: 6 }}>
                         {signals.length === 0
                           ? "Noch keine Signals vorhanden."
-                          : `Keine Events für Filter "${sigFilter === "all" ? "Alle" : EVENT_LABELS[sigFilter] ?? sigFilter}".`}
+                          : `Keine Events für gewählte Filter.`}
                       </div>
                       {signals.length === 0 && (
                         <div style={{ color: C.t3, fontSize: 11, fontFamily: C.mono }}>
@@ -2267,8 +2307,10 @@ export default function CompanyDetailPage() {
                       style={{
                         display: "flex", gap: 14, padding: "12px 0",
                         borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : "none",
-                        borderLeft: sig.severity === "high" ? `3px solid ${C.red}` : "none",
-                        paddingLeft: sig.severity === "high" ? 12 : 0,
+                        borderLeft: sig.severity === "high" ? `3px solid ${C.red}` :
+                                    sig.direction === "positive" ? `3px solid ${C.teal}` :
+                                    sig.direction === "negative" ? `3px solid ${C.red}22` : "none",
+                        paddingLeft: sig.severity === "high" || sig.direction ? 12 : 0,
                       }}
                     >
                       {/* Severity Dot + Label */}
@@ -2295,10 +2337,36 @@ export default function CompanyDetailPage() {
                           }}>
                             {EVENT_LABELS[sig.event_type] ?? sig.event_type}
                           </span>
-                          {/* Source Badge */}
+                          {/* Direction Badge — neu Session 10 */}
+                          {sig.direction && sig.direction !== "neutral" && (
+                            <span style={{
+                              fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+                              color: dirColor(sig.direction),
+                              background: dirColor(sig.direction) + "15",
+                              border: `1px solid ${dirColor(sig.direction)}33`,
+                              fontWeight: 600,
+                            }}>
+                              {dirLabel(sig.direction)} {sig.direction === "positive" ? "Potenzial" : "Risiko"}
+                            </span>
+                          )}
+                          {/* Source + Domain */}
                           <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
                             {SOURCE_LABELS[sig.source] ?? sig.source}
+                            {sig.source_domain && sig.source !== "edgar" && (
+                              <span style={{ opacity: 0.6 }}> · {sig.source_domain}</span>
+                            )}
                           </span>
+                          {/* Relevance Score */}
+                          {sig.relevance_score != null && (
+                            <span style={{
+                              fontSize: 9, color: C.t3, fontFamily: C.mono,
+                              padding: "1px 6px", borderRadius: 4,
+                              background: "rgba(255,255,255,0.04)",
+                              border: `1px solid ${C.border}`,
+                            }}>
+                              {Math.round(sig.relevance_score * 100)}% conf
+                            </span>
+                          )}
                         </div>
 
                         {/* Summary */}
@@ -2306,15 +2374,29 @@ export default function CompanyDetailPage() {
                           {sig.summary}
                         </div>
 
+                        {/* Funding Amount wenn vorhanden — B-05 */}
+                        {sig.funding_amount_usd_mn != null && (
+                          <div style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "3px 9px", borderRadius: 99, marginBottom: 4,
+                            background: C.blueDim, border: `1px solid ${C.blue}33`,
+                            fontSize: 11, color: C.blue, fontFamily: C.mono, fontWeight: 600,
+                          }}>
+                            💰 {sig.funding_amount_usd_mn >= 1000
+                              ? `$${(sig.funding_amount_usd_mn / 1000).toFixed(1)}B`
+                              : `$${sig.funding_amount_usd_mn}M`}
+                          </div>
+                        )}
+
                         {/* Source Link */}
                         {sig.source_url && (
                           <a
                             href={sig.source_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textDecoration: "none" }}
+                            style={{ fontSize: 11, color: C.teal, fontFamily: C.mono, textDecoration: "none", display: "block" }}
                           >
-                            Quelle → {sig.source_url.length > 60 ? sig.source_url.slice(0, 60) + "…" : sig.source_url}
+                            Quelle → {sig.source_domain ?? (sig.source_url.length > 55 ? sig.source_url.slice(0, 55) + "…" : sig.source_url)}
                           </a>
                         )}
                       </div>
