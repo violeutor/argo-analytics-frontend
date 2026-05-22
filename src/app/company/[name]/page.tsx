@@ -534,7 +534,7 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!name || loading) return;
     const isReady = (od?: OwnershipData | null) =>
-      od?.status === "ready" || od?.status === "manual";
+      od?.status === "ready" || od?.status === "manual" || od?.status === "empty";
     // Nicht neu starten wenn bereits ready oder Fetch läuft
     if (isReady(ownershipData) || ownershipFetchedRef.current) return;
 
