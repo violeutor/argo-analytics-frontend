@@ -1402,15 +1402,41 @@ export default function CompanyDetailPage() {
             const compOpp   = assessmentsData?.composite_opportunity;
             const compRisk  = assessmentsData?.composite_risk;
 
-            // Signal-Score Hero (Signal-Engine basiert)
+            // Signals aufteilen
             const potSignals     = signals.filter((s: SignalItem) => s.direction === "positive");
             const riskSignals    = signals.filter((s: SignalItem) => s.direction === "negative" && s.source !== "internal_absence");
             const absenceSignals = signals.filter((s: SignalItem) => s.direction === "negative" && s.source === "internal_absence");
-            const rawScore = Math.max(0, Math.min(100,
-              50 + (potSignals.length * 10) - (riskSignals.length * 8) - (absenceSignals.length * 3)
-            ));
-            const scoreColor = rawScore >= 65 ? C.teal : rawScore >= 40 ? C.amber : C.red;
-            const scoreLabel = rawScore >= 65 ? "Positiv" : rawScore >= 40 ? "Gemischt" : "Kritisch";
+
+            // Composite Score — Claude Assessment (45% Opp / 35% Risk) + Signal Drift (20%)
+            const oppScore10  = compOpp  != null ? Number(compOpp)  : null;
+            const riskScore10 = compRisk != null ? Number(compRisk) : null;
+            const hasComposite = oppScore10 !== null && riskScore10 !== null;
+
+            const signalDrift = signals.length > 0
+              ? Math.max(-1, Math.min(1,
+                  (potSignals.length - riskSignals.length - absenceSignals.length * 0.5) / Math.max(signals.length, 1)
+                ))
+              : 0;
+            const signalDrift10 = signalDrift * 10;
+
+            const compositeRaw = hasComposite
+              ? (oppScore10! * 0.45) - (riskScore10! * 0.35) + (signalDrift10 * 0.20)
+              : null;
+            // Normieren auf 0–10
+            const composite = compositeRaw !== null
+              ? Math.max(0, Math.min(10, compositeRaw + 3.5))
+              : null;
+
+            const scoreColor = composite === null ? C.t3
+              : composite >= 7.0 ? C.teal
+              : composite >= 5.0 ? C.blue
+              : composite >= 3.5 ? C.amber
+              : C.red;
+            const scoreLabel = composite === null ? "—"
+              : composite >= 7.0 ? "Stark"
+              : composite >= 5.0 ? "Solide"
+              : composite >= 3.5 ? "Gemischt"
+              : "Kritisch";
 
             // Signal-Kategorien für Dimension-Mapping
             const catLabel: Record<string, string> = {
@@ -1518,48 +1544,80 @@ export default function CompanyDetailPage() {
 
             return (
               <div>
-                {/* Hero Score */}
+                {/* Hero Score — Composite */}
                 <Card style={{ marginBottom: 16, textAlign: "center" }}>
-                  <div style={{ display: "flex", justifyContent: "center", gap: 48, alignItems: "center" }}>
-                    {/* Signal Score */}
-                    <div>
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>SIGNAL-SCORE</div>
-                      <div style={{ fontSize: 42, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{rawScore}</div>
-                      <div style={{ fontSize: 11, color: scoreColor, marginTop: 3, fontFamily: C.mono }}>{scoreLabel}</div>
+                  {/* Haupt-Score mit Tooltip */}
+                  <div style={{ position: "relative", display: "inline-block" }}
+                    onMouseEnter={e => {
+                      const tip = (e.currentTarget as HTMLElement).querySelector(".score-tooltip") as HTMLElement;
+                      if (tip) tip.style.opacity = "1";
+                    }}
+                    onMouseLeave={e => {
+                      const tip = (e.currentTarget as HTMLElement).querySelector(".score-tooltip") as HTMLElement;
+                      if (tip) tip.style.opacity = "0";
+                    }}
+                  >
+                    <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".08em" }}>
+                      COMPOSITE SCORE ⓘ
                     </div>
-                    {/* Composite Opportunity */}
-                    {compOpp != null && (
-                      <div>
-                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>OPP. SCORE</div>
-                        <div style={{ fontSize: 42, fontWeight: 700, color: C.teal, lineHeight: 1 }}>{Number(compOpp).toFixed(1)}</div>
-                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>/ 10</div>
+                    <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1, fontFamily: C.display }}>
+                      {composite !== null ? composite.toFixed(1) : "—"}
+                    </div>
+                    <div style={{ fontSize: 12, color: scoreColor, marginTop: 6, fontFamily: C.mono, fontWeight: 600 }}>
+                      {scoreLabel}
+                    </div>
+
+                    {/* Tooltip */}
+                    <div className="score-tooltip" style={{
+                      position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
+                      marginTop: 10, background: "#1A1E24", border: `1px solid ${C.border}`,
+                      borderRadius: 8, padding: "12px 16px", width: 240, zIndex: 50,
+                      opacity: 0, transition: "opacity .15s", pointerEvents: "none",
+                      textAlign: "left",
+                    }}>
+                      <div style={{ fontSize: 10, color: C.t2, fontFamily: C.mono, marginBottom: 8, fontWeight: 600 }}>
+                        GEWICHTUNG
                       </div>
-                    )}
-                    {/* Composite Risk */}
-                    {compRisk != null && (
-                      <div>
-                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 4 }}>RISK SCORE</div>
-                        <div style={{ fontSize: 42, fontWeight: 700, color: C.red, lineHeight: 1 }}>{Number(compRisk).toFixed(1)}</div>
-                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>/ 10</div>
+                      {[
+                        { label: "Opportunität", val: oppScore10?.toFixed(1) ?? "—", weight: "45%", color: C.teal },
+                        { label: "Risiko", val: riskScore10?.toFixed(1) ?? "—", weight: "35%", color: C.red },
+                        { label: "Signal-Drift", val: (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1), weight: "20%", color: signalDrift >= 0 ? C.teal : C.amber },
+                      ].map(row => (
+                        <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <div>
+                            <span style={{ fontSize: 10, color: C.t2 }}>{row.label}</span>
+                            <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginLeft: 6 }}>{row.weight}</span>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: row.color, fontFamily: C.mono }}>{row.val}</span>
+                        </div>
+                      ))}
+                      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 8, fontSize: 9, color: C.t3, lineHeight: 1.5 }}>
+                        Claude Assessment + Signal-Engine.<br />Keine Anlageberatung.
                       </div>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 12 }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: C.teal }}>{potSignals.length}</div>
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIALE</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: C.red }}>{riskSignals.length}</div>
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKEN</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: C.amber }}>{absenceSignals.length}</div>
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>DATENLÜCKEN</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 9, color: C.t3, marginTop: 10, fontFamily: C.mono }}>
-                    Signal-Engine · {signals.length} Signals · Assessment: {assessmentsData ? `${assessmentsData.source} · ${assessmentsData.model?.replace("claude-", "Claude ")}` : "lädt…"}
+
+                  {/* Teilwert-Chips */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                    {[
+                      { label: "OPP", val: oppScore10?.toFixed(1) ?? "—", color: C.teal, bg: `${C.teal}18` },
+                      { label: "RISK", val: riskScore10?.toFixed(1) ?? "—", color: C.red, bg: `${C.red}18` },
+                      { label: "DRIFT", val: signalDrift10 !== 0 ? (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1) : "0.0", color: signalDrift >= 0 ? C.teal : C.amber, bg: `${C.amber}12` },
+                      { label: "SIGNALS", val: `${potSignals.length}↑ ${riskSignals.length}↓`, color: C.t2, bg: `${C.border}` },
+                    ].map(chip => (
+                      <div key={chip.label} style={{
+                        background: chip.bg, border: `1px solid ${chip.color}33`,
+                        borderRadius: 99, padding: "4px 12px",
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}>
+                        <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>{chip.label}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: chip.color, fontFamily: C.mono }}>{chip.val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: 9, color: C.t3, marginTop: 12, fontFamily: C.mono }}>
+                    {assessmentsData?.source === "cache" ? "Assessment aus Cache" : "Assessment generiert"} · {assessmentsData?.model?.replace("claude-", "Claude ") ?? "—"} · {signals.length} Signals
                   </div>
                 </Card>
 
