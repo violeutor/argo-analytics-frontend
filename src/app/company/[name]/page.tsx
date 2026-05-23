@@ -188,6 +188,7 @@ interface CompanyScores {
   etf_score?: number;
   enabler_score?: number;
   composite_score?: number;
+  compound_risk_score?: number;  // SC-10: gewichteter 6D-Compound Risk
   hero_path?: string;       // 'ipo' | 'm_and_a' | 'etf' | 'enabler'
   hero_score?: number;
   hero_path_label?: string; // 'IPO' | 'M&A' | 'ETF-Proxy' | 'Enabler'
