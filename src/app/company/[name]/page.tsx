@@ -960,6 +960,7 @@ export default function CompanyDetailPage() {
                   <InfoRow k="Gegründet" v={data.founded ?? "—"} />
                   <InfoRow k="Hauptsitz" v={data.headquarters ?? "—"} />
                   <InfoRow k="Mitarbeiter" v={data.employee_count ?? "—"} />
+                  <InfoRow k="Sektor" v={data.industry ?? "—"} />
                   <InfoRow k="Kategorie" v={data.category ?? "—"} />
                   <div style={{ padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -980,14 +981,6 @@ export default function CompanyDetailPage() {
                     </div>
                   </div>
                   {data.website && <InfoRow k="Website" v={data.website} vColor={C.teal} />}
-                </Card>
-                <Card>
-                  <SLabel text="Markt & Positionierung" />
-                  <InfoRow k="Sektor" v={data.industry ?? "—"} />
-                  <InfoRow k="TAM 2035" v={`$${data.tam_usd_bn}B`} vColor={confColor(data.tam_confidence)} />
-                  <InfoRow k="TAM-Quelle" v={data.tam_source} />
-                  <InfoRow k="Konfidenz" v={data.tam_confidence} vColor={confColor(data.tam_confidence)} />
-                  <InfoRow k="Funding Total" v={fmtM(data.funding_total_usd_mn)} />
                 </Card>
               </div>
             </div>
