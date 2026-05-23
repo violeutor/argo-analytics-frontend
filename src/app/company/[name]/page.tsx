@@ -198,15 +198,18 @@ interface CompanyScores {
 // ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
 
 const C = {
-  bg: "#0D0F12", bgCard: "#13161B", bgHover: "#1A1E24",
-  border: "rgba(255,255,255,0.06)", borderMd: "rgba(255,255,255,0.10)",
+  // Hintergrundfarben aufgehellt
+  bg: "#181B20", bgCard: "#1F2328", bgHover: "#272C33",
+  border: "rgba(255,255,255,0.08)", borderMd: "rgba(255,255,255,0.13)",
   teal: "#00D4A0", tealDim: "rgba(0,212,160,0.08)", tealBorder: "rgba(0,212,160,0.20)",
   blue: "#3B6EF0", blueDim: "rgba(59,110,240,0.10)",
   amber: "#F0A500", amberDim: "rgba(240,165,0,0.10)",
   red: "#F04545", redDim: "rgba(240,69,69,0.10)",
   purple: "#9B6EF0", purpleDim: "rgba(155,110,240,0.10)",
-  t1: "#F0F0EE", t2: "#9A9B99", t3: "#4A4C4A",
-  mono: "'DM Mono',monospace",
+  // t2 + t3 heller — Labels und Überschriften besser lesbar
+  t1: "#F0F0EE", t2: "#B0B2B0", t3: "#6A6C6A",
+  // Kein DM Mono mehr — DM Sans durchgängig
+  mono: "'DM Sans',sans-serif",
   display: "'Plus Jakarta Sans',sans-serif",
   body: "'DM Sans',sans-serif",
   rSm: "6px", rMd: "10px", rLg: "14px",
@@ -245,7 +248,7 @@ function Badge({ label, color, bg, border }: { label: string; color: string; bg:
 }
 
 function SLabel({ text }: { text: string }) {
-  return <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>{text}</div>;
+  return <div style={{ fontSize: 11, color: C.t2, fontFamily: C.body, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>{text}</div>;
 }
 
 // FD-04 — Herkunfts-Badge je Datenblock
@@ -348,8 +351,8 @@ function FundTile({ label, val, sub, color }: { label: string; val: string; sub?
 function InfoRow({ k, v, vColor }: { k: string; v: string; vColor?: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
-      <span style={{ fontSize: 12, color: C.t2 }}>{k}</span>
-      <span style={{ fontSize: 12, color: vColor ?? C.t1, fontWeight: 500, fontFamily: C.mono }}>{v}</span>
+      <span style={{ fontSize: 13, color: C.t2 }}>{k}</span>
+      <span style={{ fontSize: 13, color: vColor ?? C.t1, fontWeight: 500 }}>{v}</span>
     </div>
   );
 }
@@ -712,7 +715,7 @@ export default function CompanyDetailPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 15 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(0,212,160,0.2); }
         ::-webkit-scrollbar { width: 5px; }
@@ -920,7 +923,7 @@ export default function CompanyDetailPage() {
           <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
             {TABS.map((tab, i) => (
               <button key={tab} onClick={() => setActiveTab(i)} style={{
-                padding: "8px 18px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                padding: "9px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer",
                 border: "none", background: "none", whiteSpace: "nowrap",
                 color: activeTab === i ? C.teal : C.t2,
                 borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
@@ -1701,7 +1704,7 @@ export default function CompanyDetailPage() {
                     {/* Tooltip */}
                     <div className="score-tooltip" style={{
                       position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
-                      marginTop: 10, background: "#1A1E24", border: `1px solid ${C.border}`,
+                      marginTop: 10, background: C.bgHover, border: `1px solid ${C.border}`,
                       borderRadius: 8, padding: "12px 16px", width: 240, zIndex: 50,
                       opacity: 0, transition: "opacity .15s", pointerEvents: "none",
                       textAlign: "left",
@@ -2438,7 +2441,7 @@ export default function CompanyDetailPage() {
                                 textAnchor={anchor}
                                 dominantBaseline="middle"
                                 fill={s.color} fontSize={9}
-                                fontFamily="DM Mono, monospace" fontWeight={600}
+                                fontFamily="DM Sans, sans-serif" fontWeight={600}
                               >
                                 {s.label}
                               </text>
@@ -2448,7 +2451,7 @@ export default function CompanyDetailPage() {
                                   textAnchor={anchor}
                                   dominantBaseline="middle"
                                   fill={scoreColor(scoreV)} fontSize={8}
-                                  fontFamily="DM Mono, monospace"
+                                  fontFamily="DM Sans, sans-serif"
                                 >
                                   {scoreV.toFixed(1)}
                                 </text>
