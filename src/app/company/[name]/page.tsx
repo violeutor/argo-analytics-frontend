@@ -1015,7 +1015,12 @@ export default function CompanyDetailPage() {
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
                 {/* Row 1: TAM · SAM · CAGR · Zyklus · Proxy Beta */}
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.proxy_beta_1y != null ? 5 : 4},1fr)`, gap: 10 }}>
+                {(() => {
+                  // proxy_beta_1y: aus Haupt-Response oder market_data Fallback
+                  const proxyBeta = data.proxy_beta_1y ?? (md as any).proxy_beta_1y ?? null;
+                  const proxyBetaBench = data.proxy_beta_benchmark ?? (md as any).proxy_beta_benchmark ?? data.proxy_ticker ?? undefined;
+                  return (
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${proxyBeta != null ? 5 : 4},1fr)`, gap: 10 }}>
                   <FundTile
                     label="TAM 2035"
                     val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
@@ -1040,15 +1045,17 @@ export default function CompanyDetailPage() {
                     sub={md.market_cycle_note?.split("—")[0]?.trim()}
                     color={cycleColor(md.market_cycle)}
                   />
-                  {data.proxy_beta_1y != null && (
+                  {proxyBeta != null && (
                     <FundTile
                       label="Market Beta ⓘ"
-                      val={`β ${data.proxy_beta_1y.toFixed(2)}`}
-                      sub={data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined}
-                      color={data.proxy_beta_1y >= 1.5 ? C.red : data.proxy_beta_1y >= 1.0 ? C.amber : C.teal}
+                      val={`β ${proxyBeta.toFixed(2)}`}
+                      sub={proxyBetaBench?.replace("Damodaran · ", "")}
+                      color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
                     />
                   )}
                 </div>
+                  );
+                })()}
 
                 {/* Row 2: Segmente + Wachstumstreiber */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1096,33 +1103,31 @@ export default function CompanyDetailPage() {
                   </Card>
                 </div>
 
-                {/* Row 3: Regionale Verteilung + Wettbewerb */}
+                {/* Row 3: Marktpositionierung + Wettbewerb */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
 
-                  {/* Regionale Verteilung */}
+                  {/* Marktpositionierung aus Peer Review */}
                   <Card>
-                    <SLabel text="Regionale Verteilung" />
-                    {md.regional_breakdown && md.regional_breakdown.length > 0 ? (
-                      <>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {md.regional_breakdown.slice(0, 6).map((r, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <span style={{ fontSize: 11, fontFamily: C.mono, color: C.t2, minWidth: 28 }}>{r.region}</span>
-                              <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                                <div style={{ height: "100%", width: `${r.share_pct}%`, background: C.blue, borderRadius: 99 }} />
-                              </div>
-                              <span style={{ fontSize: 11, fontFamily: C.mono, color: C.t2, minWidth: 36, textAlign: "right" }}>{r.share_pct.toFixed(0)}%</span>
-                            </div>
-                          ))}
+                    <SLabel text="Marktpositionierung" />
+                    {md.competition_note ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
+                          {md.competition_note}
                         </div>
-                        {md.regional_sources && (
-                          <div style={{ marginTop: 10, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                            Quelle: {md.regional_sources.join(", ")}
+                        {md.market_cycle && (
+                          <div style={{ display: "flex", align: "center", gap: 8, marginTop: 4 }}>
+                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Marktzyklus</span>
+                            <span style={{ fontSize: 11, color: C.teal, fontWeight: 600, textTransform: "capitalize" }}>{md.market_cycle}</span>
                           </div>
                         )}
-                      </>
+                        {md.market_cycle_note && (
+                          <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5 }}>{md.market_cycle_note}</div>
+                        )}
+                      </div>
                     ) : (
-                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Regionale Daten werden angereichert.</div>
+                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>
+                        Marktpositionierung wird aus Peer-Daten angereichert.
+                      </div>
                     )}
                   </Card>
 
