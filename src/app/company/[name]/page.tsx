@@ -1192,9 +1192,32 @@ export default function CompanyDetailPage() {
             const pipelineEntries = ownershipData?.entries ?? [];
             const curatedEntries  = data.ownership ?? [];
             const showPipeline    = pipelineEntries.length > 0;
-            const entries         = showPipeline ? pipelineEntries : curatedEntries;
-            const cap             = ownershipData?.cap_table;
-            const isPending       = ownershipLoading || (ownershipData?.status === "pending" || ownershipData?.status === "running");
+
+            // BUG-30: Funding Investors immer mergen (Lead + Co-Investoren aus funding_rounds)
+            // Ergänzt pipeline/curated Einträge — deduped by name
+            const fundingEntries: OwnershipItem[] = (() => {
+              const base = showPipeline ? pipelineEntries : curatedEntries;
+              const existingNames = new Set(base.map((o: any) => o.name.toLowerCase()));
+              const result: OwnershipItem[] = [];
+              for (const r of data.funding_rounds ?? []) {
+                if (r.lead_investor && !existingNames.has(r.lead_investor.toLowerCase())) {
+                  existingNames.add(r.lead_investor.toLowerCase());
+                  result.push({ name: r.lead_investor, type: "VC/Investor", role: "Lead Investor", notes: `${r.type ?? "Funding"} ${r.date?.slice(0, 4) ?? ""}`.trim() });
+                }
+                for (const co of r.co_investors ?? []) {
+                  if (co && !existingNames.has(co.toLowerCase())) {
+                    existingNames.add(co.toLowerCase());
+                    result.push({ name: co, type: "VC/Investor", role: "Co-Investor", notes: "Funding History" });
+                  }
+                }
+              }
+              return result;
+            })();
+
+            const baseEntries = showPipeline ? pipelineEntries : curatedEntries.filter((o: any) => o.name !== "Not publicly disclosed");
+            const entries     = [...baseEntries, ...fundingEntries];
+            const cap         = ownershipData?.cap_table;
+            const isPending   = ownershipLoading || (ownershipData?.status === "pending" || ownershipData?.status === "running");
 
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1232,7 +1255,7 @@ export default function CompanyDetailPage() {
 
                   {/* Investorenliste */}
                   <Card>
-                    <SLabel text={showPipeline ? "Investoren & Gesellschafter" : "Bekannte Investoren"} />
+                    <SLabel text={showPipeline ? "Investoren & Gesellschafter" : "Investoren & Gesellschafter"} />
                     {isPending && entries.length === 0 ? (
                       <div style={{ padding: "28px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>
                         Ownership-Daten werden angereichert…
@@ -1525,18 +1548,21 @@ export default function CompanyDetailPage() {
           {activeTab === 4 && (() => {
             const signals   = signalsData?.signals ?? [];
             const dims      = assessmentsData?.dimensions ?? [];
-            const compOpp   = assessmentsData?.composite_opportunity;
-            const compRisk  = assessmentsData?.composite_risk;
 
             // Signals aufteilen
             const potSignals     = signals.filter((s: SignalItem) => s.direction === "positive");
             const riskSignals    = signals.filter((s: SignalItem) => s.direction === "negative" && s.source !== "internal_absence");
             const absenceSignals = signals.filter((s: SignalItem) => s.direction === "negative" && s.source === "internal_absence");
 
-            // Composite Score — Claude Assessment (45% Opp / 35% Risk) + Signal Drift (20%)
-            const oppScore10  = compOpp  != null ? Number(compOpp)  : null;
-            const riskScore10 = compRisk != null ? Number(compRisk) : null;
-            const hasComposite = oppScore10 !== null && riskScore10 !== null;
+            // Composite Score — algorithmisch aus Dimensions (BUG-31 Fix)
+            // Nicht mehr Claude composite_opportunity/risk, sondern Mittelwert der algorithmischen Scores
+            const oppScores = dims.filter((d: any) => d.opportunity_score != null).map((d: any) => Number(d.opportunity_score));
+            const rskScores = dims.filter((d: any) => d.risk_score        != null).map((d: any) => Number(d.risk_score));
+            const oppAvg    = oppScores.length > 0 ? oppScores.reduce((a: number, b: number) => a + b, 0) / oppScores.length : null;
+            const rskAvg    = rskScores.length > 0 ? rskScores.reduce((a: number, b: number) => a + b, 0) / rskScores.length : null;
+
+            // SC-10 compound_risk_score bevorzugen wenn verfügbar
+            const compoundRisk = data.scores?.compound_risk_score ?? rskAvg;
 
             const signalDrift = signals.length > 0
               ? Math.max(-1, Math.min(1,
@@ -1545,13 +1571,17 @@ export default function CompanyDetailPage() {
               : 0;
             const signalDrift10 = signalDrift * 10;
 
+            // Formel: oppAvg - rskAvg×0.5 + signalDrift×0.15 + 2.0 (Offset für neutrale Mitte ~5)
+            const hasComposite = oppAvg !== null && compoundRisk !== null;
             const compositeRaw = hasComposite
-              ? (oppScore10! * 0.45) - (riskScore10! * 0.35) + (signalDrift10 * 0.20)
+              ? (oppAvg! - compoundRisk! * 0.5 + signalDrift10 * 0.15 + 2.0)
               : null;
-            // Normieren auf 0–10
             const composite = compositeRaw !== null
-              ? Math.max(0, Math.min(10, compositeRaw + 3.5))
+              ? Math.max(0, Math.min(10, compositeRaw))
               : null;
+
+            const oppScore10  = oppAvg;
+            const riskScore10 = compoundRisk;
 
             const scoreColor = composite === null ? C.t3
               : composite >= 7.0 ? C.teal
@@ -1623,6 +1653,10 @@ export default function CompanyDetailPage() {
               const oppScore = assessed?.opportunity_score ?? null;
               const rskScore = assessed?.risk_score ?? null;
               const label    = assessed?.label ?? dim.id;
+              const conf     = assessed?.data_confidence ?? "low";
+
+              const confColor = conf === "high" ? C.teal : conf === "medium" ? C.amber : C.t3;
+              const confLabel = conf === "high" ? "H" : conf === "medium" ? "M" : "L";
 
               // BUG-05: Farbe der Dimensionsüberschrift folgt dem Score
               const oppHeaderColor = oppScore !== null
@@ -1641,9 +1675,17 @@ export default function CompanyDetailPage() {
                   <div style={{ padding: "14px 16px", borderRight: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                       {oppScore !== null && <ScoreBadge score={oppScore} side="opp" />}
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: oppHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
-                          {label.toUpperCase()}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: oppHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                            {label.toUpperCase()}
+                          </div>
+                          <span title={`Datenkonfidenz: ${conf} · Quellen: ${(assessed?.opportunity_sources ?? []).join(", ")}`} style={{
+                            fontSize: 8, fontWeight: 700, color: confColor, fontFamily: C.mono,
+                            padding: "1px 4px", borderRadius: 3,
+                            background: confColor + "15", border: `1px solid ${confColor}30`,
+                            cursor: "help",
+                          }}>{confLabel}</span>
                         </div>
                         <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>POTENZIAL</div>
                       </div>
@@ -1659,9 +1701,17 @@ export default function CompanyDetailPage() {
                   <div style={{ padding: "14px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                       {rskScore !== null && <ScoreBadge score={rskScore} side="rsk" />}
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: rskHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
-                          {label.toUpperCase()}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: rskHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
+                            {label.toUpperCase()}
+                          </div>
+                          <span title={`Datenkonfidenz: ${conf} · Quellen: ${(assessed?.risk_sources ?? []).join(", ")}`} style={{
+                            fontSize: 8, fontWeight: 700, color: confColor, fontFamily: C.mono,
+                            padding: "1px 4px", borderRadius: 3,
+                            background: confColor + "15", border: `1px solid ${confColor}30`,
+                            cursor: "help",
+                          }}>{confLabel}</span>
                         </div>
                         <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>RISIKO</div>
                       </div>
@@ -1713,9 +1763,9 @@ export default function CompanyDetailPage() {
                         GEWICHTUNG
                       </div>
                       {[
-                        { label: "Opportunität", val: oppScore10?.toFixed(1) ?? "—", weight: "45%", color: C.teal },
-                        { label: "Risiko", val: riskScore10?.toFixed(1) ?? "—", weight: "35%", color: C.red },
-                        { label: "Signal-Drift", val: (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1), weight: "20%", color: signalDrift >= 0 ? C.teal : C.amber },
+                        { label: "Opportunität (Ø)", val: oppScore10?.toFixed(1) ?? "—", weight: "Ø Dims", color: C.teal },
+                        { label: "Risiko 6D (SC-10)", val: riskScore10?.toFixed(1) ?? "—", weight: "−0.5×", color: C.red },
+                        { label: "Signal-Drift", val: (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1), weight: "+0.15×", color: signalDrift >= 0 ? C.teal : C.amber },
                       ].map(row => (
                         <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <div>
@@ -1751,7 +1801,7 @@ export default function CompanyDetailPage() {
                   </div>
 
                   <div style={{ fontSize: 9, color: C.t3, marginTop: 12, fontFamily: C.mono }}>
-                    {assessmentsData?.source === "cache" ? "Assessment aus Cache" : "Assessment generiert"} · {assessmentsData?.model?.replace("claude-", "Claude ") ?? "—"} · {signals.length} Signals
+                    {assessmentsData?.source === "cache" ? "Assessment aus Cache" : "Assessment generiert"} · Algorithmische Scores · {assessmentsData?.model?.replace("claude-", "Claude ") ?? "—"} Narrativ · {signals.length} Signals
                   </div>
                 </Card>
 
@@ -1797,7 +1847,8 @@ export default function CompanyDetailPage() {
                 )}
 
                 <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
-                  Automatisch generiert · Keine Anlageberatung · Stand: {new Date().toLocaleDateString("de-DE")}
+                  Algorithmische Scores · Claude Narrativ · Keine Anlageberatung · Stand: {new Date().toLocaleDateString("de-DE")}
+                  <span style={{ marginLeft: 8, color: C.t3 }}>· H=high · M=medium · L=low Konfidenz</span>
                 </div>
               </div>
             );
@@ -2256,13 +2307,17 @@ export default function CompanyDetailPage() {
             );
 
             // Sub-Score-Dimensionen in Radar-Reihenfolge (oben → im Uhrzeigersinn)
+            // SC-10: compound_risk_score bevorzugen wenn verfügbar (algorithmisch, 6D)
+            const hasCompoundRisk = sc.compound_risk_score != null;
             const SUB_SCORES = [
-              { key: "market_score",       label: "Market",    color: C.teal   },
-              { key: "strategic_score",    label: "Strategic", color: C.blue   },
-              { key: "financial_score",    label: "Financial", color: C.purple },
-              { key: "risk_score",         label: "Risk",      color: C.red    },
-              { key: "ownership_score",    label: "Ownership", color: C.amber  },
-              { key: "value_driver_score", label: "Val.Driver",color: C.teal   },
+              { key: "market_score",        label: "Market",    color: C.teal   },
+              { key: "strategic_score",     label: "Strategic", color: C.blue   },
+              { key: "financial_score",     label: "Financial", color: C.purple },
+              { key: hasCompoundRisk ? "compound_risk_score" : "risk_score",
+                                            label: hasCompoundRisk ? "Risk 6D" : "Risk",
+                                                                color: C.red    },
+              { key: "ownership_score",     label: "Ownership", color: C.amber  },
+              { key: "value_driver_score",  label: "Val.Driver",color: C.teal   },
             ];
 
             const PATH_SCORES = [
