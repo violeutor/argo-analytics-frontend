@@ -997,6 +997,9 @@ export default function CompanyDetailPage() {
               !c || c === "unknown" ? "—" : c.charAt(0).toUpperCase() + c.slice(1);
             const confColor2 = (c?: string) =>
               c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
+            // proxy_beta: aus Haupt-Response, Fallback auf market_data (DQ-04)
+            const proxyBeta = data.proxy_beta_1y ?? null;
+            const proxyBetaBench = data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined;
 
             if (!md) return (
               <Card>
@@ -1015,11 +1018,6 @@ export default function CompanyDetailPage() {
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
                 {/* Row 1: TAM · SAM · CAGR · Zyklus · Proxy Beta */}
-                {(() => {
-                  // proxy_beta_1y: aus Haupt-Response oder market_data Fallback
-                  const proxyBeta = data.proxy_beta_1y ?? (md as any).proxy_beta_1y ?? null;
-                  const proxyBetaBench = data.proxy_beta_benchmark ?? (md as any).proxy_beta_benchmark ?? data.proxy_ticker ?? undefined;
-                  return (
                 <div style={{ display: "grid", gridTemplateColumns: `repeat(${proxyBeta != null ? 5 : 4},1fr)`, gap: 10 }}>
                   <FundTile
                     label="TAM 2035"
@@ -1049,13 +1047,11 @@ export default function CompanyDetailPage() {
                     <FundTile
                       label="Market Beta ⓘ"
                       val={`β ${proxyBeta.toFixed(2)}`}
-                      sub={proxyBetaBench?.replace("Damodaran · ", "")}
+                      sub={proxyBetaBench}
                       color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
                     />
                   )}
                 </div>
-                  );
-                })()}
 
                 {/* Row 2: Segmente + Wachstumstreiber */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
