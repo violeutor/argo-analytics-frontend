@@ -184,7 +184,7 @@ interface CompanyScores {
   ownership_score?: number;
   value_driver_score?: number;
   ipo_score?: number;
-  m_and_a_score?: number;
+  ma_score?: number;
   etf_score?: number;
   enabler_score?: number;
   composite_score?: number;
@@ -2386,7 +2386,7 @@ export default function CompanyDetailPage() {
 
             const PATH_SCORES = [
               { key: "ipo_score",     heroKey: "ipo",     label: "IPO",       color: C.teal   },
-              { key: "m_and_a_score", heroKey: "m_and_a", label: "M&A",       color: C.blue   },
+              { key: "ma_score", heroKey: "m_and_a", label: "M&A",       color: C.blue   },
               { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber  },
               { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple },
             ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed"));
@@ -2402,7 +2402,7 @@ export default function CompanyDetailPage() {
                 return { path: sc.hero_path, label: sc.hero_path_label, score: sc.hero_score };
               }
               const alts = [
-                { path: "m_and_a", label: "M&A",       score: sc.m_and_a_score },
+                { path: "m_and_a", label: "M&A",       score: sc.ma_score },
                 { path: "etf",     label: "ETF-Proxy", score: sc.etf_score     },
                 { path: "enabler", label: "Enabler",   score: sc.enabler_score },
               ].filter(a => a.score != null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
@@ -2641,10 +2641,10 @@ export default function CompanyDetailPage() {
                       }] : []),
                       {
                         segment: "M&A-Boutiquen",
-                        scoreKey: "m_and_a_score" as keyof CompanyScores,
+                        scoreKey: "ma_score" as keyof CompanyScores,
                         focus: "SRR × MFR × TechReadiness · Käufer-Universum",
                         note: () => {
-                          const v = sc.m_and_a_score ?? 0;
+                          const v = sc.ma_score ?? 0;
                           return v >= 7 ? "Attraktives M&A-Target — Feasibility-Fenster und Käufer-Fit prüfen."
                             : v >= 4 ? "Bedingt M&A-relevant — Stage und Buyer-Matching beachten."
                             : "Geringe M&A-Eignung — zu früh, zu teuer oder kein Käufer identifiziert.";
@@ -2735,7 +2735,7 @@ export default function CompanyDetailPage() {
               },
               {
                 key:         "m_and_a",
-                score:       sc?.m_and_a_score,
+                score:       sc?.ma_score,
                 label:       "M&A · Käufer-Proxy",
                 color:       C.blue,
                 condition:   "Attraktiv wenn: SRR Transformational · MFR Feasible · Strategischer Käufer identifiziert",
