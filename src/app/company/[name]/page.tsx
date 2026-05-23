@@ -1115,7 +1115,7 @@ export default function CompanyDetailPage() {
                           {md.competition_note}
                         </div>
                         {md.market_cycle && (
-                          <div style={{ display: "flex", align: "center", gap: 8, marginTop: 4 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                             <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Marktzyklus</span>
                             <span style={{ fontSize: 11, color: C.teal, fontWeight: 600, textTransform: "capitalize" }}>{md.market_cycle}</span>
                           </div>
