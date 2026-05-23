@@ -1477,6 +1477,54 @@ export default function CompanyDetailPage() {
                       </Card>
                     )}
 
+                    {/* DQ-05: Est. Valuation — für private Companies ohne BA-Daten */}
+                    {!f.ba_found && f.fundamentals_source !== "none" && data.funding_total_usd_mn != null && (
+                      <Card>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <SLabel text="Finanzielle Einschätzung" />
+                          <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "2px 8px", border: `1px solid ${C.border}`, borderRadius: 99 }}>
+                            Schätzung · keine Primärdaten
+                          </span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                          {/* Est. Pre-Money aus Funding × Stage-Multiple */}
+                          {(() => {
+                            const _MULT: Record<string, number> = {
+                              pre_seed: 5.0, seed: 4.0, series_a: 3.5,
+                              series_b: 2.5, series_c: 2.0, series_d: 1.5,
+                              series_d_plus: 1.3, growth: 1.2,
+                            };
+                            const mult = _MULT[data.funding_stage ?? ""] ?? 2.0;
+                            const estVal = data.funding_total_usd_mn! * mult;
+                            return (
+                              <FundTile
+                                label="Est. Valuation"
+                                val={estVal >= 1000 ? `~$${(estVal / 1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
+                                sub={`${mult}× Funding Total`}
+                                color={C.amber}
+                              />
+                            );
+                          })()}
+                          <FundTile
+                            label="Funding Total"
+                            val={fmtM(data.funding_total_usd_mn)}
+                            sub="Investiert gesamt"
+                            color={C.t1}
+                          />
+                          <FundTile
+                            label="IPO-Wahrsch."
+                            val={data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—"}
+                            sub={data.ipo_potential ?? undefined}
+                            color={data.ipo_probability_pct != null && data.ipo_probability_pct >= 50 ? C.teal : C.t2}
+                          />
+                        </div>
+                        <div style={{ marginTop: 10, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                          Valuation-Schätzung basiert auf Funding-Total × Stage-Multiplikator (VC-Faustregel).
+                          Keine verifizierten Finanzdaten verfügbar — BA-Bridge oder EDGAR nicht anwendbar.
+                        </div>
+                      </Card>
+                    )}
+
                     {/* BA-Bridge Daten (private DE) */}
                     {f.ba_found && (
                       <Card>
@@ -1737,6 +1785,13 @@ export default function CompanyDetailPage() {
 
             return (
               <div>
+                {/* TabScoreBar — SC-10 Compound Risk Score */}
+                <TabScoreBar
+                  label="Compound Risk Score"
+                  score={data.scores?.compound_risk_score}
+                  tooltip="SC-10: Algorithmischer Compound Risk aus 6 Dimensionen (Market, Financials, Strategy, Political, Technology, Operations). Confidence-gewichtet — Dimensionen ohne Datenbasis dämpfen den Score statt ihn aufzublasen."
+                />
+
                 {/* Hero Score — Composite */}
                 <Card style={{ marginBottom: 16, textAlign: "center" }}>
                   {/* Haupt-Score mit Tooltip */}
@@ -1818,10 +1873,10 @@ export default function CompanyDetailPage() {
                 {assessmentsLoading && (
                   <Card style={{ textAlign: "center", padding: 32 }}>
                     <div style={{ fontSize: 12, color: C.teal, fontFamily: C.mono, marginBottom: 8 }}>
-                      ◎ Assessment wird generiert…
+                      ◎ Scores werden berechnet…
                     </div>
                     <div style={{ fontSize: 11, color: C.t3 }}>
-                      Claude analysiert Markt, Finanzen, Strategie, Political Environment, Technologie und operative Stärke.
+                      Algorithmische Scores für 6 Dimensionen · Claude generiert Kontext-Narrativ.
                     </div>
                   </Card>
                 )}
