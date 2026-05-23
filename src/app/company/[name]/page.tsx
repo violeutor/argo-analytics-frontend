@@ -163,6 +163,7 @@ interface CompanyDetail {
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
   investment_path?: string; proxy_ticker?: string;
+  proxy_beta_1y?: number; proxy_beta_benchmark?: string; proxy_beta_source?: string;
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
   funding_rounds: FundingRoundItem[];
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
@@ -1019,8 +1020,8 @@ export default function CompanyDetailPage() {
                   score={data.scores?.market_score}
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
-                {/* Row 1: TAM · SAM · CAGR · Zyklus */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                {/* Row 1: TAM · SAM · CAGR · Zyklus · Proxy Beta */}
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.proxy_beta_1y != null ? 5 : 4},1fr)`, gap: 10 }}>
                   <FundTile
                     label="TAM 2035"
                     val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
@@ -1045,6 +1046,14 @@ export default function CompanyDetailPage() {
                     sub={md.market_cycle_note?.split("—")[0]?.trim()}
                     color={cycleColor(md.market_cycle)}
                   />
+                  {data.proxy_beta_1y != null && (
+                    <FundTile
+                      label="Market Beta ⓘ"
+                      val={`β ${data.proxy_beta_1y.toFixed(2)}`}
+                      sub={data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined}
+                      color={data.proxy_beta_1y >= 1.5 ? C.red : data.proxy_beta_1y >= 1.0 ? C.amber : C.teal}
+                    />
+                  )}
                 </div>
 
                 {/* Row 2: Segmente + Wachstumstreiber */}
