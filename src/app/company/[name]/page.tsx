@@ -2764,7 +2764,7 @@ export default function CompanyDetailPage() {
             const STAGE_MAP: Record<string, string> = {
               seed: "Seed", series_a: "Series A", series_b: "Series B",
               series_c: "Series C", series_d: "Series D", series_d_plus: "Series D+",
-              pre_seed: "Pre-Seed", growth: "Growth",
+              pre_seed: "Pre-Seed", growth: "Growth", public: "Public",
             };
 
             return (
