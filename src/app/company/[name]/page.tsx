@@ -387,6 +387,176 @@ function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
   );
 }
 
+// ── KPI Timeline Modal ────────────────────────────────────────────────────────
+
+interface KpiPoint { fiscal_year: number; value: number; }
+
+const KPI_META: Record<string, { label: string; format: (v: number) => string }> = {
+  revenue_usd_mn:      { label: "Umsatz",            format: v => `€${v.toFixed(1)}M`              },
+  ebitda_usd_mn:       { label: "EBITDA",             format: v => `€${v.toFixed(1)}M`              },
+  ebit_usd_mn:         { label: "EBIT",               format: v => `€${v.toFixed(1)}M`              },
+  net_income_usd_mn:   { label: "Jahresüberschuss",   format: v => `€${v.toFixed(1)}M`              },
+  equity_usd_mn:       { label: "Eigenkapital",       format: v => `€${v.toFixed(1)}M`              },
+  total_assets_usd_mn: { label: "Bilanzsumme",        format: v => `€${v.toFixed(1)}M`              },
+  headcount:           { label: "Mitarbeiter",        format: v => v.toLocaleString("de-DE")        },
+};
+
+function KpiTimelineModal({
+  metric, points, onClose,
+}: { metric: string; points: KpiPoint[]; onClose: () => void }) {
+  const meta   = KPI_META[metric] ?? { label: metric, format: (v: number) => String(v) };
+  const sorted = [...points].sort((a, b) => a.fiscal_year - b.fiscal_year);
+
+  // SVG dimensions
+  const W = 420, H = 160;
+  const PAD = { t: 16, r: 16, b: 32, l: 58 };
+  const iW  = W - PAD.l - PAD.r;
+  const iH  = H - PAD.t - PAD.b;
+
+  const vals = sorted.map(p => p.value);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const rng  = maxV - minV || 1;
+
+  const xS = (i: number) => PAD.l + (i / (sorted.length - 1 || 1)) * iW;
+  const yS = (v: number) => PAD.t + iH - ((v - minV) / rng) * iH;
+
+  const pathD = sorted.map((p, i) =>
+    `${i === 0 ? "M" : "L"} ${xS(i).toFixed(1)} ${yS(p.value).toFixed(1)}`
+  ).join(" ");
+  const areaD = `${pathD} L ${xS(sorted.length - 1).toFixed(1)} ${(PAD.t + iH).toFixed(1)} L ${PAD.l.toFixed(1)} ${(PAD.t + iH).toFixed(1)} Z`;
+
+  const yTicks = [0, 0.5, 1].map(pct => ({
+    y: PAD.t + iH - pct * iH,
+    val: minV + pct * rng,
+  }));
+
+  const growth = sorted.length >= 2
+    ? ((sorted[sorted.length - 1].value - sorted[0].value) / Math.abs(sorted[0].value || 1)) * 100
+    : null;
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", display: "flex",
+               alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rLg,
+                 padding: "24px 28px", width: 500, maxWidth: "92vw",
+                 boxShadow: "0 24px 80px rgba(0,0,0,0.65)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
+          <div>
+            <div style={{ fontFamily: C.display, fontSize: 16, fontWeight: 700, color: C.t1 }}>
+              {meta.label} · Verlauf
+            </div>
+            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>
+              Bundesanzeiger · {sorted.length} Datenpunkte · kpi_timeseries
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: C.rSm,
+                     color: C.t3, fontSize: 16, padding: "3px 9px", cursor: "pointer", lineHeight: 1 }}
+          >×</button>
+        </div>
+
+        {/* Growth badges */}
+        {growth !== null && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <span style={{
+              padding: "4px 12px", borderRadius: 99, fontSize: 11, fontFamily: C.mono, fontWeight: 600,
+              color: growth >= 0 ? C.teal : C.red,
+              background: (growth >= 0 ? C.teal : C.red) + "18",
+              border: `1px solid ${(growth >= 0 ? C.teal : C.red)}33`,
+            }}>
+              {growth >= 0 ? "↑" : "↓"} {Math.abs(growth).toFixed(1)}% · {sorted[0].fiscal_year}→{sorted[sorted.length - 1].fiscal_year}
+            </span>
+            <span style={{
+              padding: "4px 12px", borderRadius: 99, fontSize: 11, fontFamily: C.mono,
+              color: C.t2, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`,
+            }}>
+              Aktuell: {meta.format(sorted[sorted.length - 1].value)} ({sorted[sorted.length - 1].fiscal_year})
+            </span>
+          </div>
+        )}
+
+        {/* SVG Line Chart */}
+        <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: C.rMd, border: `1px solid ${C.border}`,
+                      overflow: "hidden", marginBottom: 14 }}>
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+            <defs>
+              <linearGradient id={`kg_${metric}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={C.teal} stopOpacity="0.28" />
+                <stop offset="100%" stopColor={C.teal} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+
+            {/* Y-grid + labels */}
+            {yTicks.map((t, i) => (
+              <g key={i}>
+                <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y}
+                  stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+                <text x={PAD.l - 5} y={t.y + 4} textAnchor="end"
+                  fill="rgba(255,255,255,0.28)" fontSize="9" fontFamily="DM Sans,sans-serif">
+                  {metric === "headcount"
+                    ? Math.round(t.val).toLocaleString("de-DE")
+                    : `${t.val.toFixed(0)}M`}
+                </text>
+              </g>
+            ))}
+
+            {/* Area + Line */}
+            {sorted.length > 1 && <>
+              <path d={areaD} fill={`url(#kg_${metric})`} />
+              <path d={pathD} fill="none" stroke={C.teal} strokeWidth="2.5"
+                strokeLinejoin="round" strokeLinecap="round" />
+            </>}
+
+            {/* Points + X labels */}
+            {sorted.map((p, i) => (
+              <g key={i}>
+                <circle cx={xS(i)} cy={yS(p.value)} r="3.5" fill={C.teal} />
+                <circle cx={xS(i)} cy={yS(p.value)} r="8" fill={C.teal} fillOpacity="0.12" />
+                <text x={xS(i)} y={H - 6} textAnchor="middle"
+                  fill="rgba(255,255,255,0.35)" fontSize="9" fontFamily="DM Sans,sans-serif">
+                  {p.fiscal_year}
+                </text>
+              </g>
+            ))}
+          </svg>
+        </div>
+
+        {/* Data table */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {sorted.map((p, i) => {
+            const prev  = i > 0 ? sorted[i - 1].value : null;
+            const delta = prev != null ? ((p.value - prev) / Math.abs(prev || 1)) * 100 : null;
+            return (
+              <div key={i} style={{ flex: 1, minWidth: 80, padding: "8px 10px", borderRadius: C.rSm,
+                background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 3 }}>{p.fiscal_year}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, fontFamily: C.display, color: C.t1 }}>
+                  {meta.format(p.value)}
+                </div>
+                {delta !== null && (
+                  <div style={{ fontSize: 9, fontFamily: C.mono, marginTop: 2,
+                    color: delta >= 0 ? C.teal : C.red }}>
+                    {delta >= 0 ? "↑" : "↓"}{Math.abs(delta).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScoringCard({ s, rank, showTR = true }: { s: ScoringDetail; rank: number; showTR?: boolean }) {
   const [open, setOpen] = useState(rank === 1);
   const rc = ratingColor(s.rating);
@@ -713,6 +883,21 @@ export default function CompanyDetailPage() {
     let vdTimer = window.setTimeout(poll, 2000);
     return () => window.clearTimeout(vdTimer);
   }, [name, loading, valueDriversData?.status]);
+
+  // KPI Timeseries — einmaliger Fetch beim ersten Tab-3-Besuch
+  const [kpiData, setKpiData]           = useState<Record<string, KpiPoint[]> | null>(null);
+  const [kpiModalMetric, setKpiModalMetric] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!name || loading || activeTab !== 3) return;
+    if (kpiData !== null) return;
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/kpi`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { metrics?: Record<string, KpiPoint[]> } | null) => {
+        setKpiData(d?.metrics ?? {});
+      })
+      .catch(() => setKpiData({}));
+  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 15 }}>
@@ -1527,12 +1712,63 @@ export default function CompanyDetailPage() {
                           <SLabel text="Bundesanzeiger · Finanzkennzahlen" />
                           <SourceBadge source="ba_bridge" />
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                          <FundTile label="Umsatz" val={f.ba_revenue_mn != null ? `€${f.ba_revenue_mn.toFixed(1)}M` : "—"} color={C.t1} />
-                          <FundTile label="Eigenkapital" val={f.ba_equity_mn != null ? `€${f.ba_equity_mn.toFixed(1)}M` : "—"} />
-                          <FundTile label="Bilanzsumme" val={f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—"} />
-                          <FundTile label="Mitarbeiter" val={f.ba_employees != null ? f.ba_employees.toLocaleString("de-DE") : "—"} />
-                        </div>
+
+                        {/* Inline helper — Trend-Button neben einem Tile */}
+                        {(() => {
+                          const hasTrend = (metric: string) =>
+                            (kpiData?.[metric]?.length ?? 0) >= 2;
+                          const TrendBtn = ({ metric }: { metric: string }) =>
+                            hasTrend(metric) ? (
+                              <button
+                                onClick={() => setKpiModalMetric(metric)}
+                                style={{
+                                  marginTop: 6, background: "none", border: `1px solid ${C.teal}44`,
+                                  borderRadius: 99, color: C.teal, fontSize: 9, padding: "2px 8px",
+                                  cursor: "pointer", fontFamily: C.mono, display: "flex",
+                                  alignItems: "center", gap: 3, letterSpacing: ".03em",
+                                }}
+                              >
+                                ↗ Verlauf
+                              </button>
+                            ) : null;
+
+                          return (
+                            <>
+                              {/* Zeile 1: Kernkennzahlen */}
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 10 }}>
+                                {[
+                                  { label: "Umsatz",      metric: "revenue_usd_mn",      val: f.ba_revenue_mn      != null ? `€${f.ba_revenue_mn.toFixed(1)}M`      : "—", color: C.t1 as string | undefined },
+                                  { label: "Eigenkapital", metric: "equity_usd_mn",       val: f.ba_equity_mn       != null ? `€${f.ba_equity_mn.toFixed(1)}M`       : "—", color: undefined },
+                                  { label: "Bilanzsumme", metric: "total_assets_usd_mn",  val: f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—", color: undefined },
+                                  { label: "Mitarbeiter", metric: "headcount",            val: f.ba_employees       != null ? f.ba_employees.toLocaleString("de-DE") : "—", color: undefined },
+                                ].map(({ label, metric, val, color }) => (
+                                  <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                                    <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: color ?? C.t1, lineHeight: 1 }}>{val}</div>
+                                    <TrendBtn metric={metric} />
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Zeile 2: GuV-Kennzahlen (nur wenn vorhanden) */}
+                              {(f.ba_ebitda_mn != null || f.ba_ebit_eur_mn != null || f.ba_net_income_eur_mn != null) && (
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                                  {[
+                                    { label: "EBITDA",            metric: "ebitda_usd_mn",     val: f.ba_ebitda_mn       != null ? `€${f.ba_ebitda_mn.toFixed(1)}M`       : "—" },
+                                    { label: "EBIT",              metric: "ebit_usd_mn",       val: f.ba_ebit_eur_mn     != null ? `€${f.ba_ebit_eur_mn.toFixed(1)}M`     : "—" },
+                                    { label: "Jahresüberschuss",  metric: "net_income_usd_mn", val: f.ba_net_income_eur_mn != null ? `€${f.ba_net_income_eur_mn.toFixed(1)}M` : "—" },
+                                  ].map(({ label, metric, val }) => (
+                                    <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                                      <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{val}</div>
+                                      <TrendBtn metric={metric} />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                         {f.ba_last_report_year && (
                           <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span>Letzter Jahresabschluss: {f.ba_last_report_year}</span>
@@ -3267,6 +3503,15 @@ export default function CompanyDetailPage() {
               </div>
             );
           })()}
+
+          {/* KPI Timeline Modal */}
+          {kpiModalMetric && kpiData?.[kpiModalMetric] && (
+            <KpiTimelineModal
+              metric={kpiModalMetric}
+              points={kpiData[kpiModalMetric]}
+              onClose={() => setKpiModalMetric(null)}
+            />
+          )}
 
           {/* Warnings */}
           {data.warnings.length > 0 && (
