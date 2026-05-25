@@ -389,16 +389,22 @@ function FundingTimeline({ rounds }: { rounds: FundingRoundItem[] }) {
 
 // ── KPI Timeline Modal ────────────────────────────────────────────────────────
 
-interface KpiPoint { fiscal_year: number; value: number; }
+interface KpiPoint { fiscal_year: number; value: number; currency?: string | null; source?: string; }
 
-const KPI_META: Record<string, { label: string; format: (v: number) => string }> = {
-  revenue_usd_mn:      { label: "Umsatz",            format: v => `€${v.toFixed(1)}M`              },
-  ebitda_usd_mn:       { label: "EBITDA",             format: v => `€${v.toFixed(1)}M`              },
-  ebit_usd_mn:         { label: "EBIT",               format: v => `€${v.toFixed(1)}M`              },
-  net_income_usd_mn:   { label: "Jahresüberschuss",   format: v => `€${v.toFixed(1)}M`              },
-  equity_usd_mn:       { label: "Eigenkapital",       format: v => `€${v.toFixed(1)}M`              },
-  total_assets_usd_mn: { label: "Bilanzsumme",        format: v => `€${v.toFixed(1)}M`              },
-  headcount:           { label: "Mitarbeiter",        format: v => v.toLocaleString("de-DE")        },
+const KPI_META: Record<string, { label: string; format: (v: number, currency?: string | null) => string }> = {
+  // Basis-Metriken — währungsneutral, currency-Feld bestimmt € oder $
+  revenue_mn:      { label: "Umsatz",           format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  ebitda_mn:       { label: "EBITDA",            format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  ebit_mn:         { label: "EBIT",              format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  net_income_mn:   { label: "Jahresüberschuss",  format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  equity_mn:       { label: "Eigenkapital",      format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  total_assets_mn: { label: "Bilanzsumme",       format: (v, c) => `${c === "USD" ? "$" : "€"}${v.toFixed(1)}M`  },
+  headcount:       { label: "Mitarbeiter",       format: (v)    => v.toLocaleString("de-DE")                      },
+  // Derived Metriken (berechnet in kpi_timeseries.py — währungsunabhängig)
+  ebitda_margin_pct:   { label: "EBITDA-Marge",      format: v => `${v.toFixed(1)}%`                             },
+  equity_ratio_pct:    { label: "Eigenkapitalquote", format: v => `${v.toFixed(1)}%`                             },
+  revenue_per_fte_k:   { label: "Revenue / Kopf",    format: (v, c) => `${c?.startsWith("USD") ? "$" : "€"}${v.toFixed(0)}k` },
+  revenue_cagr_pct:    { label: "Umsatz-CAGR",       format: v => `${v.toFixed(1)}%/J`                           },
 };
 
 function KpiTimelineModal({
@@ -454,7 +460,7 @@ function KpiTimelineModal({
               {meta.label} · Verlauf
             </div>
             <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>
-              Bundesanzeiger · {sorted.length} Datenpunkte · kpi_timeseries
+              {sorted[0]?.source === "edgar_xbrl" ? "SEC EDGAR XBRL" : "Bundesanzeiger"} · {sorted.length} Datenpunkte · kpi_timeseries
             </div>
           </div>
           <button
@@ -479,7 +485,7 @@ function KpiTimelineModal({
               padding: "4px 12px", borderRadius: 99, fontSize: 11, fontFamily: C.mono,
               color: C.t2, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`,
             }}>
-              Aktuell: {meta.format(sorted[sorted.length - 1].value)} ({sorted[sorted.length - 1].fiscal_year})
+              Aktuell: {meta.format(sorted[sorted.length - 1].value, sorted[sorted.length - 1].currency)} ({sorted[sorted.length - 1].fiscal_year})
             </span>
           </div>
         )}
@@ -540,7 +546,7 @@ function KpiTimelineModal({
                 background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, textAlign: "center" }}>
                 <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 3 }}>{p.fiscal_year}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, fontFamily: C.display, color: C.t1 }}>
-                  {meta.format(p.value)}
+                  {meta.format(p.value, p.currency)}
                 </div>
                 {delta !== null && (
                   <div style={{ fontSize: 9, fontFamily: C.mono, marginTop: 2,
@@ -891,7 +897,7 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!name || loading || activeTab !== 3) return;
     if (kpiData !== null) return;
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/kpi`)
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/kpi-timeseries`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { metrics?: Record<string, KpiPoint[]> } | null) => {
         setKpiData(d?.metrics ?? {});
@@ -1645,6 +1651,116 @@ export default function CompanyDetailPage() {
                     )}
                   </Card>
 
+                  {/* EDGAR / BA KPI-Zeitreihen — listed Companies (US: EDGAR XBRL, DE: BA) */}
+                  {kpiData && Object.keys(kpiData).length > 0 && (() => {
+                    const LISTED_METRICS = [
+                      "revenue_mn", "ebitda_mn", "ebit_mn", "net_income_mn",
+                      "equity_mn", "total_assets_mn",
+                    ];
+                    const DERIVED_METRICS = [
+                      "ebitda_margin_pct", "equity_ratio_pct", "revenue_cagr_pct",
+                    ];
+                    const hasTrend = (m: string) => (kpiData[m]?.length ?? 0) >= 2;
+                    const hasAny   = [...LISTED_METRICS, ...DERIVED_METRICS].some(m => kpiData[m]?.length);
+                    if (!hasAny) return null;
+
+                    // Quelle aus erstem verfügbaren Datenpunkt ableiten
+                    const firstMetric = LISTED_METRICS.find(m => kpiData[m]?.length);
+                    const kpiSource   = firstMetric
+                      ? (kpiData[firstMetric][0]?.source === "edgar_xbrl" ? "SEC EDGAR XBRL" : "Bundesanzeiger")
+                      : "KPI-Pipeline";
+                    const kpiCurrency = firstMetric ? (kpiData[firstMetric][0]?.currency ?? null) : null;
+                    const cur         = kpiCurrency === "USD" ? "$" : "€";
+                    const latestYear  = firstMetric
+                      ? Math.max(...kpiData[firstMetric].map(p => p.fiscal_year))
+                      : null;
+
+                    const TrendBtn = ({ metric }: { metric: string }) =>
+                      hasTrend(metric) ? (
+                        <button
+                          onClick={() => setKpiModalMetric(metric)}
+                          style={{
+                            marginTop: 6, background: "none", border: `1px solid ${C.teal}44`,
+                            borderRadius: 99, color: C.teal, fontSize: 9, padding: "2px 8px",
+                            cursor: "pointer", fontFamily: C.mono, display: "flex",
+                            alignItems: "center", gap: 3, letterSpacing: ".03em",
+                          }}
+                        >↗ Verlauf</button>
+                      ) : null;
+
+                    const latestVal = (metric: string): number | null => {
+                      const rows = kpiData[metric];
+                      if (!rows?.length) return null;
+                      return [...rows].sort((a, b) => b.fiscal_year - a.fiscal_year)[0].value;
+                    };
+
+                    const fmtMn = (v: number | null) =>
+                      v != null ? `${cur}${v.toFixed(1)}M` : "—";
+                    const fmtPct = (v: number | null) =>
+                      v != null ? `${v.toFixed(1)}%` : "—";
+
+                    return (
+                      <Card>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <SLabel text={`KPI-Zeitreihen · ${kpiSource}`} />
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            {latestYear && (
+                              <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono,
+                                padding: "2px 8px", border: `1px solid ${C.border}`, borderRadius: 99 }}>
+                                FY{latestYear}
+                              </span>
+                            )}
+                            <SourceBadge source={kpiSource === "SEC EDGAR XBRL" ? "edgar" : "ba_bridge"} />
+                          </div>
+                        </div>
+
+                        {/* Zeile 1: Kern-KPIs */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 10 }}>
+                          {LISTED_METRICS.filter(m => kpiData[m]?.length).map(metric => (
+                            <div key={metric} style={{
+                              background: C.bgCard, border: `1px solid ${C.border}`,
+                              borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column",
+                            }}>
+                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono,
+                                textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>
+                                {KPI_META[metric]?.label ?? metric}
+                              </div>
+                              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                                {fmtMn(latestVal(metric))}
+                              </div>
+                              <TrendBtn metric={metric} />
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Zeile 2: Derived Metriken */}
+                        {DERIVED_METRICS.some(m => kpiData[m]?.length) && (
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                            {DERIVED_METRICS.filter(m => kpiData[m]?.length).map(metric => (
+                              <div key={metric} style={{
+                                background: C.bgCard, border: `1px solid ${C.border}`,
+                                borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column",
+                              }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono,
+                                  textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>
+                                  {KPI_META[metric]?.label ?? metric}
+                                </div>
+                                <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                                  {fmtPct(latestVal(metric))}
+                                </div>
+                                <TrendBtn metric={metric} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 10, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                          Historische Zeitreihen · kpi_timeseries · ↗ Verlauf zeigt Chart
+                        </div>
+                      </Card>
+                    );
+                  })()}
+
                 </>) : (
                   /* Private Company */
                   <>
@@ -1737,9 +1853,9 @@ export default function CompanyDetailPage() {
                               {/* Zeile 1: Kernkennzahlen */}
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 10 }}>
                                 {[
-                                  { label: "Umsatz",      metric: "revenue_usd_mn",      val: f.ba_revenue_mn      != null ? `€${f.ba_revenue_mn.toFixed(1)}M`      : "—", color: C.t1 as string | undefined },
-                                  { label: "Eigenkapital", metric: "equity_usd_mn",       val: f.ba_equity_mn       != null ? `€${f.ba_equity_mn.toFixed(1)}M`       : "—", color: undefined },
-                                  { label: "Bilanzsumme", metric: "total_assets_usd_mn",  val: f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—", color: undefined },
+                                  { label: "Umsatz",      metric: "revenue_mn",      val: f.ba_revenue_mn      != null ? `€${f.ba_revenue_mn.toFixed(1)}M`      : "—", color: C.t1 as string | undefined },
+                                  { label: "Eigenkapital", metric: "equity_mn",       val: f.ba_equity_mn       != null ? `€${f.ba_equity_mn.toFixed(1)}M`       : "—", color: undefined },
+                                  { label: "Bilanzsumme", metric: "total_assets_mn",  val: f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—", color: undefined },
                                   { label: "Mitarbeiter", metric: "headcount",            val: f.ba_employees       != null ? f.ba_employees.toLocaleString("de-DE") : "—", color: undefined },
                                 ].map(({ label, metric, val, color }) => (
                                   <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
@@ -1754,9 +1870,9 @@ export default function CompanyDetailPage() {
                               {(f.ba_ebitda_mn != null || f.ba_ebit_eur_mn != null || f.ba_net_income_eur_mn != null) && (
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                                   {[
-                                    { label: "EBITDA",            metric: "ebitda_usd_mn",     val: f.ba_ebitda_mn       != null ? `€${f.ba_ebitda_mn.toFixed(1)}M`       : "—" },
-                                    { label: "EBIT",              metric: "ebit_usd_mn",       val: f.ba_ebit_eur_mn     != null ? `€${f.ba_ebit_eur_mn.toFixed(1)}M`     : "—" },
-                                    { label: "Jahresüberschuss",  metric: "net_income_usd_mn", val: f.ba_net_income_eur_mn != null ? `€${f.ba_net_income_eur_mn.toFixed(1)}M` : "—" },
+                                    { label: "EBITDA",            metric: "ebitda_mn",     val: f.ba_ebitda_mn       != null ? `€${f.ba_ebitda_mn.toFixed(1)}M`       : "—" },
+                                    { label: "EBIT",              metric: "ebit_mn",       val: f.ba_ebit_eur_mn     != null ? `€${f.ba_ebit_eur_mn.toFixed(1)}M`     : "—" },
+                                    { label: "Jahresüberschuss",  metric: "net_income_mn", val: f.ba_net_income_eur_mn != null ? `€${f.ba_net_income_eur_mn.toFixed(1)}M` : "—" },
                                   ].map(({ label, metric, val }) => (
                                     <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
                                       <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
