@@ -721,6 +721,16 @@ export default function CompanyDetailPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [starred, setStarred] = useState(false);
 
+  // UX-01: Tab-Status Tracking — "ready" | "pending"
+  const TAB_KEYS = ["overview","market","ownership","fundamentals","assessments","peers","value_drivers","scoring","paths","signals"] as const;
+  type TabKey = typeof TAB_KEYS[number];
+  const [tabReady, setTabReady] = useState<Record<TabKey, boolean>>({
+    overview: false, market: false, ownership: false, fundamentals: false,
+    assessments: false, peers: false, value_drivers: false, scoring: false,
+    paths: false, signals: false,
+  });
+  const statusPollRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!name) return;
     const wl: string[] = JSON.parse(localStorage.getItem("argo_watchlist") ?? "[]");
@@ -735,6 +745,42 @@ export default function CompanyDetailPage() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [name]);
+
+  // UX-01: Status-Polling — alle 4s bis all_ready=true (max 20 Versuche ≈ 80s)
+  useEffect(() => {
+    if (!name || loading) return;
+    let attempts = 0;
+    const MAX = 20;
+
+    const poll = () => {
+      if (attempts >= MAX) return;
+      attempts++;
+      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/status`)
+        .then(r => r.ok ? r.json() : null)
+        .then(s => {
+          if (!s) return;
+          setTabReady({
+            overview:      s.tabs.overview      === "ready",
+            market:        s.tabs.market        === "ready",
+            ownership:     s.tabs.ownership     === "ready",
+            fundamentals:  s.tabs.fundamentals  === "ready",
+            assessments:   s.tabs.assessments   === "ready",
+            peers:         s.tabs.peers         === "ready",
+            value_drivers: s.tabs.value_drivers === "ready",
+            scoring:       s.tabs.scoring       === "ready",
+            paths:         s.tabs.paths         === "ready",
+            signals:       s.tabs.signals       === "ready",
+          });
+          if (!s.all_ready && attempts < MAX) {
+            statusPollRef.current = window.setTimeout(poll, 4000);
+          }
+        })
+        .catch(() => { /* silent */ });
+    };
+
+    statusPollRef.current = window.setTimeout(poll, 1500); // erster Check nach 1.5s
+    return () => { if (statusPollRef.current) window.clearTimeout(statusPollRef.current); };
+  }, [name, loading]);
 
   // Market-Data Polling: wenn market_data fehlt oder unvollständig →
   // /market-Endpunkt alle 8s pollen (max 5 Versuche) bis status = "ready"
@@ -1112,19 +1158,32 @@ export default function CompanyDetailPage() {
             </div>
           )}
 
-          {/* Tab Nav */}
+          {/* Tab Nav — UX-01: Dot-Indikator wenn Tab pending */}
           <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
-            {TABS.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(i)} style={{
-                padding: "9px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-                border: "none", background: "none", whiteSpace: "nowrap",
-                color: activeTab === i ? C.teal : C.t2,
-                borderBottom: activeTab === i ? `2px solid ${C.teal}` : "2px solid transparent",
-                marginBottom: -1, transition: "all .15s", fontFamily: C.body,
-              }}>
-                {tab}
-              </button>
-            ))}
+            {TABS.map((tab, i) => {
+              const key = TAB_KEYS[i];
+              const isReady = tabReady[key];
+              const isActive = activeTab === i;
+              return (
+                <button key={tab} onClick={() => setActiveTab(i)} style={{
+                  padding: "9px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  border: "none", background: "none", whiteSpace: "nowrap",
+                  color: isActive ? C.teal : C.t2,
+                  borderBottom: isActive ? `2px solid ${C.teal}` : "2px solid transparent",
+                  marginBottom: -1, transition: "all .15s", fontFamily: C.body,
+                  position: "relative", display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  {tab}
+                  {!isReady && (
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                      background: C.amber, opacity: 0.7,
+                      animation: "pulse 2s infinite",
+                    }} />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab 0: Überblick */}
