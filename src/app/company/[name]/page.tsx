@@ -892,7 +892,7 @@ export default function CompanyDetailPage() {
   const buildExportPayload = () => {
     const payload: Record<string, any> = { company: data?.name, exported_at: new Date().toISOString() };
     if (exportTabs.overview && data) payload.overview = {
-      name: data.name, category: data.company_category, industry: data.company_industry,
+      name: data.name, category: data.category, industry: data.industry,
       founding_year: data.founding_year, headquarters: data.headquarters,
       headcount: data.headcount, description: data.description || data.intro,
       tags: data.technology_tags,
@@ -906,8 +906,8 @@ export default function CompanyDetailPage() {
     };
     if (exportTabs.fundamentals) payload.fundamentals = {
       kpi_timeseries: kpiData ?? {},
-      funding_total: data?.funding_total,
-      est_valuation: data?.est_valuation_usd_mn,
+      funding_total: data?.funding_total_usd_mn,
+      funding_rounds: data?.funding_rounds,
     };
     if (exportTabs.assessments && assessmentsData) payload.assessments = assessmentsData;
     if (exportTabs.peers && peersData) payload.peers = peersData;

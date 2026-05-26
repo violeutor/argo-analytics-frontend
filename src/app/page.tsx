@@ -327,7 +327,7 @@ function WatchlistPage({
       const a = document.createElement('a'); a.href = url; a.download = `${slug}.json`; a.click();
       URL.revokeObjectURL(url);
     } else {
-      const headers = ['Name','Industrie','Kategorie','Wertung','Inv.-Pfad','Proxy','IPO-Potenzial','Funding','Letztes Signal'];
+      const headers = ['Name','Sektor','Kategorie','Wertung','Inv.-Pfad','Proxy','IPO-Potenzial','Funding','Letztes Signal'];
       const rows = filtered.map(c => [
         c.name, c.industry ?? '', c.category ?? '', c.rating ?? '',
         c.investment_path ?? '', c.proxy ?? '', c.ipo_potential ?? '',
@@ -365,7 +365,7 @@ function WatchlistPage({
           <option value="C">C · Abwägen</option>
           <option value="D">D · Uninteressant</option>
         </select>
-        <label>Industrie</label>
+        <label>Sektor</label>
         <select value={filterIndustry} onChange={(e) => setFilterIndustry(e.target.value)}>
           <option value="">Alle</option>
           {industries.map((ind) => <option key={ind}>{ind}</option>)}
@@ -398,7 +398,7 @@ function WatchlistPage({
             <thead>
               <tr>
                 <th data-tip="Unternehmensname">Unternehmen</th>
-                <th data-tip="Industriesektor">Industrie</th>
+                <th data-tip="Industriesektor">Sektor</th>
                 <th data-tip="Technologie-Cluster">Kategorie</th>
                 <th data-tip="Gesamtwertung nach Argo Score Engine">Wertung</th>
                 <th data-tip="Empfohlener Investitionsansatz">Inv.-Pfad</th>
