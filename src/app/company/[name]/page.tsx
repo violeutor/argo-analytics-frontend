@@ -893,8 +893,8 @@ export default function CompanyDetailPage() {
     const payload: Record<string, any> = { company: data?.name, exported_at: new Date().toISOString() };
     if (exportTabs.overview && data) payload.overview = {
       name: data.name, category: data.category, industry: data.industry,
-      founding_year: data.founding_year, headquarters: data.headquarters,
-      headcount: data.headcount, description: data.description || data.intro,
+      founding_year: data.founded, headquarters: data.headquarters,
+      headcount: data.employee_count, description: data.description || data.intro,
       tags: data.technology_tags,
       tam_2035_usd_bn: data.market_data?.tam_2035_usd_bn,
       cagr_pct: data.market_data?.cagr_pct,
