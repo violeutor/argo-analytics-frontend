@@ -946,8 +946,7 @@ export default function CompanyDetailPage() {
         Object.entries(s).forEach(([k,v]) => add(`Signal ${i+1}`, k, v)));
       if (payload.ownership?.entries) (payload.ownership.entries as any[]).forEach((e,i) =>
         Object.entries(e).forEach(([k,v]) => add(`Ownership ${i+1}`, k, v)));
-      const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("
-");
+      const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
       const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = `${slug}_argo.csv`; a.click();
