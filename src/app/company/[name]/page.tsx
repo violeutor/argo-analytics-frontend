@@ -720,6 +720,13 @@ export default function CompanyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [starred, setStarred] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"json"|"csv"|"pdf">("json");
+  const [exportTabs, setExportTabs] = useState<Record<string,boolean>>({
+    overview: true, market: true, ownership: true, fundamentals: true,
+    assessments: true, peers: true, value_drivers: true, scoring: true,
+    paths: true, signals: true,
+  });
 
   // UX-01: Tab-Status Tracking — "ready" | "pending"
   const TAB_KEYS = ["overview","market","ownership","fundamentals","assessments","peers","value_drivers","scoring","paths","signals"] as const;
@@ -731,59 +738,72 @@ export default function CompanyDetailPage() {
   });
   const statusPollRef = useRef<number | null>(null);
 
+  // Watchlist
   useEffect(() => {
     if (!name) return;
     const wl: string[] = JSON.parse(localStorage.getItem("argo_watchlist") ?? "[]");
     setStarred(wl.includes(name));
   }, [name]);
 
+  // ── Zentraler Fetch-Orchestrator ─────────────────────────────────────────────
+  // Alle DB-persistierten Daten werden parallel beim Load geholt.
+  // Polling nur für Daten die aktiv berechnet werden (Market Enrichment, Value Drivers).
+  const [ownershipData, setOwnershipData]       = useState<OwnershipData | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const [sigFilter, setSigFilter]               = useState<string>("all");
+  const [signalsData, setSignalsData]           = useState<SignalsData | null>(null);
+  const [signalsLoading, setSignalsLoading]     = useState(false);
+  const [peersData, setPeersData]               = useState<PeersResponse | null>(null);
+  const [peersLoading, setPeersLoading]         = useState(false);
+  const [assessmentsData, setAssessmentsData]   = useState<any | null>(null);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+  const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
+  const [kpiData, setKpiData]                   = useState<Record<string, KpiPoint[]> | null>(null);
+  const [kpiModalMetric, setKpiModalMetric]     = useState<string | null>(null);
+
+  const _f = (path: string) =>
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}${path}`)
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+
   useEffect(() => {
     if (!name) return;
+
+    // 1) Basis-Fetch (blocking — alles andere hängt davon ab)
     fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`)
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then(setData)
+      .then(d => {
+        setData(d);
+
+        // 2) Alle weiteren Endpoints parallel — kein lazy loading mehr
+        setOwnershipLoading(true);
+        setSignalsLoading(true);
+        setPeersLoading(true);
+        setAssessmentsLoading(true);
+
+        Promise.allSettled([
+          _f("/ownership").then(od  => od  && setOwnershipData(od)),
+          _f("/signals").then(sd    => sd  && setSignalsData(sd)),
+          _f("/peers").then(pd      => pd  && setPeersData(pd)),
+          _f("/assessments").then(ad => {
+            if (ad) setAssessmentsData(ad);
+            else setAssessmentsData({ _error: "failed" });
+          }),
+          _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
+          _f("/kpi-timeseries").then(kd => setKpiData(kd?.metrics ?? {})),
+        ]).finally(() => {
+          setOwnershipLoading(false);
+          setSignalsLoading(false);
+          setPeersLoading(false);
+          setAssessmentsLoading(false);
+        });
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [name]);
+  }, [name]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // UX-01: Status-Polling — alle 4s bis all_ready=true (max 20 Versuche ≈ 80s)
-  useEffect(() => {
-    if (!name || loading) return;
-    let attempts = 0;
-    const MAX = 20;
-
-    const poll = () => {
-      if (attempts >= MAX) return;
-      attempts++;
-      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/status`)
-        .then(r => r.ok ? r.json() : null)
-        .then(s => {
-          if (!s) return;
-          setTabReady({
-            overview:      s.tabs.overview      === "ready",
-            market:        s.tabs.market        === "ready",
-            ownership:     s.tabs.ownership     === "ready",
-            fundamentals:  s.tabs.fundamentals  === "ready",
-            assessments:   s.tabs.assessments   === "ready",
-            peers:         s.tabs.peers         === "ready",
-            value_drivers: s.tabs.value_drivers === "ready",
-            scoring:       s.tabs.scoring       === "ready",
-            paths:         s.tabs.paths         === "ready",
-            signals:       s.tabs.signals       === "ready",
-          });
-          if (!s.all_ready && attempts < MAX) {
-            statusPollRef.current = window.setTimeout(poll, 4000);
-          }
-        })
-        .catch(() => { /* silent */ });
-    };
-
-    statusPollRef.current = window.setTimeout(poll, 1500); // erster Check nach 1.5s
-    return () => { if (statusPollRef.current) window.clearTimeout(statusPollRef.current); };
-  }, [name, loading]);
-
-  // Market-Data Polling: wenn market_data fehlt oder unvollständig →
-  // /market-Endpunkt alle 8s pollen (max 5 Versuche) bis status = "ready"
+  // ── Polling: nur für async-berechnete Daten ──────────────────────────────────
+  // Market Enrichment: läuft async im Backend, kann 10–60s dauern
   useEffect(() => {
     if (!name || loading) return;
     const isReady = (md?: MarketData | null) =>
@@ -791,168 +811,295 @@ export default function CompanyDetailPage() {
     if (isReady(data?.market_data)) return;
 
     let attempts = 0;
-    const MAX = 5;
-    const INTERVAL = 8000;
-
+    const MAX = 8;
     const poll = () => {
-      if (attempts >= MAX) return;
-      attempts++;
-      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/market`)
-        .then(r => r.ok ? r.json() : null)
-        .then((md: MarketData | null) => {
-          if (!md) return;
-          setData(prev => prev ? { ...prev, market_data: md } : prev);
-          if (!isReady(md) && attempts < MAX) {
-            timer = window.setTimeout(poll, INTERVAL);
-          }
-        })
-        .catch(() => { /* silent — polling läuft weiter */ });
+      if (attempts++ >= MAX) return;
+      _f("/market").then((md: MarketData | null) => {
+        if (!md) return;
+        setData(prev => prev ? { ...prev, market_data: md } : prev);
+        if (!isReady(md) && attempts < MAX)
+          timer = window.setTimeout(poll, 8000);
+      });
     };
-
-    let timer = window.setTimeout(poll, 3000); // erster Poll nach 3s
+    let timer = window.setTimeout(poll, 4000);
     return () => window.clearTimeout(timer);
-  }, [name, loading, data?.market_data?.sam_usd_bn]);
+  }, [name, loading, data?.market_data?.sam_usd_bn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ownership Polling — analog zu Market
-  const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
-  const [ownershipLoading, setOwnershipLoading] = useState(false);
-  const ownershipFetchedRef = useRef(false);
-
-  useEffect(() => {
-    if (!name || loading) return;
-    const isReady = (od?: OwnershipData | null) =>
-      od?.status === "ready" || od?.status === "manual" || od?.status === "empty";
-    // Nicht neu starten wenn bereits ready oder Fetch läuft
-    if (isReady(ownershipData) || ownershipFetchedRef.current) return;
-
-    ownershipFetchedRef.current = true;
-    setOwnershipLoading(true);
-    let attempts = 0;
-    const MAX = 5;
-    const INTERVAL = 10000;  // 10s statt 8s — weniger Requests
-
-    const poll = () => {
-      if (attempts >= MAX) { setOwnershipLoading(false); return; }
-      attempts++;
-      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/ownership`)
-        .then(r => r.ok ? r.json() : null)
-        .then((od: OwnershipData | null) => {
-          if (!od) return;
-          setOwnershipData(od);
-          if (isReady(od)) {
-            setOwnershipLoading(false);
-          } else if (attempts < MAX) {
-            ownershipTimer = window.setTimeout(poll, INTERVAL);
-          } else {
-            setOwnershipLoading(false);
-          }
-        })
-        .catch(() => { setOwnershipLoading(false); });
-    };
-
-    let ownershipTimer = window.setTimeout(poll, 2000);  // 2s statt 1s — BA-Bridge Zeit lassen
-    return () => window.clearTimeout(ownershipTimer);
-  }, [name, loading]);  // entries.length raus — verhindert Neustart bei Daten-Update
-
-  // Signals — einmaliger Fetch beim ersten Tab-4- oder Tab-9-Besuch
-  const [sigFilter, setSigFilter] = useState<string>("all");
-  const [signalsData, setSignalsData] = useState<SignalsData | null>(null);
-  const [signalsLoading, setSignalsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!name || loading || (activeTab !== 4 && activeTab !== 9)) return;
-    if (signalsData) return; // bereits geladen
-    console.log("[Argo] fetchSignals →", name, "activeTab=", activeTab);
-    setSignalsLoading(true);
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/signals`)
-      .then(r => { console.log("[Argo] signals status=", r.status); return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`); })
-      .then((sd: SignalsData) => { console.log("[Argo] signals count=", sd?.signals?.length); setSignalsData(sd); })
-      .catch((e) => { console.error("[Argo] signals error:", e); })
-      .finally(() => setSignalsLoading(false));
-  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Peers — einmaliger Fetch beim ersten Tab-5-Besuch (Claude generiert on-demand)
-  const [peersData, setPeersData] = useState<PeersResponse | null>(null);
-  const [peersLoading, setPeersLoading] = useState(false);
-
-  useEffect(() => {
-    if (!name || loading || activeTab !== 5) return;
-    if (peersData) return;
-    console.log("[Argo] fetchPeers →", name, "activeTab=", activeTab);
-    setPeersLoading(true);
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/peers`)
-      .then(r => { console.log("[Argo] peers status=", r.status); return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`); })
-      .then((pd: PeersResponse) => { console.log("[Argo] peers count=", pd?.peers?.length); setPeersData(pd); })
-      .catch((e) => { console.error("[Argo] peers error:", e); })
-      .finally(() => setPeersLoading(false));
-  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
-
-  // Assessments — on-demand Claude-Call beim ersten Tab-4-Besuch
-  const [assessmentsData, setAssessmentsData] = useState<any | null>(null);
-  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!name || loading || activeTab !== 4) return;
-    if (assessmentsData) return;
-    console.log("[Argo] fetchAssessments →", name);
-    setAssessmentsLoading(true);
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/assessments`)
-      .then(r => {
-        if (r.status === 503) return { _error: "overloaded" };
-        return r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`);
-      })
-      .then((d: any) => { console.log("[Argo] assessments source=", d?.source ?? d?._error); setAssessmentsData(d); })
-      .catch((e) => { console.error("[Argo] assessments error:", e); setAssessmentsData({ _error: "failed" }); })
-      .finally(() => setAssessmentsLoading(false));
-  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Value Drivers Polling — analog zu Market + Ownership
-  const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
-
+  // Value Drivers: Supply-Chain-Berechnung läuft async
   useEffect(() => {
     if (!name || loading) return;
     if (valueDriversData?.status === "ready" || valueDriversData?.status === "empty") return;
 
     let attempts = 0;
     const MAX = 5;
-
     const poll = () => {
-      if (attempts >= MAX) return;
-      attempts++;
-      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/value-drivers`)
-        .then(r => r.ok ? r.json() : null)
-        .then((vd: ValueDriversData | null) => {
-          if (!vd) return;
-          setValueDriversData(vd);
-          if (vd.status !== "ready" && vd.status !== "empty" && attempts < MAX) {
-            vdTimer = window.setTimeout(poll, 8000);
-          }
-        })
-        .catch(() => {});
+      if (attempts++ >= MAX) return;
+      _f("/value-drivers").then((vd: ValueDriversData | null) => {
+        if (!vd) return;
+        setValueDriversData(vd);
+        if (vd.status !== "ready" && vd.status !== "empty" && attempts < MAX)
+          vdTimer = window.setTimeout(poll, 8000);
+      });
     };
-
-    let vdTimer = window.setTimeout(poll, 2000);
+    let vdTimer = window.setTimeout(poll, 3000);
     return () => window.clearTimeout(vdTimer);
-  }, [name, loading, valueDriversData?.status]);
+  }, [name, loading, valueDriversData?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // KPI Timeseries — einmaliger Fetch beim ersten Tab-3-Besuch
-  const [kpiData, setKpiData]           = useState<Record<string, KpiPoint[]> | null>(null);
-  const [kpiModalMetric, setKpiModalMetric] = useState<string | null>(null);
-
+  // UX-01: Tab-Dots — direkt aus State abgeleitet, kein separater Status-Endpoint nötig
   useEffect(() => {
-    if (!name || loading || activeTab !== 3) return;
-    if (kpiData !== null) return;
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/kpi-timeseries`)
-      .then(r => r.ok ? r.json() : null)
-      .then((d: { metrics?: Record<string, KpiPoint[]> } | null) => {
-        setKpiData(d?.metrics ?? {});
-      })
-      .catch(() => setKpiData({}));
-  }, [name, loading, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+    setTabReady({
+      overview:      !!(data?.description && data?.market_data),
+      market:        !!(data?.market_data?.sam_usd_bn),
+      ownership:     !!(ownershipData && ownershipData.status !== "empty"),
+      fundamentals:  !!(kpiData && Object.keys(kpiData).length > 0),
+      assessments:   !!(assessmentsData && !assessmentsData._error),
+      peers:         !!(peersData?.peers?.length),
+      value_drivers: !!(valueDriversData?.status === "ready"),
+      scoring:       !!(data?.scores),
+      paths:         !!(data?.scores),
+      signals:       !!(signalsData?.signals?.length),
+    });
+  }, [data, ownershipData, signalsData, peersData, assessmentsData, valueDriversData, kpiData]);
+
+  // ── Export-Logik ─────────────────────────────────────────────────────────────
+  const EXPORT_TAB_LABELS: Record<string, string> = {
+    overview:      "Überblick",
+    market:        "Markt",
+    ownership:     "Ownership",
+    fundamentals:  "Fundamentals",
+    assessments:   "Potenziale & Risiken",
+    peers:         "Peer Review",
+    value_drivers: "Value Drivers",
+    scoring:       "Scoring",
+    paths:         "Investitionspfade",
+    signals:       "Signal History",
+  };
+
+  const EXPORT_TAB_FIELDS: Record<string, string> = {
+    overview:      "Name, Kategorie, Sektor, TAM, CAGR, Beschreibung, Tags",
+    market:        "SAM, Wettbewerb, Marktzyklus, Wachstumstreiber",
+    ownership:     "Investoren, Anteile, Funding-Runden",
+    fundamentals:  "KPI-Zeitreihen (Revenue, EBITDA), Valuation",
+    assessments:   "6D Scores, Opportunity & Risk Notes",
+    peers:         "Wettbewerber, Positionierungsnotizen",
+    value_drivers: "Enablers, Contributors, Buyers",
+    scoring:       "Composite Score, Sub-Scores, Rating",
+    paths:         "Investitionspfade, Hero Path, Path Scores",
+    signals:       "Events, Datum, Quelle, Kategorie",
+  };
+
+  const buildExportPayload = () => {
+    const payload: Record<string, any> = { company: data?.name, exported_at: new Date().toISOString() };
+    if (exportTabs.overview && data) payload.overview = {
+      name: data.name, category: data.company_category, industry: data.company_industry,
+      founding_year: data.founding_year, headquarters: data.headquarters,
+      headcount: data.headcount, description: data.description || data.intro,
+      tags: data.technology_tags,
+      tam_2035_usd_bn: data.market_data?.tam_2035_usd_bn,
+      cagr_pct: data.market_data?.cagr_pct,
+    };
+    if (exportTabs.market && data?.market_data) payload.market = data.market_data;
+    if (exportTabs.ownership) payload.ownership = {
+      entries: ownershipData?.entries ?? [],
+      funding_rounds: data?.funding_rounds ?? [],
+    };
+    if (exportTabs.fundamentals) payload.fundamentals = {
+      kpi_timeseries: kpiData ?? {},
+      funding_total: data?.funding_total,
+      est_valuation: data?.est_valuation_usd_mn,
+    };
+    if (exportTabs.assessments && assessmentsData) payload.assessments = assessmentsData;
+    if (exportTabs.peers && peersData) payload.peers = peersData;
+    if (exportTabs.value_drivers && valueDriversData) payload.value_drivers = valueDriversData;
+    if (exportTabs.scoring && data?.scores) payload.scoring = data.scores;
+    if (exportTabs.paths && data?.scores) payload.paths = {
+      hero_path: data.scores.hero_path,
+      hero_path_label: data.scores.hero_path_label,
+      hero_score: data.scores.hero_score,
+    };
+    if (exportTabs.signals && signalsData) payload.signals = signalsData.signals;
+    return payload;
+  };
+
+  const doExport = () => {
+    const payload = buildExportPayload();
+    const slug = (data?.name ?? "export").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+    if (exportFormat === "json") {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `${slug}_argo.json`; a.click();
+      URL.revokeObjectURL(url);
+
+    } else if (exportFormat === "csv") {
+      const rows: string[][] = [["Tab", "Feld", "Wert"]];
+      const add = (tab: string, key: string, val: any) => {
+        if (val == null) return;
+        const v = typeof val === "object" ? JSON.stringify(val) : String(val);
+        rows.push([tab, key, v.replace(/"/g, '""')]);
+      };
+      if (payload.overview) Object.entries(payload.overview).forEach(([k,v]) => add("Überblick", k, v));
+      if (payload.market) Object.entries(payload.market).forEach(([k,v]) => add("Markt", k, v));
+      if (payload.scoring) Object.entries(payload.scoring).forEach(([k,v]) => add("Scoring", k, v));
+      if (payload.signals) (payload.signals as any[]).forEach((s,i) =>
+        Object.entries(s).forEach(([k,v]) => add(`Signal ${i+1}`, k, v)));
+      if (payload.ownership?.entries) (payload.ownership.entries as any[]).forEach((e,i) =>
+        Object.entries(e).forEach(([k,v]) => add(`Ownership ${i+1}`, k, v)));
+      const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("
+");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `${slug}_argo.csv`; a.click();
+      URL.revokeObjectURL(url);
+
+    } else if (exportFormat === "pdf") {
+      // Print-CSS-basiertes PDF — kein externe Library nötig
+      const win = window.open("", "_blank");
+      if (!win) return;
+      win.document.write(`<!DOCTYPE html><html><head>
+        <meta charset="UTF-8"><title>${data?.name} · Argo Analytics</title>
+        <style>
+          body { font-family: -apple-system, sans-serif; font-size: 12px; color: #111; margin: 40px; }
+          h1 { font-size: 20px; margin-bottom: 4px; }
+          h2 { font-size: 14px; margin: 24px 0 8px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; color: #333; }
+          .meta { color: #666; font-size: 11px; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+          td, th { border: 1px solid #e0e0e0; padding: 5px 8px; text-align: left; font-size: 11px; }
+          th { background: #f5f5f5; font-weight: 600; }
+          pre { background: #f8f8f8; padding: 8px; border-radius: 4px; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
+          @media print { body { margin: 20px; } }
+        </style></head><body>`);
+      win.document.write(`<h1>${data?.name}</h1>`);
+      win.document.write(`<div class="meta">Argo Analytics Export · ${new Date().toLocaleDateString("de-DE")} · ${Object.keys(exportTabs).filter(k => exportTabs[k]).map(k => EXPORT_TAB_LABELS[k]).join(", ")}</div>`);
+
+      const renderTable = (obj: Record<string, any>) => {
+        let html = "<table><tr><th>Feld</th><th>Wert</th></tr>";
+        for (const [k,v] of Object.entries(obj)) {
+          if (v == null) continue;
+          const val = typeof v === "object" ? `<pre>${JSON.stringify(v, null, 2)}</pre>` : String(v);
+          html += `<tr><td>${k}</td><td>${val}</td></tr>`;
+        }
+        return html + "</table>";
+      };
+
+      if (payload.overview) { win.document.write(`<h2>Überblick</h2>${renderTable(payload.overview)}`); }
+      if (payload.market)   { win.document.write(`<h2>Markt</h2>${renderTable(payload.market)}`); }
+      if (payload.scoring)  { win.document.write(`<h2>Scoring</h2>${renderTable(payload.scoring)}`); }
+      if (payload.assessments?.dimensions) {
+        win.document.write("<h2>Potenziale & Risiken</h2><table><tr><th>Dimension</th><th>Opportunity</th><th>Risiko</th></tr>");
+        (payload.assessments.dimensions as any[]).forEach((d: any) => {
+          win.document.write(`<tr><td>${d.label ?? d.id}</td><td>${d.opportunity_note ?? "—"}</td><td>${d.risk_note ?? "—"}</td></tr>`);
+        });
+        win.document.write("</table>");
+      }
+      if (payload.signals?.length) {
+        win.document.write("<h2>Signal History</h2><table><tr><th>Datum</th><th>Typ</th><th>Zusammenfassung</th></tr>");
+        (payload.signals as any[]).slice(0, 20).forEach((s: any) => {
+          win.document.write(`<tr><td>${s.event_date ?? "—"}</td><td>${s.event_type ?? "—"}</td><td>${s.summary ?? s.raw_title ?? "—"}</td></tr>`);
+        });
+        win.document.write("</table>");
+      }
+      win.document.write("</body></html>");
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 400);
+    }
+    setShowExport(false);
+  };
+
+  // ── Export Modal ──────────────────────────────────────────────────────────────
+  const ExportModal = showExport ? (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center",
+    }} onClick={() => setShowExport(false)}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+        padding: 28, width: 520, maxHeight: "85vh", overflowY: "auto",
+        display: "flex", flexDirection: "column", gap: 20,
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.t1 }}>Export · {data?.name}</div>
+          <button onClick={() => setShowExport(false)} style={{ background: "none", border: "none", color: C.t3, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Format */}
+        <div>
+          <div style={{ fontSize: 11, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Format</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["json","csv","pdf"] as const).map(f => (
+              <button key={f} onClick={() => setExportFormat(f)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".04em",
+                border: exportFormat === f ? `1px solid ${C.teal}` : `1px solid ${C.border}`,
+                background: exportFormat === f ? C.teal + "18" : "transparent",
+                color: exportFormat === f ? C.teal : C.t2,
+                transition: "all .15s",
+              }}>
+                {f === "json" ? "JSON" : f === "csv" ? "CSV" : "PDF"}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.t3, marginTop: 6 }}>
+            {exportFormat === "json" && "Vollständige Datenstruktur — ideal für Weiterverarbeitung"}
+            {exportFormat === "csv" && "Flache Tabelle — ideal für Excel"}
+            {exportFormat === "pdf" && "Printoptimierter Report — ideal für Präsentationen & Deal Memos"}
+          </div>
+        </div>
+
+        {/* Tab-Selektion */}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Inhalte</div>
+            <button onClick={() => {
+              const allOn = Object.values(exportTabs).every(Boolean);
+              setExportTabs(Object.fromEntries(Object.keys(exportTabs).map(k => [k, !allOn])) as any);
+            }} style={{ background: "none", border: "none", color: C.teal, fontSize: 11, cursor: "pointer", fontFamily: C.body }}>
+              {Object.values(exportTabs).every(Boolean) ? "Alle abwählen" : "Alle auswählen"}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {Object.keys(exportTabs).map(key => (
+              <label key={key} style={{
+                display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px",
+                borderRadius: 6, cursor: "pointer",
+                background: exportTabs[key] ? C.teal + "0A" : "transparent",
+                border: `1px solid ${exportTabs[key] ? C.teal + "30" : "transparent"}`,
+                transition: "all .1s",
+              }}>
+                <input type="checkbox" checked={exportTabs[key]} onChange={e =>
+                  setExportTabs(prev => ({ ...prev, [key]: e.target.checked }))
+                } style={{ marginTop: 2, accentColor: C.teal }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.t1 }}>{EXPORT_TAB_LABELS[key]}</div>
+                  <div style={{ fontSize: 11, color: C.t3, marginTop: 1 }}>{EXPORT_TAB_FIELDS[key]}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Export-Button */}
+        <button onClick={doExport} style={{
+          background: C.teal, border: "none", borderRadius: 8, color: "#000",
+          fontSize: 13, fontWeight: 700, padding: "11px 0", cursor: "pointer",
+          fontFamily: C.body, transition: "opacity .15s",
+          opacity: Object.values(exportTabs).some(Boolean) ? 1 : 0.4,
+        }}
+          disabled={!Object.values(exportTabs).some(Boolean)}
+          onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+        >
+          ↓ {exportFormat.toUpperCase()} exportieren
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 15 }}>
+      {ExportModal}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1036,6 +1183,18 @@ export default function CompanyDetailPage() {
                   title={starred ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"}
                 >
                   {starred ? "★" : "☆"}
+                </button>
+                <button
+                  onClick={() => setShowExport(true)}
+                  style={{ background: "none", border: `1px solid ${C.border}`, cursor: "pointer",
+                    fontSize: 12, color: C.t2, padding: "4px 12px", borderRadius: 6,
+                    transition: "all .15s", fontFamily: C.body, fontWeight: 500,
+                    display: "flex", alignItems: "center", gap: 5 }}
+                  title="Daten exportieren"
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.teal; (e.currentTarget as HTMLButtonElement).style.color = C.teal; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.t2; }}
+                >
+                  ↓ Export
                 </button>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
