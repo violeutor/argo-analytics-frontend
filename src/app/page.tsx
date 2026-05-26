@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -448,7 +448,7 @@ function WatchlistPage({
 
 type NavTab = 'research' | 'watchlist';
 
-export default function Page() {
+function PageContent() {
   const router = useRouter();
   const searchParamsMain = useSearchParams();
   const [navTab, setNavTab] = useState<NavTab>(
@@ -679,5 +679,13 @@ export default function Page() {
         </div>
       )}
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <PageContent />
+    </Suspense>
   );
 }
