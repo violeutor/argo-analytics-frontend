@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -9,9 +9,7 @@ interface Company {
   name: string;
   category: string;
   industry?: string;
-  potential: string;
-  risk: string;
-  ipo_potential: string;
+  ipo_potential?: string;
   ipo_status?: string;
   investment_path: string;
   proxy?: string;
@@ -19,6 +17,9 @@ interface Company {
   funding?: string;
   last_signal?: string;
   source?: string;
+  // Legacy (nicht mehr angezeigt, bleibt für Rückwärtskompatibilität)
+  potential?: string;
+  risk?: string;
 }
 
 interface Buyer {
@@ -213,7 +214,7 @@ function HeroState({
     if (match) {
       handleSelect(match);
     } else {
-      router.push(`/company/${encodeURIComponent(q)}?from=search`);
+      router.push(`/company/${encodeURIComponent(q)}?from=research&back=/?tab=research`);
     }
   };
 
@@ -293,25 +294,53 @@ function WatchlistPage({
   companies: Company[];
   onSelectCompany: (c: Company) => void;
 }) {
-  const [filterPot, setFilterPot] = useState('');
   const [filterPfad, setFilterPfad] = useState('');
   const [filterRate, setFilterRate] = useState('');
   const [filterIndustry, setFilterIndustry] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [search, setSearch] = useState('');
 
-  const industries = Array.from(new Set(companies.map((c) => c.industry).filter(Boolean))) as string[];
+  const industries  = Array.from(new Set(companies.map((c) => c.industry).filter(Boolean))).sort() as string[];
+  const categories  = Array.from(new Set(companies.map((c) => c.category).filter(Boolean))).sort() as string[];
 
   const filtered = companies.filter((c) => {
-    if (filterPot && c.potential !== filterPot) return false;
     if (filterPfad && c.investment_path !== filterPfad) return false;
     if (filterRate && c.rating !== filterRate) return false;
     if (filterIndustry && c.industry !== filterIndustry) return false;
+    if (filterCategory && c.category !== filterCategory) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!c.name.toLowerCase().includes(q) && !c.category.toLowerCase().includes(q) && !(c.proxy ?? '').toLowerCase().includes(q)) return false;
+      if (!c.name.toLowerCase().includes(q) &&
+          !c.category.toLowerCase().includes(q) &&
+          !(c.industry ?? '').toLowerCase().includes(q) &&
+          !(c.proxy ?? '').toLowerCase().includes(q)) return false;
     }
     return true;
   });
+
+  // Export
+  const doExport = (fmt: 'csv' | 'json') => {
+    const slug = `argo_watchlist_${new Date().toISOString().slice(0,10)}`;
+    if (fmt === 'json') {
+      const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${slug}.json`; a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const headers = ['Name','Industrie','Kategorie','Wertung','Inv.-Pfad','Proxy','IPO-Potenzial','Funding','Letztes Signal'];
+      const rows = filtered.map(c => [
+        c.name, c.industry ?? '', c.category ?? '', c.rating ?? '',
+        c.investment_path ?? '', c.proxy ?? '', c.ipo_potential ?? '',
+        c.funding?.split(';')[0]?.trim() ?? '', c.last_signal ?? '',
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('
+');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${slug}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
 
   return (
     <div className="watchlist-wrap">
@@ -323,11 +352,6 @@ function WatchlistPage({
       </div>
 
       <div className="filter-bar">
-        <label>Potenzial</label>
-        <select value={filterPot} onChange={(e) => setFilterPot(e.target.value)}>
-          <option value="">Alle</option>
-          <option>Hoch</option><option>Mittel-hoch</option><option>Mittel</option>
-        </select>
         <label>Pfad</label>
         <select value={filterPfad} onChange={(e) => setFilterPfad(e.target.value)}>
           <option value="">Alle</option>
@@ -347,12 +371,26 @@ function WatchlistPage({
           <option value="">Alle</option>
           {industries.map((ind) => <option key={ind}>{ind}</option>)}
         </select>
+        <label>Kategorie</label>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+          <option value="">Alle</option>
+          {categories.map((cat) => <option key={cat}>{cat}</option>)}
+        </select>
         <input
           type="text"
-          placeholder="Suche Unternehmen, Proxy…"
+          placeholder="Suche…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 160 }}
         />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button onClick={() => doExport('csv')} className="btn-export" title={`${filtered.length} Companies als CSV`}>
+            ↓ CSV
+          </button>
+          <button onClick={() => doExport('json')} className="btn-export" title={`${filtered.length} Companies als JSON`}>
+            ↓ JSON
+          </button>
+        </div>
       </div>
 
       <div className="tbl-wrap">
@@ -361,14 +399,12 @@ function WatchlistPage({
             <thead>
               <tr>
                 <th data-tip="Unternehmensname">Unternehmen</th>
-                <th data-tip="Technologie-Cluster">Kategorie</th>
                 <th data-tip="Industriesektor">Industrie</th>
-                <th data-tip="Eingeschätztes Marktpotenzial">Potenzial</th>
-                <th data-tip="Technologisches und regulatorisches Risiko">Risiko</th>
-                <th data-tip="Wahrscheinlichkeit eines Börsengangs">IPO-Potenzial</th>
+                <th data-tip="Technologie-Cluster">Kategorie</th>
+                <th data-tip="Gesamtwertung nach Argo Score Engine">Wertung</th>
                 <th data-tip="Empfohlener Investitionsansatz">Inv.-Pfad</th>
                 <th data-tip="Börsennotierter Proxy-Titel">Proxy</th>
-                <th data-tip="Gesamtwertung nach SRR × MFR × TechReadiness">Wertung</th>
+                <th data-tip="Wahrscheinlichkeit eines Börsengangs">IPO-Potenzial</th>
                 <th data-tip="Gesamtes Fundraising">Funding</th>
                 <th data-tip="Letztes Signal aus Morning Briefing">L. Signal</th>
               </tr>
@@ -382,14 +418,12 @@ function WatchlistPage({
                   >
                     {c.name}
                   </td>
-                  <td className="td-muted">{c.category}</td>
                   <td className="td-muted">{c.industry ?? '—'}</td>
-                  <td><PotentialBadge val={c.potential} /></td>
-                  <td><Badge color={c.risk === 'Hoch' ? 'red' : 'gray'}>{c.risk}</Badge></td>
-                  <td><IpoBadge val={c.ipo_potential} /></td>
+                  <td className="td-muted">{c.category}</td>
+                  <td><RatingBadge rating={c.rating ?? '—'} /></td>
                   <td><PathBadge path={c.investment_path} /></td>
                   <td className="td-mono">{c.proxy ?? '—'}</td>
-                  <td><RatingBadge rating={c.rating ?? '—'} /></td>
+                  <td><IpoBadge val={c.ipo_potential ?? '—'} /></td>
                   <td className="td-muted" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.funding?.split(';')[0]?.trim() ?? '—'}
                   </td>
@@ -398,7 +432,7 @@ function WatchlistPage({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)', fontSize: 13 }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)', fontSize: 13 }}>
                     Keine Einträge für die gewählten Filter.
                   </td>
                 </tr>
@@ -417,7 +451,10 @@ type NavTab = 'research' | 'watchlist';
 
 export default function Page() {
   const router = useRouter();
-  const [navTab, setNavTab] = useState<NavTab>('research');
+  const searchParamsMain = useSearchParams();
+  const [navTab, setNavTab] = useState<NavTab>(
+    (searchParamsMain?.get("tab") as NavTab) ?? "research"
+  );
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
@@ -425,7 +462,7 @@ export default function Page() {
   }, []);
 
   const handleSelectCompany = useCallback((company: Company) => {
-    router.push(`/company/${encodeURIComponent(company.name)}?from=watchlist`);
+    router.push(`/company/${encodeURIComponent(company.name)}?from=watchlist&back=/`);
   }, [router]);
 
   const handleSelectFromWatchlist = (c: Company) => {
@@ -567,6 +604,8 @@ export default function Page() {
         .verdict-val{font-family:var(--font-d);font-size:14px;font-weight:700}
 
         /* Watchlist */
+        .btn-export{background:none;border:1px solid var(--border);border-radius:5px;color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:all .15s}
+        .btn-export:hover{border-color:var(--teal);color:var(--teal)}
         .watchlist-wrap{padding-top:1.5rem;width:100%}
         .wl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
         .wl-title{font-family:var(--font-d);font-size:16px;font-weight:600;color:var(--t1);display:flex;align-items:center;gap:8px}

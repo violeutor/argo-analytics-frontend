@@ -713,6 +713,7 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromPage = searchParams?.get("from") ?? "watchlist";
+  const backUrl  = searchParams?.get("back") ?? "/";
   const name = decodeURIComponent((params?.name ?? "") as string);
 
   const [data, setData] = useState<CompanyDetail | null>(null);
@@ -1149,8 +1150,8 @@ export default function CompanyDetailPage() {
 
           {/* Back + breadcrumb */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-            <button onClick={() => fromPage === "research" ? router.back() : router.push("/")} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
-              ← Zurück
+            <button onClick={() => router.push(backUrl)} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
+              ← {fromPage === "watchlist" ? "Watchlist" : "Research"}
             </button>
             <span style={{ fontSize: 11, color: C.t3 }}>ANALYSE · {data.name.toUpperCase()}</span>
           </div>
