@@ -713,7 +713,7 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromPage = searchParams?.get("from") ?? "watchlist";
-  const backUrl  = searchParams?.get("back") ?? "/";
+  const backUrl  = fromPage === "watchlist" ? "/?tab=watchlist" : "/?tab=research";
   const name = decodeURIComponent((params?.name ?? "") as string);
 
   const [data, setData] = useState<CompanyDetail | null>(null);
@@ -1147,12 +1147,23 @@ export default function CompanyDetailPage() {
 
         {data && !loading && (<>
 
-          {/* Back + breadcrumb */}
+          {/* Back + breadcrumb + Export */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <button onClick={() => router.push(backUrl)} style={{ background: "none", border: `1px solid ${C.borderMd}`, borderRadius: C.rSm, color: C.t2, fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>
               ← {fromPage === "watchlist" ? "Watchlist" : "Research"}
             </button>
             <span style={{ fontSize: 11, color: C.t3 }}>ANALYSE · {data.name.toUpperCase()}</span>
+            <button
+              onClick={() => setShowExport(true)}
+              style={{ marginLeft: "auto", background: "none", border: `1px solid ${C.border}`,
+                cursor: "pointer", fontSize: 12, color: C.t2, padding: "5px 12px",
+                borderRadius: C.rSm, fontFamily: C.display, fontWeight: 500,
+                display: "flex", alignItems: "center", gap: 5, transition: "all .15s" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.teal; (e.currentTarget as HTMLButtonElement).style.color = C.teal; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.t2; }}
+            >
+              ↓ Export
+            </button>
           </div>
 
           {/* Company Header */}
@@ -1184,18 +1195,7 @@ export default function CompanyDetailPage() {
                 >
                   {starred ? "★" : "☆"}
                 </button>
-                <button
-                  onClick={() => setShowExport(true)}
-                  style={{ background: "none", border: `1px solid ${C.border}`, cursor: "pointer",
-                    fontSize: 12, color: C.t2, padding: "4px 12px", borderRadius: 6,
-                    transition: "all .15s", fontFamily: C.body, fontWeight: 500,
-                    display: "flex", alignItems: "center", gap: 5 }}
-                  title="Daten exportieren"
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.teal; (e.currentTarget as HTMLButtonElement).style.color = C.teal; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.t2; }}
-                >
-                  ↓ Export
-                </button>
+
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {(data.scores?.rating ?? data.scorings[0]?.rating) && (() => {
