@@ -1014,7 +1014,7 @@ export default function CompanyDetailPage() {
       background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center",
     }} onClick={() => setShowExport(false)}>
       <div onClick={e => e.stopPropagation()} style={{
-        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12,
         padding: 28, width: 520, maxHeight: "85vh", overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 20,
       }}>
