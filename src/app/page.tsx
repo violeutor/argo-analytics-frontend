@@ -29,6 +29,17 @@ interface Buyer {
   market_cap?: number;
 }
 
+interface Notification {
+  id: string;
+  company_name: string;
+  event_type: string;
+  raw_title: string;
+  direction: string;   // 'positive' | 'negative' | 'neutral'
+  relevance_score: number;
+  event_date: string;
+  source_url?: string;
+}
+
 
 
 
@@ -56,6 +67,34 @@ async function fetchCompanies(): Promise<Company[]> {
   const res = await fetch(`${BACKEND_PROXY}/api/v1/companies`);
   if (!res.ok) return [];
   return res.json();
+}
+
+async function fetchNotifications(companyNames: string[]): Promise<Notification[]> {
+  if (!companyNames.length) return [];
+  try {
+    const params = new URLSearchParams();
+    companyNames.slice(0, 50).forEach(n => params.append('names', n));
+    params.set('days', '7');
+    params.set('min_score', '0.5');
+    const res = await fetch(`${BACKEND_PROXY}/api/v1/notifications?${params}`);
+    if (!res.ok) return [];
+    return res.json();
+  } catch { return []; }
+}
+
+const NOTIFICATION_LS_KEY = 'argo_notif_seen_v1';
+
+function getSeenIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(NOTIFICATION_LS_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function markSeen(ids: string[]): void {
+  try {
+    const seen = getSeenIds();
+    ids.forEach(id => seen.add(id));
+    localStorage.setItem(NOTIFICATION_LS_KEY, JSON.stringify([...seen]));
+  } catch {}
 }
 
 
@@ -467,10 +506,32 @@ function PageContent() {
     (searchParamsMain?.get("tab") as NavTab) ?? "research"
   );
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
+    setSeenIds(getSeenIds());
   }, []);
+
+  // Notifications nachladen sobald Companies bekannt
+  useEffect(() => {
+    if (!companies.length) return;
+    fetchNotifications(companies.map(c => c.name)).then(setNotifications);
+  }, [companies]);
+
+  const unreadCount = notifications.filter(n => !seenIds.has(n.id)).length;
+
+  const handleOpenNotif = () => {
+    setNotifOpen(o => !o);
+  };
+
+  const handleMarkAllRead = () => {
+    const ids = notifications.map(n => n.id);
+    markSeen(ids);
+    setSeenIds(getSeenIds());
+  };
 
   const handleSelectCompany = useCallback((company: Company) => {
     router.push(`/company/${encodeURIComponent(company.name)}?from=watchlist&back=/`);
@@ -668,9 +729,142 @@ function PageContent() {
             Watchlist
           </button>
         </div>
-        <div className="nav-status">
-          <div className="status-dot" />
-          Live · {companies.length} Companies
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Bell */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={handleOpenNotif}
+              style={{
+                background: notifOpen ? 'var(--bg-hover)' : 'transparent',
+                border: '1px solid ' + (notifOpen ? 'var(--border-md)' : 'transparent'),
+                borderRadius: 8, width: 34, height: 34, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: unreadCount > 0 ? 'var(--t1)' : 'var(--t3)',
+                fontSize: 16, transition: 'all .15s',
+              }}
+              title="Notifications"
+            >
+              🔔
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: 4, right: 4,
+                  background: 'var(--teal)', color: '#181B20',
+                  borderRadius: 99, fontSize: 9, fontWeight: 700,
+                  padding: '1px 4px', lineHeight: 1.4, minWidth: 14,
+                  textAlign: 'center',
+                }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Dropdown Panel */}
+            {notifOpen && (
+              <div style={{
+                position: 'absolute', top: 42, right: 0, width: 360,
+                background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+                borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                zIndex: 200, overflow: 'hidden',
+              }}>
+                {/* Header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)' }}>
+                    Signals · Watchlist
+                  </span>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 11, color: 'var(--teal)', padding: 0,
+                      }}
+                    >
+                      Alle gelesen
+                    </button>
+                  )}
+                </div>
+
+                {/* List */}
+                <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                  {notifications.length === 0 ? (
+                    <div style={{
+                      padding: '2rem', textAlign: 'center',
+                      fontSize: 12, color: 'var(--t3)',
+                    }}>
+                      Keine neuen Signals
+                    </div>
+                  ) : (
+                    notifications.slice(0, 20).map(n => {
+                      const seen   = seenIds.has(n.id);
+                      const dotCol = n.direction === 'positive' ? 'var(--teal)'
+                                   : n.direction === 'negative' ? 'var(--red)'
+                                   : 'var(--t3)';
+                      return (
+                        <div
+                          key={n.id}
+                          onClick={() => { markSeen([n.id]); setSeenIds(getSeenIds()); }}
+                          style={{
+                            padding: '9px 14px',
+                            borderBottom: '1px solid var(--border)',
+                            background: seen ? 'transparent' : 'rgba(0,212,160,0.03)',
+                            cursor: 'default',
+                            display: 'flex', gap: 10, alignItems: 'flex-start',
+                          }}
+                        >
+                          <div style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: dotCol, marginTop: 5, flexShrink: 0,
+                          }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 11, fontWeight: 600, color: 'var(--t2)',
+                              marginBottom: 2,
+                            }}>
+                              {n.company_name}
+                              {!seen && (
+                                <span style={{
+                                  marginLeft: 6, background: 'var(--teal)',
+                                  color: '#181B20', borderRadius: 99,
+                                  fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                                }}>NEU</span>
+                              )}
+                            </div>
+                            <div style={{
+                              fontSize: 12, color: 'var(--t1)',
+                              overflow: 'hidden', textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {n.raw_title}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>
+                              {n.event_date} · {n.event_type.replace(/_/g, ' ')}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {notifications.length > 20 && (
+                  <div style={{
+                    padding: '8px 14px', textAlign: 'center',
+                    fontSize: 11, color: 'var(--t3)', borderTop: '1px solid var(--border)',
+                  }}>
+                    + {notifications.length - 20} weitere · Watchlist öffnen
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="nav-status">
+            <div className="status-dot" />
+            Live · {companies.length} Companies
+          </div>
         </div>
       </nav>
 
