@@ -1807,6 +1807,40 @@ export default function CompanyDetailPage() {
             const cfColor = (v?: number | null) =>
               v == null ? C.t3 : v > 0 ? C.teal : C.red;
 
+            // ── kpi_timeseries helpers ─────────────────────────────────────
+            const kpiLatest = (metric: string): number | null => {
+              const rows = kpiData?.[metric];
+              if (!rows?.length) return null;
+              return [...rows].sort((a, b) => b.fiscal_year - a.fiscal_year)[0].value;
+            };
+            const kpiCurrency = (() => {
+              const first = ["revenue_mn","ebitda_mn","equity_mn"].find(m => kpiData?.[m]?.length);
+              return first ? (kpiData![first][0]?.currency ?? null) : null;
+            })();
+            const kpiCur = kpiCurrency === "USD" ? "$" : kpiCurrency === "EUR" ? "€" : cur;
+            const kpiHasTrend = (m: string) => (kpiData?.[m]?.length ?? 0) >= 2;
+            const kpiTrendBtn = (metric: string) =>
+              kpiHasTrend(metric) ? (
+                <button onClick={() => setKpiModalMetric(metric)} style={{
+                  marginTop: 6, background: "none", border: `1px solid ${C.teal}44`,
+                  borderRadius: 99, color: C.teal, fontSize: 9, padding: "2px 8px",
+                  cursor: "pointer", fontFamily: C.mono, display: "flex",
+                  alignItems: "center", gap: 3, letterSpacing: ".03em",
+                }}>↗ Verlauf</button>
+              ) : null;
+            const kpiSourceBadge = (yahooFilled: boolean) =>
+              !yahooFilled && kpiCurrency != null ? (
+                <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 3 }}>
+                  {kpiCurrency === "USD" ? "SEC EDGAR XBRL" : "Bundesanzeiger"}
+                </div>
+              ) : null;
+            // P/E: Yahoo primary, berechnet aus Market Cap + Net Income (EDGAR) als Fallback
+            const computedPE = f.pe_ratio ??
+              (f.market_cap_bn != null && (kpiLatest("net_income_mn") ?? 0) > 0
+                ? parseFloat(((f.market_cap_bn * 1000) / kpiLatest("net_income_mn")!).toFixed(1))
+                : null);
+            const peIsComputed = computedPE != null && f.pe_ratio == null;
+
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <TabScoreBar
@@ -1825,11 +1859,59 @@ export default function CompanyDetailPage() {
                     <FundTile label="52W Low"  val={f.week_52_low  != null ? `${cur}${f.week_52_low.toFixed(0)}`  : "—"} />
                   </div>
 
-                  {/* Row 2: P&L */}
+                  {/* Row 2: P&L Core — Yahoo primary, kpi_timeseries fallback */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                    <FundTile label="Revenue" val={fmtBn(f.revenue_bn)} sub={f.revenue_growth_pct != null ? `YoY ${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%` : undefined} color={C.t1} />
-                    <FundTile label="EBITDA"  val={fmtBn(f.ebitda_bn)} />
-                    <FundTile label="KGV (P/E)" val={fmt(f.pe_ratio, 1)} />
+                    {/* Revenue */}
+                    {(() => {
+                      const yhFilled = f.revenue_bn != null;
+                      const val = yhFilled
+                        ? fmtBn(f.revenue_bn)
+                        : kpiLatest("revenue_mn") != null
+                          ? `${kpiCur}${kpiLatest("revenue_mn")!.toFixed(1)}M`
+                          : "—";
+                      const sub = f.revenue_growth_pct != null
+                        ? `YoY ${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%`
+                        : undefined;
+                      return (
+                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Revenue</div>
+                          <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{val}</div>
+                          {sub && <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{sub}</div>}
+                          {kpiTrendBtn("revenue_mn")}
+                          {kpiSourceBadge(yhFilled)}
+                        </div>
+                      );
+                    })()}
+                    {/* EBITDA */}
+                    {(() => {
+                      const yhFilled = f.ebitda_bn != null;
+                      const val = yhFilled
+                        ? fmtBn(f.ebitda_bn)
+                        : kpiLatest("ebitda_mn") != null
+                          ? `${kpiCur}${kpiLatest("ebitda_mn")!.toFixed(1)}M`
+                          : "—";
+                      return (
+                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EBITDA</div>
+                          <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{val}</div>
+                          {kpiTrendBtn("ebitda_mn")}
+                          {kpiSourceBadge(yhFilled)}
+                        </div>
+                      );
+                    })()}
+                    {/* KGV (P/E) — Yahoo primary, berechnet aus Market Cap / Net Income als Fallback */}
+                    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>KGV (P/E)</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                        {computedPE != null ? computedPE.toFixed(1) : "—"}
+                      </div>
+                      {peIsComputed && (
+                        <div style={{ fontSize: 9, color: C.amber, fontFamily: C.mono, marginTop: 3 }}>
+                          Berechnet · Mktcap / Net Income
+                        </div>
+                      )}
+                    </div>
+                    {/* Debt/EBITDA */}
                     <FundTile label="Debt/EBITDA" val={f.debt_ebitda ? `${f.debt_ebitda.toFixed(1)}×` : "—"} color={f.debt_ebitda && f.debt_ebitda > 3 ? C.amber : C.t1} />
                   </div>
 
@@ -1856,6 +1938,32 @@ export default function CompanyDetailPage() {
                     </Card>
                   </div>
 
+                  {/* Row 3b: Balance Sheet + Derived (aus kpi_timeseries) */}
+                  {kpiData && (() => {
+                    const BS_METRICS: { label: string; metric: string; fmt: (v: number) => string }[] = [
+                      { label: "Jahresüberschuss", metric: "net_income_mn",   fmt: v => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "Eigenkapital",     metric: "equity_mn",       fmt: v => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "Bilanzsumme",      metric: "total_assets_mn", fmt: v => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "EBITDA-Marge",     metric: "ebitda_margin_pct", fmt: v => `${v.toFixed(1)}%` },
+                      { label: "Eigenkapitalquote",metric: "equity_ratio_pct",  fmt: v => `${v.toFixed(1)}%` },
+                      { label: "Umsatz-CAGR",      metric: "revenue_cagr_pct",  fmt: v => `${v.toFixed(1)}%/J` },
+                    ].filter(({ metric }) => kpiLatest(metric) != null);
+                    if (!BS_METRICS.length) return null;
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                        {BS_METRICS.map(({ label, metric, fmt: fmtFn }) => (
+                          <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                              {fmtFn(kpiLatest(metric)!)}
+                            </div>
+                            {kpiTrendBtn(metric)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {/* Row 4: Multiples */}
                   <Card>
                     <SLabel text="Bewertungs-Multiples" />
@@ -1863,12 +1971,12 @@ export default function CompanyDetailPage() {
                       {[
                         { label: "EV / Revenue", val: fmtX(f.ev_revenue), note: "niedriger = günstiger" },
                         { label: "EV / EBITDA",  val: fmtX(f.ev_ebitda),  note: "Branchenmedian ~10–15×" },
-                        { label: "P/E Ratio",    val: fmt(f.pe_ratio, 1), note: "Kurs / Gewinn je Aktie" },
+                        { label: "P/E Ratio",    val: computedPE != null ? computedPE.toFixed(1) : "—", note: peIsComputed ? "Berechnet · Mktcap / Net Income" : "Kurs / Gewinn je Aktie" },
                       ].map(m => (
                         <div key={m.label} style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
                           <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{m.label}</div>
                           <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: C.t1 }}>{m.val}</div>
-                          <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{m.note}</div>
+                          <div style={{ fontSize: 10, color: peIsComputed && m.label === "P/E Ratio" ? C.amber : C.t3, marginTop: 3 }}>{m.note}</div>
                         </div>
                       ))}
                     </div>
@@ -1905,8 +2013,8 @@ export default function CompanyDetailPage() {
                     )}
                   </Card>
 
-                  {/* EDGAR / BA KPI-Zeitreihen — listed Companies (US: EDGAR XBRL, DE: BA) */}
-                  {kpiData && Object.keys(kpiData).length > 0 && (() => {
+                  {/* KPI-Zeitreihen: integriert in Revenue/EBITDA Cards + Balance Sheet Row oben */}
+                  {false && kpiData && Object.keys(kpiData).length > 0 && (() => {
                     const LISTED_METRICS = [
                       "revenue_mn", "ebitda_mn", "ebit_mn", "net_income_mn",
                       "equity_mn", "total_assets_mn",
