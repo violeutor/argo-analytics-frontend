@@ -93,7 +93,7 @@ function markSeen(ids: string[]): void {
   try {
     const seen = getSeenIds();
     ids.forEach(id => seen.add(id));
-    localStorage.setItem(NOTIFICATION_LS_KEY, JSON.stringify([...seen]));
+    localStorage.setItem(NOTIFICATION_LS_KEY, JSON.stringify(Array.from(seen)));
   } catch {}
 }
 
