@@ -1523,7 +1523,6 @@ export default function CompanyDetailPage() {
             const md = data.market_data;
             const fd = data.fundamentals;
             const isListed = data.ipo_status === "listed";
-            const fd = data.fundamentals;
             const tamBn = md?.tam_2035_usd_bn ?? data.tam_usd_bn ?? null;
             const mktcapVsTam = fd?.market_cap_bn != null && tamBn != null && tamBn > 0
               ? (fd.market_cap_bn / tamBn) : null;
@@ -1538,17 +1537,6 @@ export default function CompanyDetailPage() {
               c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
             const proxyBeta = data.proxy_beta_1y ?? null;
             const proxyBetaBench = data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined;
-
-            // Marktpenetration: Revenue vs SAM
-            const revBn = fd?.revenue_bn ?? null;
-            const samBn = md?.sam_usd_bn ?? null;
-            const penetrationPct = revBn != null && samBn != null && samBn > 0
-              ? Math.min(100, (revBn / samBn) * 100) : null;
-
-            // Marktcap vs TAM ratio
-            const tamBn = md?.tam_2035_usd_bn ?? data.tam_usd_bn ?? null;
-            const mktcapVsTam = fd?.market_cap_bn != null && tamBn != null && tamBn > 0
-              ? (fd.market_cap_bn / tamBn) : null;
 
             if (!md && !isListed) return (
               <Card>
@@ -1566,6 +1554,34 @@ export default function CompanyDetailPage() {
                   score={data.scores?.market_score}
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
+
+                {/* Stale-Data-Banner: erscheint wenn enriched_at fehlt oder pre-2026 */}
+                {(() => {
+                  const eat = md?.enriched_at;
+                  const isStale = !eat || new Date(eat).getFullYear() < 2026;
+                  if (!isStale) return null;
+                  return (
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "8px 14px", borderRadius: C.rMd,
+                      background: C.amberDim, border: `1px solid ${C.amber}33`,
+                      fontSize: 11, color: C.amber,
+                    }}>
+                      <span>⟳ Marktdaten werden im Hintergrund angereichert — bitte in ~15 Sekunden neu laden.</span>
+                      <button
+                        onClick={() => window.location.reload()}
+                        style={{
+                          background: "none", border: `1px solid ${C.amber}55`,
+                          borderRadius: C.rSm, color: C.amber, fontSize: 10,
+                          padding: "3px 10px", cursor: "pointer", fontFamily: C.mono,
+                          flexShrink: 0, marginLeft: 12,
+                        }}
+                      >
+                        Neu laden
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* ── SHARED: TAM · SAM · CAGR · Zyklus · Beta ───────────── */}
                 {md && (
