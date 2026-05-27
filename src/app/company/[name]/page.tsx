@@ -1537,7 +1537,7 @@ export default function CompanyDetailPage() {
             const proxyBetaBench = data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined;
 
             // Marktpenetration: Revenue vs SAM
-            const revBn = fd?.revenue_bn ?? (data.revenue_usd_mn != null ? data.revenue_usd_mn / 1000 : null);
+            const revBn = fd?.revenue_bn ?? null;
             const samBn = md?.sam_usd_bn ?? null;
             const penetrationPct = revBn != null && samBn != null && samBn > 0
               ? Math.min(100, (revBn / samBn) * 100) : null;
