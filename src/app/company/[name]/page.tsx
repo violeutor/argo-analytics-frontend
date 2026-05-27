@@ -1521,6 +1521,10 @@ export default function CompanyDetailPage() {
           {/* Tab 1: Markt */}
           {activeTab === 1 && (() => {
             const md = data.market_data;
+            const fd = data.fundamentals;
+            const isListed = data.ipo_status === "listed";
+            const currency = fd?.currency === "EUR" ? "€" : "$";
+
             const cycleColor = (c?: string) =>
               c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : c === "mature" ? C.purple : C.t2;
             const compColor = (c?: string) =>
@@ -1529,11 +1533,21 @@ export default function CompanyDetailPage() {
               !c || c === "unknown" ? "—" : c.charAt(0).toUpperCase() + c.slice(1);
             const confColor2 = (c?: string) =>
               c === "high" ? C.teal : c === "medium" ? C.amber : C.red;
-            // proxy_beta: aus Haupt-Response, Fallback auf market_data (DQ-04)
             const proxyBeta = data.proxy_beta_1y ?? null;
             const proxyBetaBench = data.proxy_beta_benchmark?.replace("Damodaran · ", "") ?? data.proxy_ticker ?? undefined;
 
-            if (!md) return (
+            // Marktpenetration: Revenue vs SAM
+            const revBn = fd?.revenue_bn ?? (data.revenue_usd_mn != null ? data.revenue_usd_mn / 1000 : null);
+            const samBn = md?.sam_usd_bn ?? null;
+            const penetrationPct = revBn != null && samBn != null && samBn > 0
+              ? Math.min(100, (revBn / samBn) * 100) : null;
+
+            // Marktcap vs TAM ratio
+            const tamBn = md?.tam_2035_usd_bn ?? data.tam_usd_bn ?? null;
+            const mktcapVsTam = fd?.market_cap_bn != null && tamBn != null && tamBn > 0
+              ? (fd.market_cap_bn / tamBn) : null;
+
+            if (!md && !isListed) return (
               <Card>
                 <SLabel text="Marktdaten" />
                 <div style={{ padding: "32px 0", textAlign: "center", color: C.t3, fontFamily: C.mono, fontSize: 12 }}>
@@ -1549,174 +1563,297 @@ export default function CompanyDetailPage() {
                   score={data.scores?.market_score}
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
-                {/* Row 1: TAM · SAM · CAGR · Zyklus · Proxy Beta */}
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${proxyBeta != null ? 5 : 4},1fr)`, gap: 10 }}>
-                  <FundTile
-                    label="TAM 2035"
-                    val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
-                    sub={data.tam_source}
-                    color={confColor(data.tam_confidence)}
-                  />
-                  <FundTile
-                    label="SAM (geschätzt)"
-                    val={md.sam_usd_bn != null ? `$${md.sam_usd_bn.toFixed(0)}B` : "—"}
-                    sub={md.sam_confidence ? `Konfidenz: ${md.sam_confidence}` : undefined}
-                    color={confColor2(md.sam_confidence)}
-                  />
-                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>CAGR</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: md.cagr_pct != null ? C.teal : C.t3, lineHeight: 1 }}>
-                      {md.cagr_pct != null ? `${md.cagr_pct.toFixed(1)}%` : "—"}
-                    </div>
-                    <div style={{ fontSize: 9, color: C.t3, marginTop: 3 }}>p.a. bis 2035</div>
-                    {md.cagr_source && (
-                      <div style={{ fontSize: 9, color: C.t3, marginTop: 4, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 4, lineHeight: 1.4 }}>
-                        {md.cagr_source}
+
+                {/* ── PUBLIC: Marktposition ────────────────────────────────── */}
+                {isListed && (
+                  <Card>
+                    <SLabel text="Marktposition · Listed Company" />
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+
+                      {/* Revenue vs SAM Penetration */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Revenue</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
+                          {revBn != null ? fmtBn(revBn) : "—"}
+                        </div>
+                        {penetrationPct != null && (
+                          <>
+                            <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
+                              {penetrationPct.toFixed(1)}% SAM-Penetration
+                            </div>
+                            <div style={{ height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 99, marginTop: 4 }}>
+                              <div style={{ height: "100%", width: `${penetrationPct}%`, background: C.teal, borderRadius: 99 }} />
+                            </div>
+                          </>
+                        )}
                       </div>
+
+                      {/* Revenue Growth vs CAGR */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Umsatzwachstum</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, lineHeight: 1,
+                          color: fd?.revenue_growth_pct != null
+                            ? fd.revenue_growth_pct > (md?.cagr_pct ?? 0) ? C.teal : C.amber
+                            : C.t3
+                        }}>
+                          {fd?.revenue_growth_pct != null ? `${fd.revenue_growth_pct.toFixed(1)}%` : "—"}
+                        </div>
+                        {md?.cagr_pct != null && (
+                          <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
+                            vs. Markt CAGR {md.cagr_pct.toFixed(1)}%
+                            {fd?.revenue_growth_pct != null && (
+                              <span style={{ marginLeft: 4, color: fd.revenue_growth_pct > md.cagr_pct ? C.teal : C.amber }}>
+                                {fd.revenue_growth_pct > md.cagr_pct ? "▲ über Markt" : "▼ unter Markt"}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Marktcap vs TAM */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Mktcap / TAM</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
+                          {fd?.market_cap_bn != null ? fmtBn(fd.market_cap_bn) : "—"}
+                        </div>
+                        {mktcapVsTam != null && (
+                          <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
+                            {(mktcapVsTam * 100).toFixed(1)}% des TAM 2035
+                          </div>
+                        )}
+                        {fd?.ev_revenue != null && (
+                          <div style={{ fontSize: 9, color: C.t3 }}>EV/Rev {fd.ev_revenue.toFixed(1)}×</div>
+                        )}
+                      </div>
+
+                      {/* 52W Range */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                          Kurs · 52W
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
+                          {fd?.price != null ? `${currency}${fd.price.toFixed(2)}` : "—"}
+                        </div>
+                        {fd?.week_52_low != null && fd?.week_52_high != null && (
+                          <>
+                            <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
+                              {currency}{fd.week_52_low.toFixed(2)} – {currency}{fd.week_52_high.toFixed(2)}
+                            </div>
+                            <div style={{ height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 99, marginTop: 4, position: "relative" }}>
+                              <div style={{
+                                position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 99,
+                                width: fd.price != null
+                                  ? `${Math.min(100, Math.max(0, ((fd.price - fd.week_52_low) / (fd.week_52_high - fd.week_52_low)) * 100))}%`
+                                  : "0%",
+                                background: `linear-gradient(90deg, ${C.teal}55, ${C.teal})`,
+                              }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Source note */}
+                    <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                      Yahoo Finance · Live · Marktdaten on-demand
+                    </div>
+                  </Card>
+                )}
+
+                {/* ── SHARED: TAM · SAM · CAGR · Zyklus · Beta ───────────── */}
+                {md && (
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${proxyBeta != null ? 5 : 4},1fr)`, gap: 10 }}>
+                    <FundTile
+                      label="TAM 2035"
+                      val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
+                      sub={data.tam_source}
+                      color={confColor(data.tam_confidence)}
+                    />
+                    <FundTile
+                      label="SAM (geschätzt)"
+                      val={md.sam_usd_bn != null ? `$${md.sam_usd_bn.toFixed(0)}B` : "—"}
+                      sub={md.sam_confidence ? `Konfidenz: ${md.sam_confidence}` : undefined}
+                      color={confColor2(md.sam_confidence)}
+                    />
+                    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>CAGR</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: md.cagr_pct != null ? C.teal : C.t3, lineHeight: 1 }}>
+                        {md.cagr_pct != null ? `${md.cagr_pct.toFixed(1)}%` : "—"}
+                      </div>
+                      <div style={{ fontSize: 9, color: C.t3, marginTop: 3 }}>p.a. bis 2035</div>
+                      {md.cagr_source && (
+                        <div style={{ fontSize: 9, color: C.t3, marginTop: 4, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 4, lineHeight: 1.4 }}>
+                          {md.cagr_source}
+                        </div>
+                      )}
+                    </div>
+                    <FundTile
+                      label="Marktzyklus"
+                      val={md.market_cycle ? md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1) : "—"}
+                      sub={md.market_cycle_note?.split("—")[0]?.trim()}
+                      color={cycleColor(md.market_cycle)}
+                    />
+                    {proxyBeta != null && (
+                      <FundTile
+                        label={
+                          data.proxy_beta_source === "damodaran" ? "β Damodaran · NYU"
+                          : data.proxy_beta_source === "yahoo"   ? "β Yahoo Finance"
+                          : "β Markt"
+                        }
+                        val={`β ${proxyBeta.toFixed(2)}`}
+                        sub={proxyBetaBench}
+                        color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
+                      />
                     )}
                   </div>
-                  <FundTile
-                    label="Marktzyklus"
-                    val={md.market_cycle ? md.market_cycle.charAt(0).toUpperCase() + md.market_cycle.slice(1) : "—"}
-                    sub={md.market_cycle_note?.split("—")[0]?.trim()}
-                    color={cycleColor(md.market_cycle)}
-                  />
-                  {proxyBeta != null && (
-                    <FundTile
-                      label={
-                        data.proxy_beta_source === "damodaran"
-                          ? "β Damodaran · NYU"
-                          : data.proxy_beta_source === "yahoo"
-                          ? "β Yahoo Finance"
-                          : "β Markt"
-                      }
-                      val={`β ${proxyBeta.toFixed(2)}`}
-                      sub={proxyBetaBench}
-                      color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
-                    />
-                  )}
-                </div>
+                )}
 
-                {/* Row 2: Segmente + Wachstumstreiber */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-
-                  {/* Segmente */}
+                {/* ── PRIVATE: BA-Finanzkennzahlen (wenn vorhanden) ──────── */}
+                {!isListed && fd?.ba_found && (fd.ba_revenue_mn != null || fd.ba_ebitda_mn != null) && (
                   <Card>
-                    <SLabel text="Marktsegmente" />
-                    {md.tam_segments && md.tam_segments.length > 0 ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {md.tam_segments.map((seg, i) => (
-                          <div key={i}>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 12, color: C.t1 }}>{seg.name}</span>
-                              <span style={{ fontSize: 12, fontFamily: C.mono, color: C.teal }}>{seg.share_pct.toFixed(0)}%</span>
-                            </div>
-                            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${seg.share_pct}%`, background: `rgba(0,212,160,${0.3 + (seg.share_pct / 200)})`, borderRadius: 99, transition: "width .4s ease" }} />
-                            </div>
-                            {seg.note && <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{seg.note}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Segmentdaten werden angereichert.</div>
-                    )}
-                  </Card>
-
-                  {/* Wachstumstreiber */}
-                  <Card>
-                    <SLabel text="Wachstumstreiber" />
-                    {md.growth_drivers && md.growth_drivers.length > 0 ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {md.growth_drivers.map((d, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: i < md.growth_drivers!.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                            <div style={{ width: 20, height: 20, borderRadius: 5, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontFamily: C.mono, color: C.teal, fontWeight: 700 }}>
-                              {i + 1}
-                            </div>
-                            <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{d}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>Wachstumstreiber werden angereichert.</div>
-                    )}
-                  </Card>
-                </div>
-
-                {/* Row 3: Marktpositionierung + Wettbewerb */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-
-                  {/* Marktpositionierung aus Peer Review */}
-                  <Card>
-                    <SLabel text="Marktpositionierung" />
-                    {md.competition_note ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
-                          {md.competition_note}
+                    <SLabel text={`Finanzkennzahlen · Bundesanzeiger ${fd.ba_last_report_year ?? ""}`} />
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                      {[
+                        { label: "Umsatz", val: fd.ba_revenue_mn != null ? `€${fd.ba_revenue_mn.toFixed(0)}M` : "—" },
+                        { label: "EBITDA", val: fd.ba_ebitda_mn != null ? `€${fd.ba_ebitda_mn.toFixed(0)}M` : "—" },
+                        { label: "Mitarbeiter", val: fd.ba_employees != null ? fd.ba_employees.toLocaleString("de-DE") : "—" },
+                        { label: "Rechtsform", val: fd.ba_legal_form ?? "—" },
+                      ].map(m => (
+                        <div key={m.label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>{m.label}</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: C.mono, color: C.t1 }}>{m.val}</div>
                         </div>
-                        {md.market_cycle && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Marktzyklus</span>
-                            <span style={{ fontSize: 11, color: C.teal, fontWeight: 600, textTransform: "capitalize" }}>{md.market_cycle}</span>
-                          </div>
-                        )}
-                        {md.market_cycle_note && (
-                          <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5 }}>{md.market_cycle_note}</div>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>
-                        Marktpositionierung wird aus Peer-Daten angereichert.
-                      </div>
-                    )}
-                  </Card>
-
-                  {/* Wettbewerb + SAM-Detail */}
-                  <Card>
-                    <SLabel text="Wettbewerb & SAM" />
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {/* Competition */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Wettbewerb</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: compColor(md.competition_score), fontFamily: C.display }}>
-                            {compDisplay(md.competition_score)}
-                          </span>
-                        </div>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
-                      </div>
-                      {md.competition_note && (
-                        <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
-                      )}
-                      {/* SAM detail */}
-                      {md.sam_note && (
-                        <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
-                          {/* Alte DB-Rows: Gleichungs-Präfix rausfiltern */}
-                          {md.sam_note.replace(/^SAM\s*=\s*[^×]+×[^=]+=\s*\$[\d.]+B\.?\s*/i, "")}
-                        </div>
-                      )}
-                      {(md.sam_geo_factor != null || md.sam_tech_filter != null) && (
-                        <div style={{ display: "flex", gap: 8 }}>
-                          {md.sam_geo_factor != null && (
-                            <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
-                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Geo-Faktor</div>
-                              <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_geo_factor * 100).toFixed(0)}%</div>
-                            </div>
-                          )}
-                          {md.sam_tech_filter != null && (
-                            <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
-                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Tech-Filter</div>
-                              <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_tech_filter * 100).toFixed(0)}%</div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      ))}
                     </div>
+                    {fd.ba_source_url && (
+                      <div style={{ marginTop: 10, fontSize: 9, color: C.t3, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                        Quelle: Bundesanzeiger · {fd.ba_last_report_year ?? "letzter Jahresabschluss"}
+                      </div>
+                    )}
                   </Card>
-                </div>
+                )}
+
+                {/* ── SHARED: Segmente + Wachstumstreiber ─────────────────── */}
+                {md && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Card>
+                      <SLabel text="Marktsegmente" />
+                      {md.tam_segments && md.tam_segments.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {md.tam_segments.map((seg, i) => (
+                            <div key={i}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, color: C.t1 }}>{seg.name}</span>
+                                <span style={{ fontSize: 12, fontFamily: C.mono, color: C.teal }}>{seg.share_pct.toFixed(0)}%</span>
+                              </div>
+                              <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${seg.share_pct}%`, background: `rgba(0,212,160,${0.3 + (seg.share_pct / 200)})`, borderRadius: 99, transition: "width .4s ease" }} />
+                              </div>
+                              {seg.note && <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{seg.note}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>
+                          {isListed
+                            ? "Segmentdaten werden via DDG angereichert — Marktposition oben verfügbar."
+                            : "Segmentdaten werden angereichert."}
+                        </div>
+                      )}
+                    </Card>
+
+                    <Card>
+                      <SLabel text="Wachstumstreiber" />
+                      {md.growth_drivers && md.growth_drivers.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {md.growth_drivers.map((d, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: i < md.growth_drivers!.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                              <div style={{ width: 20, height: 20, borderRadius: 5, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontFamily: C.mono, color: C.teal, fontWeight: 700 }}>
+                                {i + 1}
+                              </div>
+                              <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{d}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>
+                          {isListed
+                            ? "Wachstumstreiber werden via DDG angereichert."
+                            : "Wachstumstreiber werden angereichert — Datenlage abhängig von DDG-Verfügbarkeit."}
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                )}
+
+                {/* ── SHARED: Marktpositionierung + Wettbewerb ─────────────── */}
+                {md && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Card>
+                      <SLabel text="Marktpositionierung" />
+                      {md.competition_note ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>{md.competition_note}</div>
+                          {md.market_cycle && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                              <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Marktzyklus</span>
+                              <span style={{ fontSize: 11, color: cycleColor(md.market_cycle), fontWeight: 600, textTransform: "capitalize" }}>{md.market_cycle}</span>
+                            </div>
+                          )}
+                          {md.market_cycle_note && (
+                            <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5 }}>{md.market_cycle_note}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: C.t3, fontStyle: "italic" }}>
+                          Marktpositionierung wird aus Peer-Daten angereichert.
+                        </div>
+                      )}
+                    </Card>
+
+                    <Card>
+                      <SLabel text="Wettbewerb & SAM" />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+                            <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Wettbewerb</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: compColor(md.competition_score), fontFamily: C.display }}>
+                              {compDisplay(md.competition_score)}
+                            </span>
+                          </div>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
+                        </div>
+                        {md.competition_note && (
+                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
+                        )}
+                        {md.sam_note && (
+                          <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
+                            {md.sam_note.replace(/^SAM\s*=\s*[^×]+×[^=]+=\s*\$[\d.]+B\.?\s*/i, "")}
+                          </div>
+                        )}
+                        {(md.sam_geo_factor != null || md.sam_tech_filter != null) && (
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {md.sam_geo_factor != null && (
+                              <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Geo-Faktor</div>
+                                <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_geo_factor * 100).toFixed(0)}%</div>
+                              </div>
+                            )}
+                            {md.sam_tech_filter != null && (
+                              <div style={{ flex: 1, padding: "6px 10px", borderRadius: C.rSm, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Tech-Filter</div>
+                                <div style={{ fontSize: 13, color: C.t1, fontWeight: 600 }}>{(md.sam_tech_filter * 100).toFixed(0)}%</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  </div>
+                )}
 
                 {/* Enriched-at */}
-                {md.enriched_at && (
+                {md?.enriched_at && (
                   <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textAlign: "right" }}>
                     Marktdaten: {new Date(md.enriched_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
                   </div>
