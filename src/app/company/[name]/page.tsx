@@ -1941,12 +1941,12 @@ export default function CompanyDetailPage() {
                   {/* Row 3b: Balance Sheet + Derived (aus kpi_timeseries) */}
                   {kpiData && (() => {
                     const BS_METRICS: { label: string; metric: string; fmt: (v: number) => string }[] = [
-                      { label: "Jahresüberschuss", metric: "net_income_mn",   fmt: v => `${kpiCur}${v.toFixed(1)}M` },
-                      { label: "Eigenkapital",     metric: "equity_mn",       fmt: v => `${kpiCur}${v.toFixed(1)}M` },
-                      { label: "Bilanzsumme",      metric: "total_assets_mn", fmt: v => `${kpiCur}${v.toFixed(1)}M` },
-                      { label: "EBITDA-Marge",     metric: "ebitda_margin_pct", fmt: v => `${v.toFixed(1)}%` },
-                      { label: "Eigenkapitalquote",metric: "equity_ratio_pct",  fmt: v => `${v.toFixed(1)}%` },
-                      { label: "Umsatz-CAGR",      metric: "revenue_cagr_pct",  fmt: v => `${v.toFixed(1)}%/J` },
+                      { label: "Jahresüberschuss", metric: "net_income_mn",    fmt: (v: number) => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "Eigenkapital",     metric: "equity_mn",        fmt: (v: number) => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "Bilanzsumme",      metric: "total_assets_mn",  fmt: (v: number) => `${kpiCur}${v.toFixed(1)}M` },
+                      { label: "EBITDA-Marge",     metric: "ebitda_margin_pct",fmt: (v: number) => `${v.toFixed(1)}%` },
+                      { label: "Eigenkapitalquote",metric: "equity_ratio_pct", fmt: (v: number) => `${v.toFixed(1)}%` },
+                      { label: "Umsatz-CAGR",      metric: "revenue_cagr_pct", fmt: (v: number) => `${v.toFixed(1)}%/J` },
                     ].filter(({ metric }) => kpiLatest(metric) != null);
                     if (!BS_METRICS.length) return null;
                     return (
