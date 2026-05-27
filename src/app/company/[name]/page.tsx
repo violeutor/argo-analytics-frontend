@@ -1523,7 +1523,10 @@ export default function CompanyDetailPage() {
             const md = data.market_data;
             const fd = data.fundamentals;
             const isListed = data.ipo_status === "listed";
-            const currency = fd?.currency === "EUR" ? "€" : "$";
+            const fd = data.fundamentals;
+            const tamBn = md?.tam_2035_usd_bn ?? data.tam_usd_bn ?? null;
+            const mktcapVsTam = fd?.market_cap_bn != null && tamBn != null && tamBn > 0
+              ? (fd.market_cap_bn / tamBn) : null;
 
             const cycleColor = (c?: string) =>
               c === "growth" ? C.teal : c === "early" ? C.blue : c === "consolidation" ? C.amber : c === "mature" ? C.purple : C.t2;
@@ -1564,105 +1567,9 @@ export default function CompanyDetailPage() {
                   tooltip="TAM-Größe · CAGR · Wettbewerbsintensität · Marktzyklus. Je höher, desto attraktiver das Marktumfeld für diesen Sektor."
                 />
 
-                {/* ── PUBLIC: Marktposition ────────────────────────────────── */}
-                {isListed && (
-                  <Card>
-                    <SLabel text="Marktposition · Listed Company" />
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-
-                      {/* Revenue vs SAM Penetration */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Revenue</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
-                          {revBn != null ? fmtBn(revBn) : "—"}
-                        </div>
-                        {penetrationPct != null && (
-                          <>
-                            <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
-                              {penetrationPct.toFixed(1)}% SAM-Penetration
-                            </div>
-                            <div style={{ height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 99, marginTop: 4 }}>
-                              <div style={{ height: "100%", width: `${penetrationPct}%`, background: C.teal, borderRadius: 99 }} />
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Revenue Growth vs CAGR */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Umsatzwachstum</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, lineHeight: 1,
-                          color: fd?.revenue_growth_pct != null
-                            ? fd.revenue_growth_pct > (md?.cagr_pct ?? 0) ? C.teal : C.amber
-                            : C.t3
-                        }}>
-                          {fd?.revenue_growth_pct != null ? `${fd.revenue_growth_pct.toFixed(1)}%` : "—"}
-                        </div>
-                        {md?.cagr_pct != null && (
-                          <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
-                            vs. Markt CAGR {md.cagr_pct.toFixed(1)}%
-                            {fd?.revenue_growth_pct != null && (
-                              <span style={{ marginLeft: 4, color: fd.revenue_growth_pct > md.cagr_pct ? C.teal : C.amber }}>
-                                {fd.revenue_growth_pct > md.cagr_pct ? "▲ über Markt" : "▼ unter Markt"}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Marktcap vs TAM */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>Mktcap / TAM</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
-                          {fd?.market_cap_bn != null ? fmtBn(fd.market_cap_bn) : "—"}
-                        </div>
-                        {mktcapVsTam != null && (
-                          <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
-                            {(mktcapVsTam * 100).toFixed(1)}% des TAM 2035
-                          </div>
-                        )}
-                        {fd?.ev_revenue != null && (
-                          <div style={{ fontSize: 9, color: C.t3 }}>EV/Rev {fd.ev_revenue.toFixed(1)}×</div>
-                        )}
-                      </div>
-
-                      {/* 52W Range */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".06em" }}>
-                          Kurs · 52W
-                        </div>
-                        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: C.mono, color: C.t1, lineHeight: 1 }}>
-                          {fd?.price != null ? `${currency}${fd.price.toFixed(2)}` : "—"}
-                        </div>
-                        {fd?.week_52_low != null && fd?.week_52_high != null && (
-                          <>
-                            <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
-                              {currency}{fd.week_52_low.toFixed(2)} – {currency}{fd.week_52_high.toFixed(2)}
-                            </div>
-                            <div style={{ height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 99, marginTop: 4, position: "relative" }}>
-                              <div style={{
-                                position: "absolute", left: 0, top: 0, height: "100%", borderRadius: 99,
-                                width: fd.price != null
-                                  ? `${Math.min(100, Math.max(0, ((fd.price - fd.week_52_low) / (fd.week_52_high - fd.week_52_low)) * 100))}%`
-                                  : "0%",
-                                background: `linear-gradient(90deg, ${C.teal}55, ${C.teal})`,
-                              }} />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Source note */}
-                    <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
-                      Yahoo Finance · Live · Marktdaten on-demand
-                    </div>
-                  </Card>
-                )}
-
                 {/* ── SHARED: TAM · SAM · CAGR · Zyklus · Beta ───────────── */}
                 {md && (
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${proxyBeta != null ? 5 : 4},1fr)`, gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${[proxyBeta != null, isListed && mktcapVsTam != null].filter(Boolean).length + 4},1fr)`, gap: 10 }}>
                     <FundTile
                       label="TAM 2035"
                       val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
@@ -1703,6 +1610,14 @@ export default function CompanyDetailPage() {
                         val={`β ${proxyBeta.toFixed(2)}`}
                         sub={proxyBetaBench}
                         color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
+                      />
+                    )}
+                    {isListed && mktcapVsTam != null && (
+                      <FundTile
+                        label="Mktcap / TAM"
+                        val={fd?.market_cap_bn != null ? fmtBn(fd.market_cap_bn) : "—"}
+                        sub={`${(mktcapVsTam * 100).toFixed(1)}% des TAM 2035`}
+                        color={C.t1}
                       />
                     )}
                   </div>
