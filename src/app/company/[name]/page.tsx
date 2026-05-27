@@ -101,6 +101,9 @@ interface PeerCompany {
   investment_path?: string; revenue_usd_mn?: number; description?: string;
   website?: string; ticker?: string; exchange?: string; stage_normalized?: string;
   positioning_note?: string;   // R-10: Claude-generiert, relativ zu Subject Company
+  // Argo Scores
+  composite_score?: number; rating?: string;
+  financial_score?: number; market_score?: number;
 }
 interface PeerBenchmark {
   metric: string; company_value?: string; peer_median?: string;
@@ -704,6 +707,87 @@ function TabScoreBar({ label, score, tooltip }: { label: string; score?: number;
   );
 }
 
+
+// ── PeerScoreModal ────────────────────────────────────────────────────────────
+
+function PeerScoreModal({ peer, onClose }: { peer: PeerCompany; onClose: () => void }) {
+  const rc = peer.rating ? ratingColor(peer.rating) : C.t3;
+  const rows: { label: string; value: string | null; note?: string }[] = [
+    { label: "Composite Score", value: peer.composite_score != null ? peer.composite_score.toFixed(1) : null, note: "SC-01–SC-13 gewichtet" },
+    { label: "Financial Score",  value: peer.financial_score  != null ? peer.financial_score.toFixed(1)  : null, note: "Revenue · Marge · Stage · CAGR" },
+    { label: "Market Score",     value: peer.market_score     != null ? peer.market_score.toFixed(1)     : null, note: "TAM · CAGR · Wettbewerb" },
+    { label: "Strategic Score",  value: null, note: "Vollanalyse via Peer analysieren →" },
+    { label: "Risk Score",       value: null, note: "Vollanalyse via Peer analysieren →" },
+    { label: "DCF-Modell",       value: null, note: "Phase 3 — in Planung" },
+  ];
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.65)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.bgCard, border: `1px solid ${C.borderMd}`,
+          borderRadius: C.rLg, padding: "24px 28px", width: "100%", maxWidth: 400,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginBottom: 4 }}>{peer.name}</div>
+            {peer.rating && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 99,
+                color: rc, background: rc + "18", border: `1px solid ${rc}33`,
+                fontFamily: C.mono,
+              }}>
+                {peer.rating} · {peer.rating === "A" ? "No-Brainer" : peer.rating === "B" ? "Solide" : peer.rating === "C" ? "Abwägen" : "Uninteressant"}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", color: C.t3, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 2 }}
+          >✕</button>
+        </div>
+
+        {/* Score Rows */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 18 }}>
+          {rows.map((r, i) => (
+            <div key={i} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              padding: "9px 0",
+              borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : "none",
+            }}>
+              <div>
+                <div style={{ fontSize: 12, color: C.t1 }}>{r.label}</div>
+                {r.note && <div style={{ fontSize: 10, color: C.t3, marginTop: 1, fontFamily: C.mono }}>{r.note}</div>}
+              </div>
+              <span style={{
+                fontSize: 13, fontFamily: C.mono, fontWeight: 600,
+                color: r.value ? C.teal : C.t3,
+              }}>
+                {r.value ?? "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer Note */}
+        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textAlign: "center", borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+          Scores algorithmisch · SC-01–SC-13 · Keine Anlageberatung
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
@@ -757,6 +841,7 @@ export default function CompanyDetailPage() {
   const [signalsLoading, setSignalsLoading]     = useState(false);
   const [peersData, setPeersData]               = useState<PeersResponse | null>(null);
   const [peersLoading, setPeersLoading]         = useState(false);
+  const [peerScoreModal, setPeerScoreModal]     = useState<PeerCompany | null>(null);
   const [assessmentsData, setAssessmentsData]   = useState<any | null>(null);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
   const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
@@ -2591,7 +2676,7 @@ export default function CompanyDetailPage() {
                             padding: "16px 20px",
                             borderBottom: idx < peers.length - 1 ? `1px solid ${C.border}` : "none",
                           }}>
-                            {/* Row 1: Name + Ticker + Funding */}
+                            {/* Row 1: Name + Ticker + Funding + Score */}
                             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
                               <div>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -2636,8 +2721,9 @@ export default function CompanyDetailPage() {
                                   )}
                                 </div>
                               </div>
-                              {/* Funding + Headcount */}
-                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              {/* Funding + Score + Buttons */}
+                              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                                {/* Funding */}
                                 <div style={{ fontSize: 13, color: C.teal, fontFamily: C.mono, fontWeight: 600 }}>
                                   {p.funding_total_usd_mn
                                     ? p.funding_total_usd_mn >= 1000
@@ -2646,10 +2732,50 @@ export default function CompanyDetailPage() {
                                     : "—"}
                                 </div>
                                 {p.headcount && (
-                                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
+                                  <div style={{ fontSize: 10, color: C.t3 }}>
                                     {p.headcount.toLocaleString("de-DE")} MA
                                   </div>
                                 )}
+                                {/* Rating + Score inline — klickbar → Modal */}
+                                {(p.rating || p.composite_score != null) && (
+                                  <button
+                                    onClick={() => setPeerScoreModal(p)}
+                                    style={{
+                                      display: "flex", alignItems: "center", gap: 5,
+                                      background: "none", border: `1px solid ${C.border}`,
+                                      borderRadius: 6, padding: "3px 8px", cursor: "pointer",
+                                      transition: "border-color .15s",
+                                    }}
+                                    title="Score-Detail anzeigen"
+                                  >
+                                    {p.rating && (
+                                      <span style={{
+                                        fontSize: 10, fontWeight: 700, fontFamily: C.mono,
+                                        color: ratingColor(p.rating),
+                                      }}>
+                                        {p.rating}
+                                      </span>
+                                    )}
+                                    {p.composite_score != null && (
+                                      <span style={{ fontSize: 10, color: C.t2, fontFamily: C.mono }}>
+                                        {p.composite_score.toFixed(1)}
+                                      </span>
+                                    )}
+                                    <span style={{ fontSize: 9, color: C.t3 }}>ⓘ</span>
+                                  </button>
+                                )}
+                                {/* Analysieren → */}
+                                <button
+                                  onClick={() => router.push(`/company/${encodeURIComponent(p.name)}`)}
+                                  style={{
+                                    fontSize: 10, color: C.teal, fontFamily: C.mono,
+                                    background: "none", border: `1px solid ${C.tealBorder}`,
+                                    borderRadius: 6, padding: "3px 8px", cursor: "pointer",
+                                    transition: "background .15s",
+                                  }}
+                                >
+                                  Analysieren →
+                                </button>
                               </div>
                             </div>
 
@@ -2706,27 +2832,41 @@ export default function CompanyDetailPage() {
                               </div>
                             ))}
                           </div>
-                          {benchmark.map((b, i) => (
-                            <div key={i} style={{
-                              display: "grid", gridTemplateColumns: "1fr 110px 110px",
-                              gap: 8, padding: "8px 0",
-                              borderBottom: i < benchmark.length - 1 ? `1px solid ${C.border}` : "none",
-                              alignItems: "center",
-                            }}>
-                              <div>
-                                <div style={{ fontSize: 11, color: C.t1 }}>{b.metric}</div>
-                                {b.note && <div style={{ fontSize: 9, color: C.t3, marginTop: 1 }}>{b.note}</div>}
+                          {benchmark.map((b, i) => {
+                            // Farbcodierung: company_value vs peer_median numerisch vergleichen
+                            const cv = parseFloat((b.company_value ?? "").replace(/[^0-9.]/g, ""));
+                            const pv = parseFloat((b.peer_median ?? "").replace(/[^0-9.]/g, ""));
+                            const hasNum = !isNaN(cv) && !isNaN(pv) && pv > 0;
+                            const valColor = hasNum
+                              ? cv >= pv ? C.teal : C.amber
+                              : C.teal;
+                            return (
+                              <div key={i} style={{
+                                display: "grid", gridTemplateColumns: "1fr 110px 110px",
+                                gap: 8, padding: "8px 0",
+                                borderBottom: i < benchmark.length - 1 ? `1px solid ${C.border}` : "none",
+                                alignItems: "center",
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: 11, color: C.t1 }}>{b.metric}</div>
+                                  {b.note && <div style={{ fontSize: 9, color: C.t3, marginTop: 1 }}>{b.note}</div>}
+                                </div>
+                                <div style={{ fontSize: 12, color: b.company_value ? valColor : C.t3, fontFamily: C.mono, fontWeight: 600 }}>
+                                  {b.company_value ?? "—"}
+                                </div>
+                                <div style={{ fontSize: 12, color: C.t2, fontFamily: C.mono }}>
+                                  {b.peer_median ?? "—"}
+                                </div>
                               </div>
-                              <div style={{ fontSize: 12, color: C.teal, fontFamily: C.mono }}>
-                                {b.company_value ?? "—"}
-                              </div>
-                              <div style={{ fontSize: 12, color: C.t2, fontFamily: C.mono }}>
-                                {b.peer_median ?? "—"}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </Card>
+                    )}
+
+                    {/* PeerScore Modal */}
+                    {peerScoreModal && (
+                      <PeerScoreModal peer={peerScoreModal} onClose={() => setPeerScoreModal(null)} />
                     )}
 
                     {/* Block 3: Comparable Transactions Placeholder */}
