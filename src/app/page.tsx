@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -515,16 +515,55 @@ function PageContent() {
     setSeenIds(getSeenIds());
   }, []);
 
-  // Notifications nachladen sobald Companies bekannt
+  // ── Notification Refresh-Logik ───────────────────────────────────────────────
+  // Strategie: visibilitychange (min 15min Cooldown) + 30min Interval
+  const notifLastFetch = useRef<number>(0);
+  const NOTIF_COOLDOWN = 15 * 60 * 1000;   // 15 Minuten
+  const NOTIF_INTERVAL = 30 * 60 * 1000;   // 30 Minuten
+
+  const refreshNotifications = useCallback((names: string[]) => {
+    if (!names.length) return;
+    const now = Date.now();
+    if (now - notifLastFetch.current < NOTIF_COOLDOWN) return;
+    notifLastFetch.current = now;
+    fetchNotifications(names).then(setNotifications);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialer Load sobald Companies bekannt
   useEffect(() => {
     if (!companies.length) return;
-    fetchNotifications(companies.map(c => c.name)).then(setNotifications);
-  }, [companies]);
+    const names = companies.map(c => c.name);
+    notifLastFetch.current = 0;   // erstes Laden immer
+    refreshNotifications(names);
+  }, [companies]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // visibilitychange — Refresh wenn Tab wieder aktiv wird
+  useEffect(() => {
+    if (!companies.length) return;
+    const names = companies.map(c => c.name);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshNotifications(names);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [companies, refreshNotifications]);
+
+  // 30-Minuten-Interval als Backstop
+  useEffect(() => {
+    if (!companies.length) return;
+    const names = companies.map(c => c.name);
+    const id = window.setInterval(() => refreshNotifications(names), NOTIF_INTERVAL);
+    return () => window.clearInterval(id);
+  }, [companies, refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unreadCount = notifications.filter(n => !seenIds.has(n.id)).length;
 
-  const handleOpenNotif = () => {
-    setNotifOpen(o => !o);
+  const handleOpenNotif = () => setNotifOpen(o => !o);
+
+  const handleRefreshNotif = () => {
+    if (!companies.length) return;
+    notifLastFetch.current = 0;   // Cooldown überspringen
+    refreshNotifications(companies.map(c => c.name));
   };
 
   const handleMarkAllRead = () => {
@@ -774,17 +813,29 @@ function PageContent() {
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)' }}>
                     Signals · Watchlist
                   </span>
-                  {unreadCount > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button
-                      onClick={handleMarkAllRead}
+                      onClick={handleRefreshNotif}
+                      title="Jetzt aktualisieren"
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 11, color: 'var(--teal)', padding: 0,
+                        fontSize: 13, color: 'var(--t3)', padding: 0, lineHeight: 1,
                       }}
                     >
-                      Alle gelesen
+                      ⟳
                     </button>
-                  )}
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          fontSize: 11, color: 'var(--teal)', padding: 0,
+                        }}
+                      >
+                        Alle gelesen
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* List */}

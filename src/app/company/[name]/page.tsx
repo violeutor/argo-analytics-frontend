@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -767,6 +767,41 @@ export default function CompanyDetailPage() {
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
 
+  // ── Signal Refresh-Logik ──────────────────────────────────────────────────────
+  // visibilitychange (min 15min Cooldown) + 30min Interval + manueller Trigger
+  const signalLastFetch = useRef<number>(0);
+  const [signalRefreshing, setSignalRefreshing] = useState(false);
+  const SIGNAL_COOLDOWN = 15 * 60 * 1000;
+  const SIGNAL_INTERVAL = 30 * 60 * 1000;
+
+  const refreshSignals = useCallback((force = false) => {
+    if (!name) return;
+    const now = Date.now();
+    if (!force && now - signalLastFetch.current < SIGNAL_COOLDOWN) return;
+    signalLastFetch.current = now;
+    setSignalRefreshing(true);
+    _f("/signals")
+      .then(sd => { if (sd) setSignalsData(sd); })
+      .finally(() => setSignalRefreshing(false));
+  }, [name]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // visibilitychange
+  useEffect(() => {
+    if (!name || loading) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshSignals();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [name, loading, refreshSignals]);
+
+  // 30-Minuten-Interval
+  useEffect(() => {
+    if (!name || loading) return;
+    const id = window.setInterval(() => refreshSignals(), SIGNAL_INTERVAL);
+    return () => window.clearInterval(id);
+  }, [name, loading, refreshSignals]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!name) return;
 
@@ -1107,6 +1142,7 @@ export default function CompanyDetailPage() {
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         button { font-family: inherit; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
       {/* Nav */}
@@ -3706,7 +3742,26 @@ export default function CompanyDetailPage() {
 
                 {/* Signal-Timeline */}
                 <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rLg, padding: "18px 20px" }}>
-                  <SLabel text={`Signal History · ${filtered.length} Events`} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <SLabel text={`Signal History · ${filtered.length} Events`} />
+                    <button
+                      onClick={() => refreshSignals(true)}
+                      title="Signals aktualisieren"
+                      style={{
+                        background: 'none', border: `1px solid ${C.border}`,
+                        borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+                        fontSize: 12, color: signalRefreshing ? C.teal : C.t3,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        transition: 'color .15s',
+                      }}
+                    >
+                      <span style={{
+                        display: 'inline-block',
+                        animation: signalRefreshing ? 'spin 1s linear infinite' : 'none',
+                      }}>⟳</span>
+                      {signalRefreshing ? 'Aktualisiere…' : 'Refresh'}
+                    </button>
+                  </div>
 
                   {signalsLoading && (
                     <div style={{ padding: "24px 0", textAlign: "center", color: C.t3, fontSize: 12, fontFamily: C.mono }}>
