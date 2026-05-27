@@ -298,6 +298,7 @@ function WatchlistPage({
   const [filterRate, setFilterRate] = useState('');
   const [filterIndustry, setFilterIndustry] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterIpoStatus, setFilterIpoStatus] = useState('');
   const [search, setSearch] = useState('');
 
   const industries  = Array.from(new Set(companies.map((c) => c.industry).filter(Boolean))).sort() as string[];
@@ -308,6 +309,11 @@ function WatchlistPage({
     if (filterRate && c.rating !== filterRate) return false;
     if (filterIndustry && c.industry !== filterIndustry) return false;
     if (filterCategory && c.category !== filterCategory) return false;
+    if (filterIpoStatus) {
+      const status = (c.ipo_status ?? '').toLowerCase();
+      if (filterIpoStatus === 'listed' && status !== 'listed') return false;
+      if (filterIpoStatus === 'private' && status === 'listed') return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       if (!c.name.toLowerCase().includes(q) &&
@@ -351,6 +357,22 @@ function WatchlistPage({
       </div>
 
       <div className="filter-bar">
+        <label>Sektor</label>
+        <select value={filterIndustry} onChange={(e) => setFilterIndustry(e.target.value)}>
+          <option value="">Alle</option>
+          {industries.map((ind) => <option key={ind}>{ind}</option>)}
+        </select>
+        <label>Kategorie</label>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+          <option value="">Alle</option>
+          {categories.map((cat) => <option key={cat}>{cat}</option>)}
+        </select>
+        <label>Status</label>
+        <select value={filterIpoStatus} onChange={(e) => setFilterIpoStatus(e.target.value)}>
+          <option value="">Alle</option>
+          <option value="listed">Public</option>
+          <option value="private">Private</option>
+        </select>
         <label>Pfad</label>
         <select value={filterPfad} onChange={(e) => setFilterPfad(e.target.value)}>
           <option value="">Alle</option>
@@ -364,16 +386,6 @@ function WatchlistPage({
           <option value="B">B · Solide</option>
           <option value="C">C · Abwägen</option>
           <option value="D">D · Uninteressant</option>
-        </select>
-        <label>Sektor</label>
-        <select value={filterIndustry} onChange={(e) => setFilterIndustry(e.target.value)}>
-          <option value="">Alle</option>
-          {industries.map((ind) => <option key={ind}>{ind}</option>)}
-        </select>
-        <label>Kategorie</label>
-        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-          <option value="">Alle</option>
-          {categories.map((cat) => <option key={cat}>{cat}</option>)}
         </select>
         <input
           type="text"
