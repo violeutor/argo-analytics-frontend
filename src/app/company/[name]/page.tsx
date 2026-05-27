@@ -306,8 +306,8 @@ function BetaBadge({ fd }: { fd: FundamentalsData }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             {[
               { k: "Benchmark", v: fd.beta_benchmark ?? "—" },
-              { k: "Quelle", v: isDamodaran ? "Damodaran (Branchen-Beta)" : "yfinance" },
-              { k: "Berechnung", v: isDamodaran ? "Unlevered Beta (NYU)" : "252 Handelstage" },
+              { k: "Quelle", v: isDamodaran ? "Damodaran · NYU Stern" : fd.beta_source === "yahoo" ? "Yahoo Finance" : "yfinance · BA-Bridge" },
+              { k: "Berechnung", v: isDamodaran ? "Unlevered Beta nach Sektor (NYU)" : fd.beta_source === "yahoo" ? "Trailing 12M vs. S&P 500" : "252 Handelstage vs. Benchmark" },
               ...(fd.beta_3y != null ? [{ k: "Beta 3Y", v: fd.beta_3y.toFixed(3) }] : []),
               ...(fd.volatility_30d != null ? [{ k: "Volatilität 30d", v: `${(fd.volatility_30d * 100).toFixed(1)}%` }] : []),
             ].map(row => (
@@ -1498,7 +1498,13 @@ export default function CompanyDetailPage() {
                   />
                   {proxyBeta != null && (
                     <FundTile
-                      label="Market Beta ⓘ"
+                      label={
+                        data.proxy_beta_source === "damodaran"
+                          ? "β Damodaran · NYU"
+                          : data.proxy_beta_source === "yahoo"
+                          ? "β Yahoo Finance"
+                          : "β Markt"
+                      }
                       val={`β ${proxyBeta.toFixed(2)}`}
                       sub={proxyBetaBench}
                       color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
