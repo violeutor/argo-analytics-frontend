@@ -129,7 +129,7 @@ interface FundamentalsData {
   ev_revenue?: number; ev_ebitda?: number; enterprise_value_bn?: number;
   // BA-Bridge (private DE)
   ba_found?: boolean; ba_revenue_mn?: number; ba_ebitda_mn?: number;
-  ba_ebit_eur_mn?: number; ba_net_income_eur_mn?: number;
+  ba_ebit_mn?: number; ba_net_income_mn?: number;
   ba_equity_mn?: number; ba_total_assets_mn?: number; ba_employees?: number;
   ba_legal_form?: string; ba_registered_at?: string;
   ba_last_report_year?: string; ba_source_url?: string;
