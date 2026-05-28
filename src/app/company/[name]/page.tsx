@@ -1804,6 +1804,32 @@ export default function CompanyDetailPage() {
               s === "openregister_de" ? "OpenRegister DE" :
               s === "manual" ? "Kuratiert" : s ?? "—";
 
+            // ── Investor Tier Badge ───────────────────────────────────────────
+            // Tier 1 = global top-tier VC/PE/Impact funds
+            // Tier 2 = established sector/climate/growth funds
+            // Tier 3 = regional / unknown → kein Badge
+            const TIER1 = [
+              "sequoia","andreessen horowitz","a16z","benchmark","kleiner perkins",
+              "accel","lightspeed","general catalyst","index ventures","bessemer",
+              "greylock","khosla ventures","founders fund","tiger global","softbank",
+              "coatue","insight partners","blackstone","kkr","carlyle","apollo",
+              "warburg pincus","tpg","breakthrough energy","dcvc","google ventures",
+              "gv","intel capital","flagship pioneering","lux capital","prelude ventures",
+            ];
+            const TIER2 = [
+              "energy impact partners","clean energy ventures","congruent ventures",
+              "energize ventures","s2g ventures","lower carbon capital","pale blue dot",
+              "extantia capital","dragoneer","deerfield management",
+              "saudi aramco energy ventures","total ventures","liberty energy",
+              "halliburton","coatue management","fall line capital","dcvc",
+            ];
+            const investorTier = (name: string): { label: string; color: string } | null => {
+              const n = name.toLowerCase();
+              if (TIER1.some(t => n.includes(t))) return { label: "Tier 1", color: C.teal };
+              if (TIER2.some(t => n.includes(t))) return { label: "Tier 2", color: C.blue };
+              return null;
+            };
+
             // Einträge: Pipeline-Daten bevorzugen, curated als Fallback
             const pipelineEntries = ownershipData?.entries ?? [];
             const curatedEntries  = data.ownership ?? [];
@@ -1901,6 +1927,15 @@ export default function CompanyDetailPage() {
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
                             {o.role && <span style={{ fontSize: 11, fontFamily: C.mono, color: C.teal }}>{o.role}</span>}
+                            {(() => {
+                              const tier = investorTier(o.name);
+                              return tier ? (
+                                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, fontFamily: C.mono,
+                                  color: tier.color, background: tier.color + "18", border: `1px solid ${tier.color}33` }}>
+                                  {tier.label}
+                                </span>
+                              ) : null;
+                            })()}
                             {"share_pct" in o && (o as OwnershipEntryPipeline).share_pct != null && (
                               <span style={{ fontSize: 10, fontFamily: C.mono, color: C.t2 }}>{((o as OwnershipEntryPipeline).share_pct!).toFixed(1)}%</span>
                             )}
@@ -2312,169 +2347,30 @@ export default function CompanyDetailPage() {
                   </Card>
 
                 </>) : (
-                  /* Private Company */
-                  <>
-                    {/* FD-02 — Keine Finanzdaten */}
-                    {f.fundamentals_source === "none" && (
-                      <Card>
-                        <div style={{ padding: "24px 0", textAlign: "center", color: C.t3, fontSize: 12, fontFamily: C.mono }}>
-                          Keine Finanzdaten öffentlich verfügbar für diese Company.
-                        </div>
-                      </Card>
-                    )}
+                  /* ── Private Company ─────────────────────────────────────── */
+                  (() => {
+                    // Region-Detection: DE wenn ba_found oder fundamentals_source === 'ba_bridge'
+                    const isDE = f.ba_found || f.fundamentals_source === "ba_bridge";
+                    const isUS = f.fundamentals_source === "edgar" || (!isDE && f.fundamentals_source !== "none");
 
-                    {/* DQ-05: Est. Valuation — für private Companies ohne BA-Daten */}
-                    {!f.ba_found && f.fundamentals_source !== "none" && data.funding_total_usd_mn != null && (
-                      <Card>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                          <SLabel text="Finanzielle Einschätzung" />
-                          <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "2px 8px", border: `1px solid ${C.border}`, borderRadius: 99 }}>
-                            Schätzung · keine Primärdaten
-                          </span>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-                          {/* Est. Pre-Money aus Funding × Stage-Multiple */}
-                          {(() => {
-                            const _MULT: Record<string, number> = {
-                              pre_seed: 5.0, seed: 4.0, series_a: 3.5,
-                              series_b: 2.5, series_c: 2.0, series_d: 1.5,
-                              series_d_plus: 1.3, growth: 1.2,
-                            };
-                            const mult = _MULT[data.funding_stage ?? ""] ?? 2.0;
-                            const estVal = data.funding_total_usd_mn! * mult;
-                            return (
-                              <FundTile
-                                label="Est. Valuation"
-                                val={estVal >= 1000 ? `~$${(estVal / 1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
-                                sub={`${mult}× Funding Total`}
-                                color={C.amber}
-                              />
-                            );
-                          })()}
-                          <FundTile
-                            label="Funding Total"
-                            val={fmtM(data.funding_total_usd_mn)}
-                            sub="Investiert gesamt"
-                            color={C.t1}
-                          />
-                          <FundTile
-                            label="IPO-Wahrsch."
-                            val={data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—"}
-                            sub={data.ipo_potential ?? undefined}
-                            color={data.ipo_probability_pct != null && data.ipo_probability_pct >= 50 ? C.teal : C.t2}
-                          />
-                        </div>
-                        <div style={{ marginTop: 10, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
-                          Valuation-Schätzung basiert auf Funding-Total × Stage-Multiplikator (VC-Faustregel).
-                          Keine verifizierten Finanzdaten verfügbar — BA-Bridge oder EDGAR nicht anwendbar.
-                        </div>
-                      </Card>
-                    )}
+                    // Shared: Est. Valuation Berechnung
+                    const STAGE_MULT: Record<string, number> = {
+                      pre_seed: 5.0, seed: 4.0, series_a: 3.5, series_b: 2.5,
+                      series_c: 2.0, series_d: 1.5, series_d_plus: 1.3, growth: 1.2,
+                    };
+                    const stageMult   = STAGE_MULT[data.funding_stage ?? ""] ?? 2.0;
+                    const estVal      = data.funding_total_usd_mn != null ? data.funding_total_usd_mn * stageMult : null;
+                    const stageLabels: Record<string,string> = {
+                      pre_seed:"Pre-Seed", seed:"Seed", series_a:"Series A", series_b:"Series B",
+                      series_c:"Series C", series_d:"Series D", series_d_plus:"Series D+", growth:"Growth", public:"Public",
+                    };
 
-                    {/* BA-Bridge Daten (private DE) */}
-                    {f.ba_found && (
-                      <Card>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                          <SLabel text="Bundesanzeiger · Finanzkennzahlen" />
-                          <SourceBadge source="ba_bridge" />
-                        </div>
-
-                        {/* Inline helper — Trend-Button neben einem Tile */}
-                        {(() => {
-                          const hasTrend = (metric: string) =>
-                            (kpiData?.[metric]?.length ?? 0) >= 2;
-                          const TrendBtn = ({ metric }: { metric: string }) =>
-                            hasTrend(metric) ? (
-                              <button
-                                onClick={() => setKpiModalMetric(metric)}
-                                style={{
-                                  marginTop: 6, background: "none", border: `1px solid ${C.teal}44`,
-                                  borderRadius: 99, color: C.teal, fontSize: 9, padding: "2px 8px",
-                                  cursor: "pointer", fontFamily: C.mono, display: "flex",
-                                  alignItems: "center", gap: 3, letterSpacing: ".03em",
-                                }}
-                              >
-                                ↗ Verlauf
-                              </button>
-                            ) : null;
-
-                          return (
-                            <>
-                              {/* Zeile 1: Kernkennzahlen */}
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 10 }}>
-                                {[
-                                  { label: "Umsatz",      metric: "revenue_mn",      val: f.ba_revenue_mn      != null ? `€${f.ba_revenue_mn.toFixed(1)}M`      : "—", color: C.t1 as string | undefined },
-                                  { label: "Eigenkapital", metric: "equity_mn",       val: f.ba_equity_mn       != null ? `€${f.ba_equity_mn.toFixed(1)}M`       : "—", color: undefined },
-                                  { label: "Bilanzsumme", metric: "total_assets_mn",  val: f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—", color: undefined },
-                                  { label: "Mitarbeiter", metric: "headcount",            val: f.ba_employees       != null ? f.ba_employees.toLocaleString("de-DE") : "—", color: undefined },
-                                ].map(({ label, metric, val, color }) => (
-                                  <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
-                                    <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: color ?? C.t1, lineHeight: 1 }}>{val}</div>
-                                    <TrendBtn metric={metric} />
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* Zeile 2: GuV-Kennzahlen (nur wenn vorhanden) */}
-                              {(f.ba_ebitda_mn != null || f.ba_ebit_eur_mn != null || f.ba_net_income_eur_mn != null) && (
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-                                  {[
-                                    { label: "EBITDA",            metric: "ebitda_mn",     val: f.ba_ebitda_mn       != null ? `€${f.ba_ebitda_mn.toFixed(1)}M`       : "—" },
-                                    { label: "EBIT",              metric: "ebit_mn",       val: f.ba_ebit_eur_mn     != null ? `€${f.ba_ebit_eur_mn.toFixed(1)}M`     : "—" },
-                                    { label: "Jahresüberschuss",  metric: "net_income_mn", val: f.ba_net_income_eur_mn != null ? `€${f.ba_net_income_eur_mn.toFixed(1)}M` : "—" },
-                                  ].map(({ label, metric, val }) => (
-                                    <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
-                                      <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{val}</div>
-                                      <TrendBtn metric={metric} />
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                        {f.ba_last_report_year && (
-                          <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <span>Letzter Jahresabschluss: {f.ba_last_report_year}</span>
-                            {f.extraction_confidence && (() => {
-                              const confMap: Record<string, { label: string; color: string }> = {
-                                full:         { label: "GuV vollständig", color: C.teal  },
-                                partial:      { label: "GuV teilweise",   color: C.amber },
-                                balance_only: { label: "Nur Bilanz",      color: C.amber },
-                                not_found:    { label: "Keine Daten",     color: C.red   },
-                              };
-                              const conf = confMap[f.extraction_confidence!];
-                              if (!conf) return null;
-                              return (
-                                <span style={{
-                                  fontSize: 9, padding: "1px 7px", borderRadius: 99, fontFamily: C.mono,
-                                  color: conf.color, background: conf.color + "18",
-                                  border: `1px solid ${conf.color}33`,
-                                }}>
-                                  {conf.label}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </Card>
-                    )}
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                      <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
-                      <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
-                      <FundTile label="Stage"         val={({ seed:"Seed", series_a:"Series A", series_b:"Series B", series_c:"Series C", series_d:"Series D", series_d_plus:"Series D+", pre_seed:"Pre-Seed", growth:"Growth", public:"Public" } as Record<string,string>)[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"} />
-                      <FundTile label="IPO-Potenzial" val={data.ipo_potential ?? "—"} color={data.ipo_potential === "Hoch" ? C.teal : C.t2} />
-                    </div>
-
-                    {/* Beta — private (Damodaran) */}
-                    {f.beta_1y != null && (
+                    // Shared: Damodaran Beta Block
+                    const BetaBlock = () => f.beta_1y != null ? (
                       <Card>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                           <SLabel text="Risiko · Branchen-Beta" />
-                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Damodaran · NYU</span>
+                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Damodaran · NYU Stern</span>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
                           <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
@@ -2483,15 +2379,200 @@ export default function CompanyDetailPage() {
                           </div>
                           <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
                             <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Sektor</div>
-                            <span style={{ fontSize: 11, color: C.t2 }}>{f.beta_benchmark?.replace("Damodaran · ", "") ?? "—"}</span>
+                            <span style={{ fontSize: 12, color: C.t2, fontFamily: C.mono }}>{f.beta_benchmark?.replace("Damodaran · ", "") ?? "—"}</span>
                           </div>
                         </div>
-                        <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                          Industriestandard für Private-Company-Bewertung (VC/PE/M&A)
+                        <div style={{ marginTop: 8, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                          Branchenstandard für Diskontierungsrate in DCF-Modellen (VC/PE/M&A). Gilt für vergleichbare börsennotierte Peers im selben Sektor.
                         </div>
                       </Card>
-                    )}
-                  </>
+                    ) : null;
+
+                    if (isDE) return (
+                      /* ══ PRIVATE DE — Jahresabschluss-View ══════════════════ */
+                      <>
+                        {/* Block A: Bundesanzeiger Finanzkennzahlen — Produktwaffe */}
+                        {f.ba_found ? (
+                          <Card>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                              <SLabel text="Jahresabschluss · Finanzkennzahlen" />
+                              <SourceBadge source="ba_bridge" />
+                            </div>
+                            {/* Jahresabschluss-Meta — Qualitätssignal prominent */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                              {f.ba_last_report_year && (
+                                <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
+                                  Letzter Jahresabschluss: <strong style={{ color: C.t2 }}>{f.ba_last_report_year}</strong>
+                                </span>
+                              )}
+                              {f.ba_legal_form && (
+                                <span style={{ fontSize: 9, padding: "1px 7px", borderRadius: 99, fontFamily: C.mono,
+                                  color: C.t2, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}` }}>
+                                  {f.ba_legal_form}
+                                </span>
+                              )}
+                              {f.extraction_confidence && (() => {
+                                const cMap: Record<string, { label: string; color: string }> = {
+                                  full:         { label: "GuV vollständig", color: C.teal  },
+                                  partial:      { label: "GuV teilweise",   color: C.amber },
+                                  balance_only: { label: "Nur Bilanz",      color: C.amber },
+                                  not_found:    { label: "Keine GuV-Daten", color: C.red   },
+                                };
+                                const c = cMap[f.extraction_confidence!];
+                                return c ? (
+                                  <span style={{ fontSize: 9, padding: "1px 7px", borderRadius: 99, fontFamily: C.mono,
+                                    color: c.color, background: c.color + "18", border: `1px solid ${c.color}33` }}>
+                                    {c.label}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
+
+                            {/* Zeile 1: Bilanz-Kernkennzahlen */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 10 }}>
+                              {[
+                                { label: "Umsatz",       metric: "revenue_mn",     val: f.ba_revenue_mn      != null ? `€${f.ba_revenue_mn >= 1000 ? (f.ba_revenue_mn/1000).toFixed(1)+"B" : f.ba_revenue_mn.toFixed(1)+"M"}` : "—", color: C.t1 },
+                                { label: "Eigenkapital", metric: "equity_mn",      val: f.ba_equity_mn       != null ? `€${f.ba_equity_mn.toFixed(1)}M`       : "—", color: undefined },
+                                { label: "Bilanzsumme",  metric: "total_assets_mn",val: f.ba_total_assets_mn != null ? `€${f.ba_total_assets_mn.toFixed(1)}M` : "—", color: undefined },
+                                { label: "Mitarbeiter",  metric: "headcount",      val: f.ba_employees       != null ? f.ba_employees.toLocaleString("de-DE") : "—", color: undefined },
+                              ].map(({ label, metric, val, color }) => (
+                                <div key={metric} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                                  <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: color ?? C.t1, lineHeight: 1 }}>{val}</div>
+                                  <TrendBtn metric={metric} />
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Zeile 2: GuV (nur wenn vorhanden) */}
+                            {(f.ba_ebitda_mn != null || f.ba_ebit_mn != null || f.ba_net_income_mn != null) && (
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                                {[
+                                  { label: "EBITDA",           metric: "ebitda_mn",     val: f.ba_ebitda_mn    != null ? `€${f.ba_ebitda_mn.toFixed(1)}M`    : "—" },
+                                  { label: "EBIT",             metric: "ebit_mn",       val: f.ba_ebit_mn      != null ? `€${f.ba_ebit_mn.toFixed(1)}M`      : "—" },
+                                  { label: "Jahresüberschuss", metric: "net_income_mn", val: f.ba_net_income_mn!= null ? `€${f.ba_net_income_mn.toFixed(1)}M` : "—" },
+                                ].map(({ label, metric, val }) => (
+                                  <div key={metric} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
+                                    <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{val}</div>
+                                    <TrendBtn metric={metric} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </Card>
+                        ) : (
+                          /* BA nicht gefunden — Pending-State */
+                          <Card>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                              <SLabel text="Jahresabschluss · Finanzkennzahlen" />
+                              <span style={{ fontSize: 9, color: C.amber, fontFamily: C.mono, padding: "2px 8px",
+                                border: `1px solid ${C.amber}44`, borderRadius: 99, background: C.amberDim }}>
+                                Wird angereichert
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, color: C.t3, fontFamily: C.mono, padding: "16px 0", lineHeight: 1.6 }}>
+                              Bundesanzeiger-Daten werden geladen. DE GmbHs sind zur Offenlegung verpflichtet —
+                              Jahresabschluss-Daten folgen nach Anreicherung.
+                            </div>
+                          </Card>
+                        )}
+
+                        {/* Block B: Bewertung / Funding */}
+                        <Card>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                            <SLabel text="Funding & Bewertungsschätzung" />
+                            {estVal != null && (
+                              <span style={{ fontSize: 9, color: C.amber, fontFamily: C.mono, padding: "2px 8px",
+                                border: `1px solid ${C.amber}44`, borderRadius: 99 }}>
+                                Schätzung · VC-Faustregel
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                            {estVal != null && (
+                              <FundTile label="Est. Valuation"
+                                val={estVal >= 1000 ? `~$${(estVal/1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
+                                sub={`${stageMult}× Funding Total`} color={C.amber} />
+                            )}
+                            <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
+                            <FundTile label="Stage" val={stageLabels[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"} />
+                            <FundTile label="IPO-Potenzial"
+                              val={data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—"}
+                              sub={data.ipo_potential ?? undefined}
+                              color={data.ipo_probability_pct != null && data.ipo_probability_pct >= 50 ? C.teal : C.t2} />
+                          </div>
+                          {estVal != null && (
+                            <div style={{ marginTop: 10, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                              Funding-Total × Stage-Multiplikator (VC-Faustregel). Bundesanzeiger-Kennzahlen oben liefern die verifizierten Primärdaten für eine fundierte Bewertung.
+                            </div>
+                          )}
+                        </Card>
+
+                        <BetaBlock />
+                      </>
+                    );
+
+                    /* ══ PRIVATE US (+ alle anderen) — Funding-Intelligence-View ══ */
+                    return (
+                      <>
+                        {/* Block A: Keine Offenlegungspflicht — explizit, kein leerer State */}
+                        <div style={{ padding: "12px 16px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)",
+                          border: `1px solid ${C.border}`, display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <span style={{ fontSize: 14, marginTop: 1 }}>ℹ</span>
+                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.6 }}>
+                            <strong style={{ color: C.t1 }}>Keine Finanzkennzahlen verfügbar.</strong>{" "}
+                            US private companies unterliegen keiner Offenlegungspflicht für Jahresabschlüsse.
+                            Funding-Struktur und Investorenqualität sind der primäre Informationsrahmen.
+                          </div>
+                        </div>
+
+                        {/* Block B: Funding-Übersicht prominent */}
+                        <Card>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                            <SLabel text="Funding-Übersicht" />
+                            <SourceBadge source="edgar" />
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                            <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
+                            <FundTile label="Stage"         val={stageLabels[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"} />
+                            <FundTile label="Letzte Runde"  val={data.funding_last_round?.split(";")[0] ?? "—"} />
+                            <FundTile label="Runden"        val={data.funding_rounds?.length ? String(data.funding_rounds.length) : "—"} />
+                          </div>
+                        </Card>
+
+                        {/* Block C: Est. Valuation */}
+                        {estVal != null && (
+                          <Card>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                              <SLabel text="Bewertungsschätzung" />
+                              <span style={{ fontSize: 9, color: C.amber, fontFamily: C.mono, padding: "2px 8px",
+                                border: `1px solid ${C.amber}44`, borderRadius: 99 }}>
+                                Schätzung · VC-Faustregel
+                              </span>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                              <FundTile label="Est. Valuation"
+                                val={estVal >= 1000 ? `~$${(estVal/1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
+                                sub={`${stageMult}× Funding Total`} color={C.amber} />
+                              <FundTile label="IPO-Wahrsch."
+                                val={data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—"}
+                                sub={data.ipo_potential ?? undefined}
+                                color={data.ipo_probability_pct != null && data.ipo_probability_pct >= 50 ? C.teal : C.t2} />
+                              <FundTile label="Investitionspfad"
+                                val={data.investment_path ?? "—"}
+                                color={data.investment_path === "IPO" ? C.teal : C.t2} />
+                            </div>
+                            <div style={{ marginTop: 10, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                              Funding-Total × Stage-Multiplikator (VC-Faustregel). Für verifizierte Primärdaten sind pitchbooks oder direkte Company-Kommunikation erforderlich.
+                            </div>
+                          </Card>
+                        )}
+
+                        <BetaBlock />
+                      </>
+                    );
+                  })()
                 )}
                 <FundingTimeline rounds={data.funding_rounds} />
               </div>
