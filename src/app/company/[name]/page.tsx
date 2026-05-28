@@ -2021,105 +2021,227 @@ export default function CompanyDetailPage() {
                 />
                 {f.is_listed ? (<>
 
-                  {/* Row 1: Preis + Marktstruktur */}
+                  {/* ── Block 1: Market Snapshot ─────────────────────────────── */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
-                    <FundTile label="Kurs" val={f.price != null ? `${cur}${f.price.toFixed(2)}` : "—"} color={C.t1} />
-                    <FundTile label="Marktcap" val={fmtBn(f.market_cap_bn)} color={C.t1} />
-                    <FundTile label="Enterprise Value" val={fmtBn(f.enterprise_value_bn)} />
+                    <FundTile label="Kurs"             val={f.price != null ? `${cur}${f.price.toFixed(2)}` : "—"} color={C.t1} />
+                    <FundTile label="Marktcap"         val={fmtBn(f.market_cap_bn)} color={C.t1} />
+                    <FundTile label="Enterprise Value" val={fmtBn(f.enterprise_value_bn)}
+                      sub={f.enterprise_value_bn != null && f.debt_ebitda == null ? "≈ Mktcap · ohne Debt/Cash" : undefined} />
                     <FundTile label="52W High" val={f.week_52_high != null ? `${cur}${f.week_52_high.toFixed(0)}` : "—"} />
                     <FundTile label="52W Low"  val={f.week_52_low  != null ? `${cur}${f.week_52_low.toFixed(0)}`  : "—"} />
                   </div>
 
-                  {/* Row 2: P&L — Revenue/EBITDA als Inline-Cards mit kpi_timeseries Fallback + Verlauf */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-
-                    {/* Revenue: Yahoo primär → EDGAR kpi_timeseries Fallback */}
-                    {(() => {
-                      const yVal     = f.revenue_bn != null ? fmtBn(f.revenue_bn) : null;
-                      const kVal     = kpiLatest("revenue_mn");
-                      const display  = yVal ?? (kVal != null ? fmtMn(kVal) : "—");
-                      const fromKpi  = yVal == null && kVal != null;
-                      return (
-                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Revenue</div>
-                          <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{display}</div>
-                          {f.revenue_growth_pct != null && (
-                            <div style={{ fontSize: 10, color: growthColor(f.revenue_growth_pct), marginTop: 3 }}>
-                              YoY {f.revenue_growth_pct > 0 ? "+" : ""}{f.revenue_growth_pct.toFixed(1)}%
-                            </div>
-                          )}
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            {fromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
-                            <TrendBtn metric="revenue_mn" />
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* EBITDA: Yahoo primär → EDGAR kpi_timeseries Fallback */}
-                    {(() => {
-                      const yVal    = f.ebitda_bn != null ? fmtBn(f.ebitda_bn) : null;
-                      const kVal    = kpiLatest("ebitda_mn");
-                      const display = yVal ?? (kVal != null ? fmtMn(kVal) : "—");
-                      const fromKpi = yVal == null && kVal != null;
-                      return (
-                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EBITDA</div>
-                          <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{display}</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            {fromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
-                            <TrendBtn metric="ebitda_mn" />
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* P/E: Yahoo primär → Berechnet aus Mktcap / Net Income (EDGAR) */}
-                    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
-                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>KGV (P/E)</div>
-                      <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
-                        {computedPE != null ? computedPE.toFixed(1) : "—"}
-                      </div>
-                      {peIsComputed && (
-                        <span style={{ marginTop: 6, fontSize: 9, color: C.amber, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.amber}44`, borderRadius: 99, alignSelf: "flex-start" }}>
-                          Berechnet · Mktcap / Net Income
-                        </span>
-                      )}
+                  {/* ── Block 2: P&L — Revenue, EBITDA, Gross Margin, EBITDA-Marge ─ */}
+                  <Card>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <SLabel text="Gewinn & Verlust" />
+                      {KPI_FIRST && <SourceBadge source={kpiSourceLabel === "SEC EDGAR XBRL" ? "edgar" : "ba_bridge"} />}
                     </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
 
-                    <FundTile label="Debt/EBITDA" val={f.debt_ebitda ? `${f.debt_ebitda.toFixed(1)}×` : "—"} color={f.debt_ebitda && f.debt_ebitda > 3 ? C.amber : C.t1} />
-                  </div>
+                      {/* Revenue */}
+                      {(() => {
+                        const yVal    = f.revenue_bn != null ? fmtBn(f.revenue_bn) : null;
+                        const kVal    = kpiLatest("revenue_mn");
+                        const display = yVal ?? (kVal != null ? fmtMn(kVal) : "—");
+                        const fromKpi = yVal == null && kVal != null;
+                        return (
+                          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Revenue</div>
+                            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{display}</div>
+                            {f.revenue_growth_pct != null && (
+                              <div style={{ fontSize: 10, color: growthColor(f.revenue_growth_pct), marginTop: 3 }}>
+                                YoY {f.revenue_growth_pct > 0 ? "+" : ""}{f.revenue_growth_pct.toFixed(1)}%
+                              </div>
+                            )}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                              {fromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
+                              <TrendBtn metric="revenue_mn" />
+                            </div>
+                          </div>
+                        );
+                      })()}
 
-                  {/* Row 3: Margen + Growth + Cashflow */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                      {/* EBITDA */}
+                      {(() => {
+                        const yVal    = f.ebitda_bn != null ? fmtBn(f.ebitda_bn) : null;
+                        const kVal    = kpiLatest("ebitda_mn");
+                        const display = yVal ?? (kVal != null ? fmtMn(kVal) : "—");
+                        const fromKpi = yVal == null && kVal != null;
+                        return (
+                          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EBITDA</div>
+                            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{display}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                              {fromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
+                              <TrendBtn metric="ebitda_mn" />
+                            </div>
+                          </div>
+                        );
+                      })()}
 
-                    <Card>
-                      <SLabel text="Margen" />
-                      <InfoRow k="Bruttomarge"    v={fmtPct(f.gross_margin_pct)}     vColor={marginColor(f.gross_margin_pct)} />
-                      <InfoRow k="EBIT-Marge"     v={fmtPct(f.operating_margin_pct)} vColor={marginColor(f.operating_margin_pct)} />
-                      <InfoRow k="Nettomarge"     v={fmtPct(f.profit_margin_pct)}    vColor={marginColor(f.profit_margin_pct)} />
-                    </Card>
+                      {/* Gross Margin */}
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Bruttomarge</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: marginColor(f.gross_margin_pct), lineHeight: 1 }}>
+                          {fmtPct(f.gross_margin_pct)}
+                        </div>
+                        <TrendBtn metric="gross_profit_mn" />
+                      </div>
 
-                    <Card>
-                      <SLabel text="Wachstum" />
-                      <InfoRow k="Revenue Growth" v={f.revenue_growth_pct != null ? `${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%` : "—"} vColor={growthColor(f.revenue_growth_pct)} />
-                      <InfoRow k="Earnings Growth" v={f.earnings_growth_pct != null ? `${f.earnings_growth_pct > 0 ? "+" : ""}${f.earnings_growth_pct.toFixed(1)}%` : "—"} vColor={growthColor(f.earnings_growth_pct)} />
-                    </Card>
+                      {/* EBITDA-Marge */}
+                      {(() => {
+                        const ebitdaMarginDirect = (() => {
+                          const k = kpiLatest("ebitda_margin_pct");
+                          if (k != null) return k;
+                          const rev = kpiLatest("revenue_mn"); const ebd = kpiLatest("ebitda_mn");
+                          if (rev && rev > 0 && ebd != null) return ebd / rev * 100;
+                          if (f.ebitda_bn && f.revenue_bn && f.revenue_bn > 0) return f.ebitda_bn / f.revenue_bn * 100;
+                          return null;
+                        })();
+                        return (
+                          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EBITDA-Marge</div>
+                            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: marginColor(ebitdaMarginDirect), lineHeight: 1 }}>
+                              {ebitdaMarginDirect != null ? `${ebitdaMarginDirect.toFixed(1)}%` : "—"}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </Card>
 
+                  {/* ── Block 3: Profitabilität — Nettomarge, P/E, Net Income ─── */}
+                  <Card>
+                    <SLabel text="Profitabilität" />
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 12 }}>
+
+                      {/* EBIT-Marge */}
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EBIT-Marge</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: marginColor(f.operating_margin_pct), lineHeight: 1 }}>
+                          {fmtPct(f.operating_margin_pct)}
+                        </div>
+                      </div>
+
+                      {/* Nettomarge */}
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Nettomarge</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: marginColor(f.profit_margin_pct), lineHeight: 1 }}>
+                          {fmtPct(f.profit_margin_pct)}
+                        </div>
+                      </div>
+
+                      {/* P/E — BUG FIX: einmalig, computedPE (Yahoo primär → EDGAR Fallback) */}
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>KGV (P/E)</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                          {computedPE != null ? computedPE.toFixed(1) : "—"}
+                        </div>
+                        {peIsComputed && (
+                          <span style={{ marginTop: 6, fontSize: 9, color: C.amber, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.amber}44`, borderRadius: 99, alignSelf: "flex-start" }}>
+                            Berechnet · Mktcap / Net Income
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Net Income mit Trend */}
+                      {(() => {
+                        const kVal = kpiLatest("net_income_mn");
+                        return (
+                          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Net Income</div>
+                            <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: kVal != null ? (kVal >= 0 ? C.teal : C.red) : C.t3, lineHeight: 1 }}>
+                              {kVal != null ? fmtMn(kVal) : "—"}
+                            </div>
+                            <TrendBtn metric="net_income_mn" />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </Card>
+
+                  {/* ── Block 4: Cashflow ──────────────────────────────────────── */}
+                  {(f.free_cashflow_bn != null || f.operating_cashflow_bn != null
+                    || kpiLatest("free_cashflow_mn") != null || kpiLatest("operating_cashflow_mn") != null) && (
                     <Card>
                       <SLabel text="Cashflow" />
-                      <InfoRow k="Free Cashflow"      v={fmtBn(f.free_cashflow_bn)}      vColor={cfColor(f.free_cashflow_bn)} />
-                      <InfoRow k="Operating Cashflow" v={fmtBn(f.operating_cashflow_bn)} vColor={cfColor(f.operating_cashflow_bn)} />
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginTop: 12 }}>
+                        {(() => {
+                          const fcfDirect = f.free_cashflow_bn;
+                          const fcfKpi    = kpiLatest("free_cashflow_mn");
+                          const fcfVal    = fcfDirect != null ? fmtBn(fcfDirect) : (fcfKpi != null ? fmtMn(fcfKpi) : null);
+                          const fcfColor  = fcfDirect != null ? cfColor(fcfDirect) : (fcfKpi != null ? cfColor(fcfKpi / 1000) : C.t3);
+                          const fcfFromKpi = fcfDirect == null && fcfKpi != null;
+                          return (
+                            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Free Cashflow</div>
+                              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: fcfColor, lineHeight: 1 }}>{fcfVal ?? "—"}</div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                                {fcfFromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
+                                <TrendBtn metric="free_cashflow_mn" />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {(() => {
+                          const ocfDirect = f.operating_cashflow_bn;
+                          const ocfKpi    = kpiLatest("operating_cashflow_mn");
+                          const ocfVal    = ocfDirect != null ? fmtBn(ocfDirect) : (ocfKpi != null ? fmtMn(ocfKpi) : null);
+                          const ocfColor  = ocfDirect != null ? cfColor(ocfDirect) : (ocfKpi != null ? cfColor(ocfKpi / 1000) : C.t3);
+                          const ocfFromKpi = ocfDirect == null && ocfKpi != null;
+                          return (
+                            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                              <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Operating Cashflow</div>
+                              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: ocfColor, lineHeight: 1 }}>{ocfVal ?? "—"}</div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                                {ocfFromKpi && <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, padding: "1px 6px", border: `1px solid ${C.border}`, borderRadius: 99 }}>{kpiSourceLabel}</span>}
+                                <TrendBtn metric="operating_cashflow_mn" />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </Card>
-                  </div>
+                  )}
 
-                  {/* Balance Sheet Row — kpi_timeseries: Net Income, Equity, Assets + Derived */}
+                  {/* ── Block 5: Verschuldung & Bewertungs-Multiples ────────────── */}
+                  <Card>
+                    <SLabel text="Verschuldung & Multiples" />
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 12 }}>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Debt / EBITDA</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: f.debt_ebitda && f.debt_ebitda > 3 ? C.amber : C.t1 }}>
+                          {f.debt_ebitda ? `${f.debt_ebitda.toFixed(1)}×` : "—"}
+                        </div>
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>&gt;3× = erhöhte Verschuldung</div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EV / Revenue</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: C.t1 }}>{fmtX(f.ev_revenue)}</div>
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>niedriger = günstiger</div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>EV / EBITDA</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: C.t1 }}>{fmtX(f.ev_ebitda)}</div>
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>Median ~10–15×</div>
+                      </div>
+                      {/* EV-Qualitäts-Badge: Näherung wenn kein Debt/Cash */}
+                      {f.enterprise_value_bn != null && f.debt_ebitda == null && (
+                        <div style={{ padding: "12px 14px", borderRadius: C.rMd, background: C.amberDim, border: `1px solid ${C.amber}33`, display: "flex", alignItems: "flex-start" }}>
+                          <div style={{ fontSize: 10, color: C.amber, lineHeight: 1.5 }}>
+                            <strong>EV ≈ Mktcap</strong><br />Debt/Cash fehlen noch — Multiples-Näherung für PE/M&A eingeschränkt nutzbar.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* ── Block 6: Balance Sheet / kpi_timeseries Zeitreihen ──────── */}
                   {(() => {
                     const BS = [
-                      { metric: "net_income_mn",    label: "Net Income",   fmtFn: (v: number) => fmtMn(v) },
                       { metric: "equity_mn",        label: "Eigenkapital", fmtFn: (v: number) => fmtMn(v) },
                       { metric: "total_assets_mn",  label: "Bilanzsumme",  fmtFn: (v: number) => fmtMn(v) },
-                      { metric: "ebitda_margin_pct",label: "EBITDA-Marge", fmtFn: (v: number) => `${v.toFixed(1)}%` },
                       { metric: "equity_ratio_pct", label: "EK-Quote",     fmtFn: (v: number) => `${v.toFixed(1)}%` },
                       { metric: "revenue_cagr_pct", label: "Umsatz-CAGR",  fmtFn: (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%` },
                     ].filter(({ metric }) => kpiLatest(metric) != null);
@@ -2130,9 +2252,9 @@ export default function CompanyDetailPage() {
                           <SLabel text="Balance Sheet · Zeitreihen" />
                           <SourceBadge source={kpiSourceLabel === "SEC EDGAR XBRL" ? "edgar" : "ba_bridge"} />
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
                           {BS.map(({ metric, label, fmtFn }) => (
-                            <div key={metric} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                            <div key={metric} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
                               <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{label}</div>
                               <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>{fmtFn(kpiLatest(metric)!)}</div>
                               <TrendBtn metric={metric} />
@@ -2143,25 +2265,22 @@ export default function CompanyDetailPage() {
                     );
                   })()}
 
-                  {/* Row 4: Multiples */}
-                  <Card>
-                    <SLabel text="Bewertungs-Multiples" />
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-                      {[
-                        { label: "EV / Revenue", val: fmtX(f.ev_revenue), note: "niedriger = günstiger" },
-                        { label: "EV / EBITDA",  val: fmtX(f.ev_ebitda),  note: "Branchenmedian ~10–15×" },
-                        { label: "P/E Ratio",    val: fmt(f.pe_ratio, 1), note: "Kurs / Gewinn je Aktie" },
-                      ].map(m => (
-                        <div key={m.label} style={{ padding: "12px 14px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>{m.label}</div>
-                          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: C.display, color: C.t1 }}>{m.val}</div>
-                          <div style={{ fontSize: 10, color: C.t3, marginTop: 3 }}>{m.note}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
+                  {/* ── Block 7: Wachstum ──────────────────────────────────────── */}
+                  {(f.revenue_growth_pct != null || f.earnings_growth_pct != null) && (
+                    <Card>
+                      <SLabel text="Wachstum" />
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginTop: 12 }}>
+                        <InfoRow k="Revenue Growth (YoY)"
+                          v={f.revenue_growth_pct != null ? `${f.revenue_growth_pct > 0 ? "+" : ""}${f.revenue_growth_pct.toFixed(1)}%` : "—"}
+                          vColor={growthColor(f.revenue_growth_pct)} />
+                        <InfoRow k="Earnings Growth (YoY)"
+                          v={f.earnings_growth_pct != null ? `${f.earnings_growth_pct > 0 ? "+" : ""}${f.earnings_growth_pct.toFixed(1)}%` : "—"}
+                          vColor={growthColor(f.earnings_growth_pct)} />
+                      </div>
+                    </Card>
+                  )}
 
-                  {/* Row 5: Beta — listed (market) */}
+                  {/* ── Block 8: Risiko & Volatilität ──────────────────────────── */}
                   <Card>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                       <SLabel text="Risiko & Volatilität" />
