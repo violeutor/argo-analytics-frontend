@@ -841,7 +841,7 @@ export default function CompanyDetailPage() {
   const [signalsLoading, setSignalsLoading]     = useState(false);
   const [peersData, setPeersData]               = useState<PeersResponse | null>(null);
   const [peersLoading, setPeersLoading]         = useState(false);
-  const [peerScoreModal, setPeerScoreModal]     = useState<PeerCompany | null>(null);
+  // peerScoreModal entfernt — Scores jetzt inline auf Peer-Karte (kein Modal)
   const [assessmentsData, setAssessmentsData]   = useState<any | null>(null);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
   const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
@@ -2907,9 +2907,22 @@ export default function CompanyDetailPage() {
             };
             const stageColor = (s?: string | null) =>
               !s ? C.t3 : stageOrder[s] >= 6 ? C.teal : stageOrder[s] >= 3 ? C.blue : C.amber;
-
             const regionFlag = (r?: string | null) =>
               r === "US" ? "🇺🇸" : r === "DE" ? "🇩🇪" : r === "EU" ? "🇪🇺" : r === "UK" ? "🇬🇧" : "🌐";
+
+            // Inline-Score-Bar: 0–10 als Balken
+            const ScoreBar = ({ value, color }: { value?: number | null; color: string }) => {
+              if (value == null) return <span style={{ color: C.t3, fontSize: 11, fontFamily: C.mono }}>—</span>;
+              const pct = Math.min(100, (value / 10) * 100);
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 48, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontFamily: C.mono, color, fontWeight: 600 }}>{value.toFixed(1)}</span>
+                </div>
+              );
+            };
 
             return (
               <div>
@@ -2934,193 +2947,36 @@ export default function CompanyDetailPage() {
                       score={data.scores?.strategic_score}
                       tooltip="SRR × TechReadiness × Käufer-Universum. Misst strategische Attraktivität für M&A, Partnerschaften und Peer-Positionierung."
                     />
-                    {/* Cache-Badge */}
-                    {peersData?.from_cache && (
-                      <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 10, textAlign: "right" }}>
-                        Cached · {peersData.generated_at?.slice(0, 10)}
-                      </div>
-                    )}
 
-                    {/* Block 1: Peer-Karten */}
-                    <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden" }}>
-                      <div style={{ padding: "14px 20px 6px", borderBottom: `1px solid ${C.border}` }}>
-                        <SLabel text={`Wettbewerber (${peers.length})`} />
-                      </div>
-                      {peers.map((p, idx) => {
-                        const pathColor = PATH_COLORS[p.investment_path ?? ""] ?? C.t3;
-                        const isListed  = p.ipo_status === "listed";
-                        return (
-                          <div key={p.id} style={{
-                            padding: "16px 20px",
-                            borderBottom: idx < peers.length - 1 ? `1px solid ${C.border}` : "none",
-                          }}>
-                            {/* Row 1: Name + Ticker + Funding + Score */}
-                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
-                              <div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                  <span>{regionFlag(p.region)} {p.name}</span>
-                                  {p.ticker && (
-                                    <span style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, background: C.tealDim, border: `1px solid ${C.tealBorder}`, borderRadius: 4, padding: "1px 6px" }}>
-                                      {p.ticker}{p.exchange ? ` · ${p.exchange}` : ""}
-                                    </span>
-                                  )}
-                                </div>
-                                {/* Badges Row */}
-                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-                                  {p.stage_normalized && (
-                                    <span style={{
-                                      fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px",
-                                      color: stageColor(p.stage_normalized),
-                                      background: stageColor(p.stage_normalized) + "18",
-                                      border: `1px solid ${stageColor(p.stage_normalized)}33`,
-                                    }}>
-                                      {p.stage_normalized}
-                                    </span>
-                                  )}
-                                  {isListed && (
-                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}` }}>
-                                      Public
-                                    </span>
-                                  )}
-                                  {p.investment_path && p.investment_path !== "Beobachten" && (
-                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: pathColor, background: pathColor + "18", border: `1px solid ${pathColor}33` }}>
-                                      {p.investment_path}
-                                    </span>
-                                  )}
-                                  {p.headquarters && (
-                                    <span style={{ fontSize: 10, color: C.t3, display: "flex", alignItems: "center", gap: 3 }}>
-                                      <span>📍</span>{p.headquarters}
-                                    </span>
-                                  )}
-                                  {p.founding_year && (
-                                    <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>
-                                      Gegr. {p.founding_year}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Funding + Score + Buttons */}
-                              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                                {/* Funding */}
-                                <div style={{ fontSize: 13, color: C.teal, fontFamily: C.mono, fontWeight: 600 }}>
-                                  {p.funding_total_usd_mn
-                                    ? p.funding_total_usd_mn >= 1000
-                                      ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
-                                      : `$${p.funding_total_usd_mn.toFixed(0)}M`
-                                    : "—"}
-                                </div>
-                                {p.headcount && (
-                                  <div style={{ fontSize: 10, color: C.t3 }}>
-                                    {p.headcount.toLocaleString("de-DE")} MA
-                                  </div>
-                                )}
-                                {/* Rating + Score inline — klickbar → Modal */}
-                                {(p.rating || p.composite_score != null) && (
-                                  <button
-                                    onClick={() => setPeerScoreModal(p)}
-                                    style={{
-                                      display: "flex", alignItems: "center", gap: 5,
-                                      background: "none", border: `1px solid ${C.border}`,
-                                      borderRadius: 6, padding: "3px 8px", cursor: "pointer",
-                                      transition: "border-color .15s",
-                                    }}
-                                    title="Score-Detail anzeigen"
-                                  >
-                                    {p.rating && (
-                                      <span style={{
-                                        fontSize: 10, fontWeight: 700, fontFamily: C.mono,
-                                        color: ratingColor(p.rating),
-                                      }}>
-                                        {p.rating}
-                                      </span>
-                                    )}
-                                    {p.composite_score != null && (
-                                      <span style={{ fontSize: 10, color: C.t2, fontFamily: C.mono }}>
-                                        {p.composite_score.toFixed(1)}
-                                      </span>
-                                    )}
-                                    <span style={{ fontSize: 9, color: C.t3 }}>ⓘ</span>
-                                  </button>
-                                )}
-                                {/* Analysieren → */}
-                                <button
-                                  onClick={() => router.push(`/company/${encodeURIComponent(p.name)}`)}
-                                  style={{
-                                    fontSize: 10, color: C.teal, fontFamily: C.mono,
-                                    background: "none", border: `1px solid ${C.tealBorder}`,
-                                    borderRadius: 6, padding: "3px 8px", cursor: "pointer",
-                                    transition: "background .15s",
-                                  }}
-                                >
-                                  Analysieren →
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Positioning Note — prominente Hauptaussage */}
-                            {p.positioning_note && (
-                              <div style={{
-                                padding: "9px 12px", marginBottom: 8,
-                                background: "rgba(0,212,160,0.06)",
-                                border: `1px solid ${C.tealBorder}`,
-                                borderLeft: `3px solid ${C.teal}`,
-                                borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
-                                fontSize: 12, color: C.t1, lineHeight: 1.55,
-                              }}>
-                                {p.positioning_note}
-                              </div>
-                            )}
-
-                            {/* Description als Kontext-Ergänzung */}
-                            {p.description && (
-                              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 6 }}>
-                                {p.description.slice(0, 180)}{p.description.length > 180 ? "…" : ""}
-                              </div>
-                            )}
-
-                            {/* Website Link */}
-                            {p.website && (
-                              <a
-                                href={p.website.startsWith("http") ? p.website : `https://${p.website}`}
-                                target="_blank" rel="noopener noreferrer"
-                                style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, textDecoration: "none", opacity: 0.7 }}
-                              >
-                                {p.website.replace(/^https?:\/\//, "")} →
-                              </a>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </Card>
-
-                    {/* Block 2: Benchmark */}
+                    {/* Block 1: Benchmark — gibt Kontext für alle Peer-Karten */}
                     {benchmark.length > 0 && (
                       <Card style={{ marginBottom: 12 }}>
-                        <SLabel text="Benchmark vs. Peer-Median" />
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <SLabel text="Benchmark vs. Peer-Median" />
+                          {peersData?.from_cache && (
+                            <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
+                              Cached · {peersData.generated_at?.slice(0, 10)}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                          {/* Header */}
                           <div style={{
-                            display: "grid", gridTemplateColumns: "1fr 110px 110px",
+                            display: "grid", gridTemplateColumns: "1fr 100px 100px",
                             gap: 8, padding: "0 0 6px",
                             borderBottom: `1px solid ${C.border}`,
                           }}>
                             {["Metrik", data.name, "Peer-Median"].map(h => (
-                              <div key={h} style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, fontWeight: 600 }}>
-                                {h}
-                              </div>
+                              <div key={h} style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, fontWeight: 600 }}>{h}</div>
                             ))}
                           </div>
                           {benchmark.map((b, i) => {
-                            // Farbcodierung: company_value vs peer_median numerisch vergleichen
                             const cv = parseFloat((b.company_value ?? "").replace(/[^0-9.]/g, ""));
                             const pv = parseFloat((b.peer_median ?? "").replace(/[^0-9.]/g, ""));
                             const hasNum = !isNaN(cv) && !isNaN(pv) && pv > 0;
-                            const valColor = hasNum
-                              ? cv >= pv ? C.teal : C.amber
-                              : C.teal;
+                            const valColor = hasNum ? cv >= pv ? C.teal : C.amber : C.teal;
                             return (
                               <div key={i} style={{
-                                display: "grid", gridTemplateColumns: "1fr 110px 110px",
+                                display: "grid", gridTemplateColumns: "1fr 100px 100px",
                                 gap: 8, padding: "8px 0",
                                 borderBottom: i < benchmark.length - 1 ? `1px solid ${C.border}` : "none",
                                 alignItems: "center",
@@ -3142,30 +2998,167 @@ export default function CompanyDetailPage() {
                       </Card>
                     )}
 
-                    {/* PeerScore Modal */}
-                    {peerScoreModal && (
-                      <PeerScoreModal peer={peerScoreModal} onClose={() => setPeerScoreModal(null)} />
-                    )}
-
-                    {/* Block 3: Comparable Transactions Placeholder */}
-                    <Card>
-                      <SLabel text="Comparable Transactions" />
-                      <div style={{
-                        border: `1px dashed ${C.border}`, borderRadius: 6,
-                        padding: 16, textAlign: "center",
-                      }}>
-                        <div style={{ fontSize: 11, color: C.t3 }}>
-                          Comparable Transactions — Phase 3
-                        </div>
-                        <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 4 }}>
-                          Ähnliche abgeschlossene M&A-Deals · EV/Revenue · EV/EBITDA Multiples
-                        </div>
+                    {/* Block 2: Peer-Karten */}
+                    <Card style={{ padding: 0, overflow: "hidden", marginBottom: 12 }}>
+                      <div style={{ padding: "14px 20px 10px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <SLabel text={`Wettbewerber (${peers.length})`} />
+                        <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
+                          Scores werden automatisch angereichert
+                        </span>
                       </div>
+                      {peers.map((p, idx) => {
+                        const pathColor = PATH_COLORS[p.investment_path ?? ""] ?? C.t3;
+                        const isListed  = p.ipo_status === "listed";
+                        const rc        = p.rating ? ratingColor(p.rating) : null;
+                        const hasScores = p.composite_score != null || p.financial_score != null || p.market_score != null;
+
+                        return (
+                          <div key={p.id} style={{
+                            padding: "18px 20px",
+                            borderBottom: idx < peers.length - 1 ? `1px solid ${C.border}` : "none",
+                          }}>
+                            {/* Row 1: Name + Ticker + Funding-Betrag */}
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <span>{regionFlag(p.region)} {p.name}</span>
+                                  {p.ticker && (
+                                    <span style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, background: C.tealDim, border: `1px solid ${C.tealBorder}`, borderRadius: 4, padding: "1px 6px" }}>
+                                      {p.ticker}{p.exchange ? ` · ${p.exchange}` : ""}
+                                    </span>
+                                  )}
+                                  {rc && (
+                                    <span style={{ fontSize: 10, fontWeight: 700, fontFamily: C.mono, color: rc, background: rc + "18", border: `1px solid ${rc}33`, borderRadius: 4, padding: "1px 6px" }}>
+                                      {p.rating}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Badges */}
+                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+                                  {p.stage_normalized && (
+                                    <span style={{
+                                      fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px",
+                                      color: stageColor(p.stage_normalized),
+                                      background: stageColor(p.stage_normalized) + "18",
+                                      border: `1px solid ${stageColor(p.stage_normalized)}33`,
+                                    }}>
+                                      {p.stage_normalized}
+                                    </span>
+                                  )}
+                                  {isListed && (
+                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}` }}>Public</span>
+                                  )}
+                                  {p.investment_path && p.investment_path !== "Beobachten" && (
+                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: pathColor, background: pathColor + "18", border: `1px solid ${pathColor}33` }}>
+                                      {p.investment_path}
+                                    </span>
+                                  )}
+                                  {p.headquarters && (
+                                    <span style={{ fontSize: 10, color: C.t3, display: "flex", alignItems: "center", gap: 3 }}>
+                                      📍{p.headquarters}
+                                    </span>
+                                  )}
+                                  {p.founding_year && (
+                                    <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Gegr. {p.founding_year}</span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Funding + Analysieren */}
+                              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                                <div style={{ fontSize: 13, color: C.teal, fontFamily: C.mono, fontWeight: 600 }}>
+                                  {p.funding_total_usd_mn
+                                    ? p.funding_total_usd_mn >= 1000
+                                      ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
+                                      : `$${p.funding_total_usd_mn.toFixed(0)}M`
+                                    : "—"}
+                                </div>
+                                {p.headcount && (
+                                  <div style={{ fontSize: 10, color: C.t3 }}>{p.headcount.toLocaleString("de-DE")} MA</div>
+                                )}
+                                <button
+                                  onClick={() => router.push(`/company/${encodeURIComponent(p.name)}`)}
+                                  style={{
+                                    fontSize: 10, color: C.teal, fontFamily: C.mono,
+                                    background: "none", border: `1px solid ${C.tealBorder}`,
+                                    borderRadius: 6, padding: "3px 10px", cursor: "pointer",
+                                  }}
+                                >
+                                  Analysieren →
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Positioning Note */}
+                            {p.positioning_note && (
+                              <div style={{
+                                padding: "8px 12px", marginBottom: 10,
+                                background: "rgba(0,212,160,0.05)",
+                                border: `1px solid ${C.tealBorder}`,
+                                borderLeft: `3px solid ${C.teal}`,
+                                borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
+                                fontSize: 12, color: C.t1, lineHeight: 1.55,
+                              }}>
+                                {p.positioning_note}
+                              </div>
+                            )}
+
+                            {/* Description */}
+                            {p.description && !p.positioning_note && (
+                              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>
+                                {p.description.slice(0, 180)}{p.description.length > 180 ? "…" : ""}
+                              </div>
+                            )}
+
+                            {/* Inline Score-Row — kein Modal */}
+                            <div style={{
+                              display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
+                              gap: 1, marginTop: 4,
+                              background: C.border,
+                              borderRadius: C.rSm, overflow: "hidden",
+                              border: `1px solid ${C.border}`,
+                            }}>
+                              {[
+                                { label: "Composite", value: p.composite_score, color: p.rating ? ratingColor(p.rating) : C.t2 },
+                                { label: "Financial",  value: p.financial_score,  color: C.blue },
+                                { label: "Market",     value: p.market_score,     color: C.teal },
+                              ].map((s, si) => (
+                                <div key={si} style={{
+                                  padding: "8px 10px", background: C.bgCard,
+                                  display: "flex", flexDirection: "column", gap: 5,
+                                }}>
+                                  <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                                    {s.label}
+                                  </div>
+                                  <ScoreBar value={s.value} color={s.color} />
+                                </div>
+                              ))}
+                            </div>
+                            {!hasScores && (
+                              <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 5, textAlign: "center" }}>
+                                Scores werden im Hintergrund berechnet — beim nächsten Laden verfügbar
+                              </div>
+                            )}
+
+                            {/* Website */}
+                            {p.website && (
+                              <div style={{ marginTop: 8 }}>
+                                <a
+                                  href={p.website.startsWith("http") ? p.website : `https://${p.website}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textDecoration: "none", opacity: 0.7 }}
+                                >
+                                  {p.website.replace(/^https?:\/\//, "")} →
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </Card>
 
-                    {/* Disclaimer */}
-                    <div style={{ marginTop: 12, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
-                      Peers generiert via Claude · Keine Anlageberatung · Stand: {peersData?.generated_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)}
+                    {/* Footer */}
+                    <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
+                      Peers generiert via Claude · Scores: SC-01–SC-13 · Keine Anlageberatung · Stand: {peersData?.generated_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)}
                     </div>
                   </>
                 )}
