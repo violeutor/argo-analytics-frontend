@@ -219,6 +219,8 @@ const C = {
   display: "'Plus Jakarta Sans',sans-serif",
   body: "'DM Sans',sans-serif",
   rSm: "6px", rMd: "10px", rLg: "14px",
+  // Fließtext-Größe — einziger Hebel für alle Body-Texte in Karten
+  fsBody: 13,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -698,7 +700,7 @@ function TabScoreBar({ label, score, tooltip }: { label: string; score?: number;
           position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 200,
           background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rMd,
           padding: "10px 14px", width: 240, boxShadow: "0 4px 20px rgba(0,0,0,.5)",
-          fontSize: 11, color: C.t2, lineHeight: 1.6, pointerEvents: "none",
+          fontSize: C.fsBody, color: C.t2, lineHeight: 1.6, pointerEvents: "none",
         }}>
           {tooltip}
         </div>
@@ -1566,7 +1568,7 @@ export default function CompanyDetailPage() {
                 {(data.description || data.intro) && (
                   <Card>
                     <SLabel text="Einordnung" />
-                    <div style={{ fontSize: 13, lineHeight: 1.7, color: C.t1 }}>
+                    <div style={{ fontSize: C.fsBody, lineHeight: 1.7, color: C.t1 }}>
                       {data.description || data.intro}
                     </div>
                     <div style={{ marginTop: 10, fontSize: 10, color: C.t3, fontFamily: C.mono }}>
@@ -1792,7 +1794,7 @@ export default function CompanyDetailPage() {
                               <div style={{ width: 20, height: 20, borderRadius: 5, background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontFamily: C.mono, color: C.teal, fontWeight: 700 }}>
                                 {i + 1}
                               </div>
-                              <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{d}</span>
+                              <span style={{ fontSize: C.fsBody, color: C.t1, lineHeight: 1.5 }}>{d}</span>
                             </div>
                           ))}
                         </div>
@@ -1814,7 +1816,7 @@ export default function CompanyDetailPage() {
                       <SLabel text="Marktpositionierung" />
                       {md.competition_note ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>{md.competition_note}</div>
+                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.6 }}>{md.competition_note}</div>
                           {md.market_cycle && (
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                               <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Marktzyklus</span>
@@ -1845,10 +1847,10 @@ export default function CompanyDetailPage() {
                           <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
                         </div>
                         {md.competition_note && (
-                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
+                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
                         )}
                         {md.sam_note && (
-                          <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 11, color: C.t2, lineHeight: 1.55 }}>
+                          <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>
                             {md.sam_note.replace(/^SAM\s*=\s*[^×]+×[^=]+=\s*\$[\d.]+B\.?\s*/i, "")}
                           </div>
                         )}
@@ -2056,7 +2058,7 @@ export default function CompanyDetailPage() {
                             }} />
                           </div>
                         </div>
-                        <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{cap.note}</div>
+                        <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>{cap.note}</div>
                         {/* Quellen-Badges */}
                         {showPipeline && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
@@ -2610,7 +2612,7 @@ export default function CompanyDetailPage() {
                         <div style={{ padding: "12px 16px", borderRadius: C.rMd, background: "rgba(255,255,255,0.03)",
                           border: `1px solid ${C.border}`, display: "flex", alignItems: "flex-start", gap: 10 }}>
                           <span style={{ fontSize: 14, marginTop: 1 }}>ℹ</span>
-                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.6 }}>
+                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.6 }}>
                             <strong style={{ color: C.t1 }}>Keine Finanzkennzahlen verfügbar.</strong>{" "}
                             US private companies unterliegen keiner Offenlegungspflicht für Jahresabschlüsse.
                             Funding-Struktur und Investorenqualität sind der primäre Informationsrahmen.
@@ -2761,7 +2763,7 @@ export default function CompanyDetailPage() {
 
             const MiniSignal = ({ s, accent }: { s: SignalItem; accent: string }) => (
               <div style={{
-                fontSize: 10, color: C.t2, borderLeft: `2px solid ${accent}55`,
+                fontSize: C.fsBody - 3, color: C.t2, borderLeft: `2px solid ${accent}55`,
                 paddingLeft: 7, marginTop: 5, lineHeight: 1.4,
               }}>
                 <span style={{ color: accent, fontFamily: C.mono, fontSize: 9, marginRight: 4 }}>
@@ -2805,7 +2807,7 @@ export default function CompanyDetailPage() {
                           <div style={{ fontSize: 10, fontWeight: 600, color: oppHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
                             {label.toUpperCase()}
                           </div>
-                          <span title={`Datenkonfidenz: ${conf} · Quellen: ${(assessed?.opportunity_sources ?? []).join(", ")}`} style={{
+                          <span title={`Konfidenz ${conf === "high" ? "Hoch" : conf === "medium" ? "Mittel — begrenzte Datenbasis" : "Niedrig — Score basiert auf Stage-Proxy"} · Quellen: ${(assessed?.opportunity_sources ?? []).join(", ")}`} style={{
                             fontSize: 8, fontWeight: 700, color: confColor, fontFamily: C.mono,
                             padding: "1px 4px", borderRadius: 3,
                             background: confColor + "15", border: `1px solid ${confColor}30`,
@@ -2816,8 +2818,8 @@ export default function CompanyDetailPage() {
                       </div>
                     </div>
                     {assessed?.opportunity_note
-                      ? <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{assessed.opportunity_note}</div>
-                      : <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
+                      ? <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5 }}>{assessed.opportunity_note}</div>
+                      : <div style={{ fontSize: C.fsBody, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
                     }
                     {oppSigs.map((s: SignalItem, i: number) => <MiniSignal key={i} s={s} accent={C.teal} />)}
                   </div>
@@ -2831,7 +2833,7 @@ export default function CompanyDetailPage() {
                           <div style={{ fontSize: 10, fontWeight: 600, color: rskHeaderColor, fontFamily: C.mono, letterSpacing: ".05em" }}>
                             {label.toUpperCase()}
                           </div>
-                          <span title={`Datenkonfidenz: ${conf} · Quellen: ${(assessed?.risk_sources ?? []).join(", ")}`} style={{
+                          <span title={`Konfidenz ${conf === "high" ? "Hoch" : conf === "medium" ? "Mittel — begrenzte Datenbasis" : "Niedrig — Score basiert auf Stage-Proxy"} · Quellen: ${(assessed?.risk_sources ?? []).join(", ")}`} style={{
                             fontSize: 8, fontWeight: 700, color: confColor, fontFamily: C.mono,
                             padding: "1px 4px", borderRadius: 3,
                             background: confColor + "15", border: `1px solid ${confColor}30`,
@@ -2842,8 +2844,8 @@ export default function CompanyDetailPage() {
                       </div>
                     </div>
                     {assessed?.risk_note
-                      ? <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{assessed.risk_note}</div>
-                      : <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
+                      ? <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5 }}>{assessed.risk_note}</div>
+                      : <div style={{ fontSize: C.fsBody, color: C.t3, fontStyle: "italic" }}>Wird generiert…</div>
                     }
                     {rskSigs.map((s: SignalItem, i: number) => <MiniSignal key={i} s={s} accent={C.red} />)}
                   </div>
@@ -2874,13 +2876,18 @@ export default function CompanyDetailPage() {
                     }}
                   >
                     <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginBottom: 6, letterSpacing: ".08em" }}>
-                      COMPOSITE SCORE ⓘ
+                      POTENZIAL & RISIKO INDEX ⓘ
                     </div>
                     <div style={{ fontSize: 56, fontWeight: 700, color: scoreColor, lineHeight: 1, fontFamily: C.display }}>
                       {composite !== null ? composite.toFixed(1) : "—"}
                     </div>
                     <div style={{ fontSize: 12, color: scoreColor, marginTop: 6, fontFamily: C.mono, fontWeight: 600 }}>
                       {scoreLabel}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.t3, marginTop: 8, fontFamily: C.mono, lineHeight: 1.5, maxWidth: 220, textAlign: "center" }}>
+                      Ø Potenzial-Scores der 6 Dimensionen<br />
+                      minus gewichteter Risiko-Score (SC-10)<br />
+                      plus Signal-Drift aus {signals.length} Signals
                     </div>
 
                     {/* Tooltip */}
@@ -2892,23 +2899,25 @@ export default function CompanyDetailPage() {
                       textAlign: "left",
                     }}>
                       <div style={{ fontSize: 10, color: C.t2, fontFamily: C.mono, marginBottom: 8, fontWeight: 600 }}>
-                        GEWICHTUNG
+                        WIE BERECHNET?
                       </div>
                       {[
-                        { label: "Opportunität (Ø)", val: oppScore10?.toFixed(1) ?? "—", weight: "Ø Dims", color: C.teal },
-                        { label: "Risiko 6D (SC-10)", val: riskScore10?.toFixed(1) ?? "—", weight: "−0.5×", color: C.red },
-                        { label: "Signal-Drift", val: (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1), weight: "+0.15×", color: signalDrift >= 0 ? C.teal : C.amber },
+                        { label: "Opportunität (Ø)", val: oppScore10?.toFixed(1) ?? "—", weight: "Ø aller 6 Dims", note: "Durchschnitt der Potenzial-Scores", color: C.teal },
+                        { label: "Risiko 6D (SC-10)", val: riskScore10?.toFixed(1) ?? "—", weight: "−0.5×", note: "Compound Risk, confidence-gewichtet", color: C.red },
+                        { label: "Signal-Drift", val: (signalDrift10 >= 0 ? "+" : "") + signalDrift10.toFixed(1), weight: "+0.15×", note: `${potSignals.length} pos. / ${riskSignals.length} neg. Signals`, color: signalDrift >= 0 ? C.teal : C.amber },
                       ].map(row => (
-                        <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <div>
+                        <div key={row.label} style={{ marginBottom: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span style={{ fontSize: 10, color: C.t2 }}>{row.label}</span>
-                            <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginLeft: 6 }}>{row.weight}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: row.color, fontFamily: C.mono }}>{row.val}</span>
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: row.color, fontFamily: C.mono }}>{row.val}</span>
+                          <div style={{ fontSize: 9, color: C.t3, marginTop: 2 }}>
+                            <span style={{ fontFamily: C.mono, marginRight: 4 }}>{row.weight}</span>{row.note}
+                          </div>
                         </div>
                       ))}
                       <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 8, fontSize: 9, color: C.t3, lineHeight: 1.5 }}>
-                        Claude Assessment + Signal-Engine.<br />Keine Anlageberatung.
+                        Algorithmische Scores · Claude Narrativ<br />Keine Anlageberatung.
                       </div>
                     </div>
                   </div>
@@ -3186,7 +3195,7 @@ export default function CompanyDetailPage() {
                                 border: `1px solid ${C.tealBorder}`,
                                 borderLeft: `3px solid ${C.teal}`,
                                 borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
-                                fontSize: 12, color: C.t1, lineHeight: 1.55,
+                                fontSize: C.fsBody, color: C.t1, lineHeight: 1.55,
                               }}>
                                 {p.positioning_note}
                               </div>
@@ -3194,7 +3203,7 @@ export default function CompanyDetailPage() {
 
                             {/* Description */}
                             {p.description && !p.positioning_note && (
-                              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>
+                              <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>
                                 {p.description.slice(0, 180)}{p.description.length > 180 ? "…" : ""}
                               </div>
                             )}
@@ -3311,7 +3320,7 @@ export default function CompanyDetailPage() {
               const accentDim = isEnabler ? C.blueDim : C.tealDim;
               return (
                 <div key={entry.ticker} style={{
-                  padding: "14px 16px", borderRadius: C.rMd,
+                  padding: "15px 17px", borderRadius: C.rMd,
                   background: "rgba(255,255,255,0.025)",
                   border: `1px solid ${C.border}`,
                   display: "flex", flexDirection: "column", gap: 10,
@@ -3357,18 +3366,18 @@ export default function CompanyDetailPage() {
                           {/* Rolle als erster Bullet */}
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
                             <span style={{ color: C.t3, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
-                            <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
+                            <span style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
                           </div>
                           {/* Context als zweiter Bullet */}
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
                             <span style={{ color: accent, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
-                            <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{entry.context}</span>
+                            <span style={{ fontSize: C.fsBody, color: C.t1, lineHeight: 1.5 }}>{entry.context}</span>
                           </div>
                         </div>
                       ) : (
                         <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
                           <span style={{ color: C.t3, fontSize: 11, lineHeight: "18px", flexShrink: 0 }}>·</span>
-                          <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
+                          <span style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5 }}>{entry.role}</span>
                         </div>
                       )
                     }
@@ -3460,7 +3469,7 @@ export default function CompanyDetailPage() {
                           display: "flex", alignItems: "center", gap: 8,
                         }}>
                           <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
-                          <span style={{ fontSize: 11, color: C.t2 }}>{etf.name}</span>
+                          <span style={{ fontSize: C.fsBody, color: C.t2 }}>{etf.name}</span>
                           <div style={{ width: 30, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
                             <div style={{ height: "100%", width: `${etf.relevance * 100}%`, background: C.purple, borderRadius: 99 }} />
                           </div>
@@ -3802,7 +3811,7 @@ export default function CompanyDetailPage() {
                       const v = sc[prof.scoreKey] as number | undefined;
                       return (
                         <div key={prof.segment} style={{
-                          padding: "14px 16px", borderRadius: C.rMd,
+                          padding: "15px 17px", borderRadius: C.rMd,
                           background: "rgba(255,255,255,0.025)", border: `1px solid ${C.border}`,
                         }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -3812,7 +3821,7 @@ export default function CompanyDetailPage() {
                             </span>
                           </div>
                           <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginBottom: 8 }}>{prof.focus}</div>
-                          <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.55 }}>{prof.note()}</div>
+                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>{prof.note()}</div>
                         </div>
                       );
                     })}
@@ -3915,7 +3924,7 @@ export default function CompanyDetailPage() {
                       <div style={{ fontSize: 18, fontWeight: 700, color: C.teal, fontFamily: C.display }}>
                         {data.fundamentals.ticker ?? data.name} · {data.fundamentals.exchange ?? "—"}
                       </div>
-                      <div style={{ fontSize: 12, color: C.t2, marginTop: 4 }}>
+                      <div style={{ fontSize: C.fsBody, color: C.t2, marginTop: 4 }}>
                         Direkter Kauf über Börse möglich — sofortige Liquidität.
                       </div>
                     </div>
@@ -3946,7 +3955,7 @@ export default function CompanyDetailPage() {
                       <div style={{ fontSize: 18, fontWeight: 700, color: scoreColor(sc.hero_score), fontFamily: C.display }}>
                         {sc.hero_path_label}
                       </div>
-                      <div style={{ fontSize: 12, color: C.t2, marginTop: 4 }}>
+                      <div style={{ fontSize: C.fsBody, color: C.t2, marginTop: 4 }}>
                         {ALL_PATHS.find(p => p.key === heroPath)?.description ?? ""}
                       </div>
                     </div>
@@ -3974,7 +3983,7 @@ export default function CompanyDetailPage() {
                         flex: 1, minWidth: 180, padding: "7px 12px",
                         background: `${C.teal}06`, border: `1px solid ${C.teal}20`,
                         borderLeft: `3px solid ${C.teal}`, borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
-                        fontSize: 11, color: C.t2, lineHeight: 1.45,
+                        fontSize: C.fsBody, color: C.t2, lineHeight: 1.45,
                       }}>
                         <span style={{ color: C.teal, fontFamily: C.mono, fontSize: 9, display: "block", marginBottom: 2 }}>↑ SIGNAL</span>
                         {s.summary.length > 90 ? s.summary.slice(0, 90) + "…" : s.summary}
@@ -3985,7 +3994,7 @@ export default function CompanyDetailPage() {
                         flex: 1, minWidth: 180, padding: "7px 12px",
                         background: `${C.red}05`, border: `1px solid ${C.red}15`,
                         borderLeft: `3px solid ${C.red}44`, borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
-                        fontSize: 11, color: C.t2, lineHeight: 1.45,
+                        fontSize: C.fsBody, color: C.t2, lineHeight: 1.45,
                       }}>
                         <span style={{ color: C.red, fontFamily: C.mono, fontSize: 9, display: "block", marginBottom: 2 }}>↓ SIGNAL</span>
                         {s.summary.length > 90 ? s.summary.slice(0, 90) + "…" : s.summary}
@@ -4038,7 +4047,7 @@ export default function CompanyDetailPage() {
                       <div style={{ padding: "14px 20px" }}>
 
                         {path.key === "ipo" && (
-                          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
+                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.6 }}>
                             {data.ipo_potential === "Hoch"
                               ? `IPO-Potential: Hoch — Sekundärmarkt oder Pre-IPO-Runden evaluieren. Stage: ${STAGE_MAP[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"}.`
                               : `IPO-Potential: ${data.ipo_potential ?? "—"} — Zeitpunkt beobachten, Stage ${STAGE_MAP[data.funding_stage ?? ""] ?? "—"}.`
@@ -4094,7 +4103,7 @@ export default function CompanyDetailPage() {
                                   display: "flex", alignItems: "center", gap: 10,
                                 }}>
                                   <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
-                                  <span style={{ fontSize: 11, color: C.t2 }}>{etf.name}</span>
+                                  <span style={{ fontSize: C.fsBody, color: C.t2 }}>{etf.name}</span>
                                   <div style={{ width: 30, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
                                     <div style={{ height: "100%", width: `${etf.relevance * 100}%`, background: C.purple, borderRadius: 99 }} />
                                   </div>
