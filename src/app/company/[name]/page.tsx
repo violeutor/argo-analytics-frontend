@@ -841,7 +841,13 @@ export default function CompanyDetailPage() {
   const [signalsLoading, setSignalsLoading]     = useState(false);
   const [peersData, setPeersData]               = useState<PeersResponse | null>(null);
   const [peersLoading, setPeersLoading]         = useState(false);
-  // peerScoreModal entfernt — Scores jetzt inline auf Peer-Karte (kein Modal)
+  // UX-PEER-01: Live Score-Polling für Peer-Karten
+  const peerScorePollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const peerScorePollStart = useRef<number>(0);
+  const PEER_POLL_INTERVAL = 5_000;   // 5s
+  const PEER_POLL_TIMEOUT  = 180_000; // 3min hard stop
+  // Expliziter Zähler — nie im Dependency-Array rechnen
+  const [pendingScoreCount, setPendingScoreCount] = useState(0);
   const [assessmentsData, setAssessmentsData]   = useState<any | null>(null);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
   const [valueDriversData, setValueDriversData] = useState<ValueDriversData | null>(null);
@@ -906,7 +912,12 @@ export default function CompanyDetailPage() {
         Promise.allSettled([
           _f("/ownership").then(od  => od  && setOwnershipData(od)),
           _f("/signals").then(sd    => sd  && setSignalsData(sd)),
-          _f("/peers").then(pd      => pd  && setPeersData(pd)),
+          _f("/peers").then(pd => {
+            if (!pd) return;
+            setPeersData(pd);
+            // Explizit zählen — Dependency-Array bleibt sauber
+            setPendingScoreCount((pd.peers ?? []).filter((p: PeerCompany) => p.composite_score == null).length);
+          }),
           _f("/assessments").then(ad => {
             if (ad) setAssessmentsData(ad);
             else setAssessmentsData({ _error: "failed" });
@@ -966,6 +977,84 @@ export default function CompanyDetailPage() {
     let vdTimer = window.setTimeout(poll, 3000);
     return () => window.clearTimeout(vdTimer);
   }, [name, loading, valueDriversData?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // UX-PEER-01: Peer-Score Live-Polling — startet wenn Tab 5 aktiv und Peers ohne Score vorhanden
+  // Dependency-Array: [activeTab, pendingScoreCount] — kein .filter() im Array, kein fragiles Length-Proxy
+  useEffect(() => {
+    const peers = peersData?.peers ?? [];
+    const shouldPoll = activeTab === 5 && peers.length > 0 && pendingScoreCount > 0;
+
+    if (!shouldPoll) {
+      if (peerScorePollRef.current) {
+        clearInterval(peerScorePollRef.current);
+        peerScorePollRef.current = null;
+      }
+      return;
+    }
+
+    // Poller noch nicht gestartet → starten
+    if (!peerScorePollRef.current) {
+      peerScorePollStart.current = Date.now();
+
+      peerScorePollRef.current = setInterval(async () => {
+        // Hard timeout nach 3min
+        if (Date.now() - peerScorePollStart.current > PEER_POLL_TIMEOUT) {
+          clearInterval(peerScorePollRef.current!);
+          peerScorePollRef.current = null;
+          setPendingScoreCount(0); // Timeout — kein weiterer Versuch
+          return;
+        }
+
+        // Snapshot der aktuellen Peer-Liste für diesen Tick
+        const currentPeers = peersData?.peers ?? [];
+        const stillMissing = currentPeers.filter(p => p.composite_score == null);
+        if (stillMissing.length === 0) {
+          clearInterval(peerScorePollRef.current!);
+          peerScorePollRef.current = null;
+          setPendingScoreCount(0);
+          return;
+        }
+
+        const results = await Promise.allSettled(
+          stillMissing.map(p =>
+            fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(p.name)}/scores`)
+              .then(r => r.ok ? r.json() : null)
+              .catch(() => null)
+          )
+        );
+
+        // Scores live in peersData patchen + Zähler explizit dekrementieren
+        let newlyResolved = 0;
+        const updatedPeers = currentPeers.map(peer => {
+          const idx = stillMissing.findIndex(m => m.name === peer.name);
+          if (idx === -1) return peer;
+          const res = results[idx];
+          if (res.status !== "fulfilled" || !res.value?.scores_ready) return peer;
+          newlyResolved++;
+          return {
+            ...peer,
+            composite_score: res.value.composite_score ?? peer.composite_score,
+            financial_score: res.value.financial_score ?? peer.financial_score,
+            market_score:    res.value.market_score    ?? peer.market_score,
+            rating:          res.value.rating          ?? peer.rating,
+          };
+        });
+
+        if (newlyResolved > 0 && peersData) {
+          setPeersData({ ...peersData, peers: updatedPeers });
+          // Explizit dekrementieren → triggert useEffect neu → Poller stoppt wenn 0
+          setPendingScoreCount(prev => Math.max(0, prev - newlyResolved));
+        }
+      }, PEER_POLL_INTERVAL);
+    }
+
+    return () => {
+      if (peerScorePollRef.current) {
+        clearInterval(peerScorePollRef.current);
+        peerScorePollRef.current = null;
+      }
+    };
+  }, [activeTab, pendingScoreCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // UX-01: Tab-Dots — direkt aus State abgeleitet, kein separater Status-Endpoint nötig
   useEffect(() => {
@@ -1230,6 +1319,7 @@ export default function CompanyDetailPage() {
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         button { font-family: inherit; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes argoPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }
       `}</style>
 
       {/* Nav */}
@@ -2917,7 +3007,7 @@ export default function CompanyDetailPage() {
               return (
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 48, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 2 }} />
+                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
                   </div>
                   <span style={{ fontSize: 11, fontFamily: C.mono, color, fontWeight: 600 }}>{value.toFixed(1)}</span>
                 </div>
@@ -3134,8 +3224,15 @@ export default function CompanyDetailPage() {
                               ))}
                             </div>
                             {!hasScores && (
-                              <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 5, textAlign: "center" }}>
-                                Scores werden im Hintergrund berechnet — beim nächsten Laden verfügbar
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, justifyContent: "center" }}>
+                                <span style={{
+                                  width: 6, height: 6, borderRadius: "50%",
+                                  background: C.amber, display: "inline-block",
+                                  animation: "argoPulse 1.4s ease-in-out infinite",
+                                }} />
+                                <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
+                                  Scores werden berechnet…
+                                </span>
                               </div>
                             )}
 
