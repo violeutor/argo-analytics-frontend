@@ -1927,11 +1927,17 @@ export default function CompanyDetailPage() {
             const curatedEntries  = data.ownership ?? [];
             const showPipeline    = pipelineEntries.length > 0;
 
-            // BUG-30: Funding Investors immer mergen (Lead + Co-Investoren aus funding_rounds)
-            // Ergänzt pipeline/curated Einträge — deduped by name
+            // BUG-30: Funding Investors mergen (Lead + Co-Investoren aus funding_rounds)
+            // Dedupe-Basis: pipeline + curated + data.ownership (Backend hat bereits gemerged)
+            // data.ownership einbeziehen verhindert Duplikate wenn Backend-Merge und
+            // Frontend-Merge denselben Investor aus verschiedenen Quellen ziehen.
             const fundingEntries: OwnershipItem[] = (() => {
               const base = showPipeline ? pipelineEntries : curatedEntries;
-              const existingNames = new Set(base.map((o: any) => o.name.toLowerCase()));
+              const allKnownNames = new Set([
+                ...base.map((o: any) => o.name.toLowerCase()),
+                ...(data.ownership ?? []).map((o: any) => o.name.toLowerCase()),
+              ]);
+              const existingNames = allKnownNames;
               const result: OwnershipItem[] = [];
               for (const r of data.funding_rounds ?? []) {
                 if (r.lead_investor && !existingNames.has(r.lead_investor.toLowerCase())) {
@@ -4309,7 +4315,7 @@ export default function CompanyDetailPage() {
                       </div>
                       {signals.length === 0 && (
                         <div style={{ color: C.t3, fontSize: 11, fontFamily: C.mono }}>
-                          Signal-Engine läuft täglich 06:00 UTC — erste Signale erscheinen nach dem nächsten Cron-Run.
+                          Signal-Engine läuft täglich 04:00 UTC — erste Signale erscheinen nach dem nächsten Cron-Run.
                         </div>
                       )}
                     </div>
