@@ -159,6 +159,17 @@ interface ScoringDetail {
   deal_success_score: number; rating: string; execution_warning: boolean;
 }
 interface SupplyItem { ticker: string; name: string; exchange?: string; role: string; relevance: number }
+interface FundingMomentum {
+  rounds_count: number;
+  days_since_last_round?: number | null;
+  avg_months_between_rounds?: number | null;
+  last_round_amount_usd_mn?: number | null;
+  round_size_growth_pct?: number | null;
+  lead_investors: string[];
+  stage_progression: string[];
+  momentum_score?: number | null;
+}
+
 interface CompanyDetail {
   name: string; category?: string; core_technology?: string;
   website?: string; intro: string; industry?: string; risk?: string; enrichment_pending?: boolean;
@@ -170,6 +181,7 @@ interface CompanyDetail {
   proxy_beta_1y?: number; proxy_beta_benchmark?: string; proxy_beta_source?: string;
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
   funding_rounds: FundingRoundItem[];
+  funding_momentum?: FundingMomentum | null;
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
   scorings: ScoringDetail[];
   supply_chain_upstream: SupplyItem[]; supply_chain_downstream: SupplyItem[];
@@ -925,7 +937,7 @@ export default function CompanyDetailPage() {
             else setAssessmentsData({ _error: "failed" });
           }),
           _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
-          _f("/kpi-timeseries").then(kd => setKpiData(kd?.metrics ?? {})),
+          _f(`/kpi-timeseries?company_id=${encodeURIComponent(d.id)}`).then(kd => setKpiData(kd?.metrics ?? {})),
         ]).finally(() => {
           setOwnershipLoading(false);
           setSignalsLoading(false);
@@ -2710,6 +2722,78 @@ export default function CompanyDetailPage() {
                             </div>
                           </Card>
                         )}
+
+
+                        {/* Block D: Funding Momentum — berechnet aus Form D Runden */}
+                        {data.funding_momentum && data.funding_momentum.rounds_count > 0 && (() => {
+                          const fm = data.funding_momentum!;
+                          const scoreColor = fm.momentum_score == null ? C.t3
+                            : fm.momentum_score >= 7 ? C.teal
+                            : fm.momentum_score >= 4 ? C.amber
+                            : C.red;
+                          const daysLabel = fm.days_since_last_round == null ? "—"
+                            : fm.days_since_last_round <= 365
+                              ? `${fm.days_since_last_round}d`
+                              : `${(fm.days_since_last_round / 30.44).toFixed(0)}mo`;
+                          const growthLabel = fm.round_size_growth_pct == null ? "—"
+                            : `${fm.round_size_growth_pct > 0 ? "+" : ""}${fm.round_size_growth_pct.toFixed(0)}%`;
+                          const growthCol = fm.round_size_growth_pct == null ? C.t3
+                            : fm.round_size_growth_pct >= 0 ? C.teal : C.red;
+                          return (
+                            <Card>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                                <SLabel text="Funding Momentum" />
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  {fm.momentum_score != null && (
+                                    <span style={{ fontSize: 11, fontWeight: 700, fontFamily: C.mono,
+                                      color: scoreColor, background: scoreColor + "18",
+                                      border: `1px solid ${scoreColor}44`, borderRadius: 99, padding: "2px 10px" }}>
+                                      Score {fm.momentum_score.toFixed(1)}/10
+                                    </span>
+                                  )}
+                                  <SourceBadge source="edgar" />
+                                </div>
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+                                <FundTile label="Runden" val={String(fm.rounds_count)} />
+                                <FundTile label="Letzte Runde vor" val={daysLabel}
+                                  color={fm.days_since_last_round != null && fm.days_since_last_round <= 365 ? C.teal : C.t2} />
+                                <FundTile label="Ø Abstand" val={fm.avg_months_between_rounds != null ? `${fm.avg_months_between_rounds.toFixed(0)}mo` : "—"} />
+                                <FundTile label="Rundenwachstum" val={growthLabel} color={growthCol} />
+                              </div>
+                              {fm.stage_progression.length > 0 && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginRight: 4 }}>Stage</span>
+                                  {fm.stage_progression.map((s, i) => (
+                                    <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                      {i > 0 && <span style={{ color: C.t3, fontSize: 10 }}>→</span>}
+                                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+                                        color: i === fm.stage_progression.length - 1 ? C.teal : C.t2,
+                                        background: i === fm.stage_progression.length - 1 ? "rgba(0,212,160,.1)" : "rgba(255,255,255,.04)",
+                                        border: `1px solid ${i === fm.stage_progression.length - 1 ? C.teal + "44" : C.border}` }}>
+                                        {s}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {fm.lead_investors.length > 0 && (
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginRight: 4, paddingTop: 2 }}>Lead</span>
+                                  {fm.lead_investors.map((inv, i) => (
+                                    <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, fontFamily: C.mono,
+                                      color: C.t2, background: "rgba(255,255,255,.04)", border: `1px solid ${C.border}` }}>
+                                      {inv}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div style={{ marginTop: 10, fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                                Momentum Score aus Rundengröße, Frequenz, Wachstum und Stage. Indikator für Investoren-Vertrauen — kein Ersatz für Financials.
+                              </div>
+                            </Card>
+                          );
+                        })()}
 
                         <BetaBlock />
                       </>
