@@ -161,7 +161,7 @@ interface ScoringDetail {
 interface SupplyItem { ticker: string; name: string; exchange?: string; role: string; relevance: number }
 interface CompanyDetail {
   name: string; category?: string; core_technology?: string;
-  website?: string; intro: string; industry?: string; risk?: string;
+  website?: string; intro: string; industry?: string; risk?: string; enrichment_pending?: boolean;
   founded?: string; headquarters?: string; employee_count?: string;
   product_description?: string; description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
@@ -969,6 +969,10 @@ export default function CompanyDetailPage() {
   // (eigener Poller) bleibt unberührt.
   useEffect(() => {
     if (!name || loading) return;
+    // Nur pollen wenn Backend Phase B tatsächlich gequeued hat (Cold-Path).
+    // Warm-Companies (R1-GUARD-Skip) haben enrichment_pending=false → kein Leerlauf-
+    // Polling gegen den teuren /company-Endpoint, auch wenn headcount dauerhaft fehlt.
+    if (!data?.enrichment_pending) return;
     // Abbruch wenn die typischerweise nachgelieferten Felder schon da sind
     const basisReady = (d?: CompanyDetail | null) =>
       !!(d?.headquarters && d?.employee_count);
@@ -998,7 +1002,7 @@ export default function CompanyDetailPage() {
     };
     let timer = window.setTimeout(poll, 5000);
     return () => window.clearTimeout(timer);
-  }, [name, loading, data?.headquarters, data?.employee_count]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, loading, data?.enrichment_pending, data?.headquarters, data?.employee_count]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Value Drivers: Supply-Chain-Berechnung läuft async
   useEffect(() => {
