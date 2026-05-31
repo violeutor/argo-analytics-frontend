@@ -275,9 +275,11 @@ function SLabel({ text }: { text: string }) {
 function SourceBadge({ source }: { source?: string }) {
   if (!source || source === "none") return null;
   const map: Record<string, { label: string; color: string }> = {
-    yahoo:     { label: "Yahoo Finance", color: C.blue },
-    ba_bridge: { label: "Bundesanzeiger", color: C.teal },
-    edgar:     { label: "SEC EDGAR", color: C.purple },
+    yahoo:           { label: "Yahoo Finance",   color: C.blue   },
+    ba_bridge:       { label: "Bundesanzeiger",  color: C.teal   },
+    hai:             { label: "Bundesanzeiger",  color: C.teal   },  // HAI financial_kpi → BA-Daten
+    handelsregister: { label: "Handelsregister", color: C.teal   },  // HAI ownership/management
+    edgar:           { label: "SEC EDGAR",       color: C.purple },
   };
   const s = map[source];
   if (!s) return null;
@@ -2224,7 +2226,7 @@ export default function CompanyDetailPage() {
                   <Card>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                       <SLabel text="Gewinn & Verlust" />
-                      {KPI_FIRST && <SourceBadge source={kpiSourceLabel === "SEC EDGAR XBRL" ? "edgar" : "ba_bridge"} />}
+                      {KPI_FIRST && <SourceBadge source={kpiSourceLabel === "SEC EDGAR XBRL" ? "edgar" : (kpiData![KPI_FIRST][0]?.source === "hai" ? "hai" : "ba_bridge")} />}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
 
@@ -2545,7 +2547,7 @@ export default function CompanyDetailPage() {
                     if (isDE) return (
                       /* ══ PRIVATE DE — Jahresabschluss-View ══════════════════ */
                       <>
-                        {/* Block A: Bundesanzeiger Finanzkennzahlen — Produktwaffe */}
+                        {/* Block A: Finanzkennzahlen — BA primär, HAI als Fallback */}
                         {f.ba_found ? (
                           <Card>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
@@ -2615,8 +2617,46 @@ export default function CompanyDetailPage() {
                               </div>
                             )}
                           </Card>
+                        ) : kpiData && (kpiData["revenue_mn"]?.length || kpiData["net_income_mn"]?.length) ? (
+                          /* HAI-Fallback: BA nicht gefunden, aber kpi_timeseries hat HAI-Daten */
+                          <Card>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                              <SLabel text="Finanzkennzahlen" />
+                              <SourceBadge source="hai" />
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 10 }}>
+                              {/* Umsatz — neuester Wert aus kpi_timeseries */}
+                              <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Umsatz</div>
+                                <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                                  {kpiLatest("revenue_mn") != null ? `€${((kpiLatest("revenue_mn") ?? 0) >= 1000 ? ((kpiLatest("revenue_mn") ?? 0)/1000).toFixed(1)+"B" : (kpiLatest("revenue_mn") ?? 0).toFixed(1)+"M")}` : "—"}
+                                </div>
+                                <TrendBtn metric="revenue_mn" />
+                              </div>
+                              {/* Jahresüberschuss — mit Vorzeichen-Farbe */}
+                              <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Jahresüberschuss</div>
+                                <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, lineHeight: 1,
+                                  color: kpiLatest("net_income_mn") == null ? C.t3 : (kpiLatest("net_income_mn") ?? 0) >= 0 ? C.teal : C.red }}>
+                                  {kpiLatest("net_income_mn") != null ? `€${(kpiLatest("net_income_mn") ?? 0).toFixed(1)}M` : "—"}
+                                </div>
+                                <TrendBtn metric="net_income_mn" />
+                              </div>
+                              {/* Mitarbeiter */}
+                              <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Mitarbeiter</div>
+                                <div style={{ fontSize: 18, fontWeight: 600, fontFamily: C.display, color: C.t1, lineHeight: 1 }}>
+                                  {kpiLatest("headcount") != null ? (kpiLatest("headcount") ?? 0).toLocaleString("de-DE") : (data.employee_count ?? "—")}
+                                </div>
+                                <TrendBtn metric="headcount" />
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 10, color: C.t3, lineHeight: 1.5 }}>
+                              Aus Bundesanzeiger-Jahresabschlüssen extrahiert. Kein Bundesanzeiger-Direkttreffer — Daten über Handelsregister bezogen.
+                            </div>
+                          </Card>
                         ) : (
-                          /* BA nicht gefunden — Pending-State */
+                          /* Kein BA, kein HAI — Pending-State */
                           <Card>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                               <SLabel text="Jahresabschluss · Finanzkennzahlen" />
@@ -2626,8 +2666,8 @@ export default function CompanyDetailPage() {
                               </span>
                             </div>
                             <div style={{ fontSize: 12, color: C.t3, fontFamily: C.mono, padding: "16px 0", lineHeight: 1.6 }}>
-                              Bundesanzeiger-Daten werden geladen. DE GmbHs sind zur Offenlegung verpflichtet —
-                              Jahresabschluss-Daten folgen nach Anreicherung.
+                              Jahresabschluss-Daten werden geladen. DE GmbHs sind zur Offenlegung verpflichtet —
+                              Finanzkennzahlen folgen nach Anreicherung.
                             </div>
                           </Card>
                         )}
