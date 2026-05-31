@@ -275,11 +275,12 @@ function SLabel({ text }: { text: string }) {
 function SourceBadge({ source }: { source?: string }) {
   if (!source || source === "none") return null;
   const map: Record<string, { label: string; color: string }> = {
-    yahoo:           { label: "Yahoo Finance",   color: C.blue   },
-    ba_bridge:       { label: "Bundesanzeiger",  color: C.teal   },
-    hai:             { label: "Bundesanzeiger",  color: C.teal   },  // HAI financial_kpi → BA-Daten
-    handelsregister: { label: "Handelsregister", color: C.teal   },  // HAI ownership/management
-    edgar:           { label: "SEC EDGAR",       color: C.purple },
+    yahoo:           { label: "Yahoo Finance",        color: C.blue   },
+    ba_bridge:       { label: "Bundesanzeiger",       color: C.teal   },
+    hai:             { label: "Bundesanzeiger",       color: C.teal   },  // HAI financial_kpi → BA-Daten
+    handelsregister: { label: "Handelsregister",      color: C.teal   },  // HAI ownership/management
+    edgar:           { label: "SEC EDGAR",            color: C.purple },
+    bafin_insider:   { label: "BaFin Art. 19 MAR",   color: C.amber  },  // SE-18 Directors' Dealings
   };
   const s = map[source];
   if (!s) return null;
@@ -2903,7 +2904,8 @@ export default function CompanyDetailPage() {
               regulatory_intervention: "Regulatorik ⚠", policy_support: "Policy +",
               policy_risk: "Policy ⚠", subsidy: "Förderung",
               negative_earnings: "Earnings", supply_chain: "Lieferkette",
-              insider_selling: "Insider-Verkauf", customer_concentration: "Kundenkonzentration",
+              insider_selling: "Insider-Verkauf", insider_buying: "Insider-Kauf",
+              customer_concentration: "Kundenkonzentration",
               filing: "Transparenz", ownership_entry: "Ownership", general_news: "News",
               headcount_growth: "Headcount +", tech_milestone: "Tech-Meilenstein",
             };
@@ -2918,7 +2920,7 @@ export default function CompanyDetailPage() {
               { id: "strategy",   oppCats: ["new_partnership", "expansion", "acquisition"],      rskCats: ["leadership_change", "strategy_pivot"] },
               { id: "political",  oppCats: ["regulatory_positive", "subsidy", "policy_support"], rskCats: ["regulatory_intervention", "policy_risk", "sanctions"] },
               { id: "technology", oppCats: ["patent", "new_product", "tech_milestone"],          rskCats: ["ip_risk", "tech_obsolescence"] },
-              { id: "operations", oppCats: ["headcount_growth", "revenue_per_fte"],              rskCats: ["supply_chain", "customer_concentration", "filing"] },
+              { id: "operations", oppCats: ["headcount_growth", "revenue_per_fte", "insider_buying"],  rskCats: ["supply_chain", "customer_concentration", "filing", "insider_selling"] },
             ];
 
             const ScoreBadge = ({ score, side }: { score: number; side: "opp" | "rsk" }) => {

@@ -38,6 +38,7 @@ interface Notification {
   relevance_score: number;
   event_date: string;
   source_url?: string;
+  signal_category?: string;
 }
 
 
@@ -853,15 +854,31 @@ function PageContent() {
                       const dotCol = n.direction === 'positive' ? 'var(--teal)'
                                    : n.direction === 'negative' ? 'var(--red)'
                                    : 'var(--t3)';
+                      // NOTIF-01: Signal-Kategorie als lesbares Label
+                      const catLabels: Record<string, string> = {
+                        funding: 'Finanzierung', partnership: 'Partnerschaft', ipo_progress: 'IPO',
+                        market_growth: 'Marktwachstum', patent: 'Patent/IP', investor_entry: 'Investor',
+                        regulatory: 'Regulatorik', negative_earnings: 'Earnings',
+                        supply_chain: 'Lieferkette', insider_selling: 'Insider-Verkauf',
+                        insider_buying: 'Insider-Kauf', customer_concentration: 'Kundenkonzentration',
+                        filing: 'Transparenz', ownership_entry: 'Ownership', general_news: 'News',
+                      };
+                      const catLabel = n.signal_category ? (catLabels[n.signal_category] ?? n.signal_category) : null;
                       return (
                         <div
                           key={n.id}
-                          onClick={() => { markSeen([n.id]); setSeenIds(getSeenIds()); }}
+                          onClick={() => {
+                            markSeen([n.id]);
+                            setSeenIds(getSeenIds());
+                            setNotifOpen(false);
+                            setNavTab('research');
+                            router.push(`/company/${encodeURIComponent(n.company_name)}?from=signal&back=/`);
+                          }}
                           style={{
                             padding: '9px 14px',
                             borderBottom: '1px solid var(--border)',
                             background: seen ? 'transparent' : 'rgba(0,212,160,0.03)',
-                            cursor: 'default',
+                            cursor: 'pointer',
                             display: 'flex', gap: 10, alignItems: 'flex-start',
                           }}
                         >
@@ -881,6 +898,13 @@ function PageContent() {
                                   color: '#181B20', borderRadius: 99,
                                   fontSize: 9, fontWeight: 700, padding: '1px 5px',
                                 }}>NEU</span>
+                              )}
+                              {catLabel && (
+                                <span style={{
+                                  marginLeft: 6, background: 'var(--bg-hover)',
+                                  color: 'var(--t3)', borderRadius: 99,
+                                  fontSize: 9, fontWeight: 600, padding: '1px 5px',
+                                }}>{catLabel}</span>
                               )}
                             </div>
                             <div style={{
