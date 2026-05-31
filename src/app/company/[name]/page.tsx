@@ -960,6 +960,46 @@ export default function CompanyDetailPage() {
     return () => window.clearTimeout(timer);
   }, [name, loading, data?.market_data?.sam_usd_bn]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Phase-B-Enrichment-Poller (Option 2, zweite Hälfte) ──────────────────────
+  // Cold-Path: Backend liefert Phase A (Identität+Ticker+Kategorie) sofort, die
+  // langsamen Basisfelder (Headcount, HQ, Description, Website) kommen als
+  // BackgroundTask nach und landen in der DB. Dieser Poller holt sie in dieselbe
+  // Session, statt auf den nächsten Load zu warten.
+  // Muster identisch zum Market-Poller. Merged NUR die Basisfelder — market_data
+  // (eigener Poller) bleibt unberührt.
+  useEffect(() => {
+    if (!name || loading) return;
+    // Abbruch wenn die typischerweise nachgelieferten Felder schon da sind
+    const basisReady = (d?: CompanyDetail | null) =>
+      !!(d?.headquarters && d?.employee_count);
+    if (basisReady(data)) return;
+
+    let attempts = 0;
+    const MAX = 6;
+    const poll = () => {
+      if (attempts++ >= MAX) return;
+      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then((d: CompanyDetail | null) => {
+          if (!d) return;
+          // Nur Basisfelder mergen — gezielt, damit frisch gepollte market_data
+          // oder andere Tab-States nicht überschrieben werden.
+          setData(prev => prev ? {
+            ...prev,
+            headquarters:   prev.headquarters   || d.headquarters,
+            employee_count: prev.employee_count || d.employee_count,
+            description:    prev.description     || d.description,
+            website:        prev.website         || d.website,
+            founded:        prev.founded         || d.founded,
+          } : prev);
+          if (!basisReady(d) && attempts < MAX)
+            timer = window.setTimeout(poll, 6000);
+        });
+    };
+    let timer = window.setTimeout(poll, 5000);
+    return () => window.clearTimeout(timer);
+  }, [name, loading, data?.headquarters, data?.employee_count]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Value Drivers: Supply-Chain-Berechnung läuft async
   useEffect(() => {
     if (!name || loading) return;
