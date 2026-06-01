@@ -817,6 +817,15 @@ export default function CompanyDetailPage() {
   const fromPage = searchParams?.get("from") ?? "watchlist";
   const backUrl  = fromPage === "watchlist" ? "/?tab=watchlist" : "/?tab=research";
   const name = decodeURIComponent((params?.name ?? "") as string);
+  // DISAMBIG-01: ticker + isin aus /resolve via Landing-Page Query-Params
+  // Werden einmalig beim Erst-Fetch an den Backend-Insert weitergegeben (Blank-Entry).
+  const _resolvedTicker = searchParams?.get("ticker") ?? null;
+  const _resolvedIsin   = searchParams?.get("isin")   ?? null;
+  const _resolveParams  = [
+    _resolvedTicker ? `ticker=${encodeURIComponent(_resolvedTicker)}` : null,
+    _resolvedIsin   ? `isin=${encodeURIComponent(_resolvedIsin)}`     : null,
+  ].filter(Boolean).join("&");
+  const _companyUrl = `${API_BASE}/api/v1/company/${encodeURIComponent(name)}${_resolveParams ? `?${_resolveParams}` : ""}`;
 
   const [data, setData] = useState<CompanyDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -915,7 +924,7 @@ export default function CompanyDetailPage() {
     if (!name) return;
 
     // 1) Basis-Fetch (blocking — alles andere hängt davon ab)
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`)
+    fetch(_companyUrl)
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(d => {
         setData(d);
