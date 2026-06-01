@@ -271,10 +271,11 @@ function HeroState({
     onSelect(c);
   };
 
-  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN aus /resolve.
-  const goToCompany = (companyName: string, isin?: string | null) => {
+  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN + Ticker aus /resolve.
+  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}`);
+    const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}`);
   };
 
   const handleSearch = async () => {
@@ -300,7 +301,7 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker);
       }
     } catch {
       // OpenFIGI/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
