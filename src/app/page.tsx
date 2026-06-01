@@ -45,6 +45,7 @@ interface Notification {
 interface ResolveCandidate {
   figi: string;
   name: string;
+  legal_name?: string | null;
   ticker?: string | null;
   exchange?: string | null;
   display_exchange?: string | null;
@@ -58,6 +59,7 @@ interface ResolveResponse {
   resolved_name?: string | null;
   resolved_isin?: string | null;
   resolved_ticker?: string | null;
+  resolved_exchange?: string | null;
   candidates: ResolveCandidate[];
   reason: string;
 }
@@ -271,11 +273,12 @@ function HeroState({
     onSelect(c);
   };
 
-  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN + Ticker aus /resolve.
-  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null) => {
+  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN + Ticker + Exchange aus /resolve.
+  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null, exchange?: string | null) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
     const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}`);
+    const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}`);
   };
 
   const handleSearch = async () => {
@@ -301,7 +304,7 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange);
       }
     } catch {
       // OpenFIGI/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
@@ -312,12 +315,16 @@ function HeroState({
   };
 
   // Modal-Auswahl: User hat eine Entität gewählt.
-  // Name = letzter query (User-Input), nicht OpenFIGI-Instrumentenname ("BAYER AG-REG").
-  // ISIN + Ticker aus OpenFIGI als Query-Params für Enrichment.
+  // Name = normalisierter Legal Name aus OpenFIGI ("Bayer AG"), Fallback User-Input.
+  // ISIN/Ticker/Exchange aus OpenFIGI als Query-Params für Enrichment.
   const handleDisambigPick = (c: ResolveCandidate) => {
+    const navName = c.legal_name || query.trim();
     const isinParam = c.isin ? `&isin=${encodeURIComponent(c.isin)}` : '';
     const tickerParam = c.ticker ? `&ticker=${encodeURIComponent(c.ticker)}` : '';
-    router.push(`/company/${encodeURIComponent(query.trim())}?from=research&back=/?tab=research${isinParam}${tickerParam}`);
+    // Exchange nur wenn echter Handelsplatz (display_exchange ≠ roher exchCode)
+    const venue = (c.display_exchange && c.display_exchange !== c.exchange) ? c.display_exchange : null;
+    const exchangeParam = venue ? `&exchange=${encodeURIComponent(venue)}` : '';
+    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}`);
     setDisambig(null);
   };
 
@@ -410,7 +417,7 @@ function HeroState({
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ color: 'var(--t1)', fontWeight: 500, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {c.name}
+                {c.legal_name || c.name}
               </div>
               <div style={{ color: 'var(--t3)', fontSize: 11, marginTop: 2 }}>
                 {[c.ticker, c.display_exchange].filter(Boolean).join(' · ')}
