@@ -41,6 +41,26 @@ interface Notification {
   signal_category?: string;
 }
 
+// DISAMBIG-01 / R25: Entity-Resolution-Response (Backend /api/v1/resolve)
+interface ResolveCandidate {
+  lei: string;
+  legal_name: string;
+  legal_form?: string | null;
+  country?: string | null;
+  isin?: string | null;
+}
+
+interface ResolveResponse {
+  query: string;
+  show_modal: boolean;
+  resolved_name?: string | null;
+  resolved_isin?: string | null;
+  candidates: ResolveCandidate[];
+  connected?: ResolveCandidate[];
+  connected_truncated?: boolean;
+  reason: string;
+}
+
 
 
 
@@ -205,6 +225,13 @@ function HeroState({
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Company[]>([]);
   const [popular, setPopular] = useState<{ name: string; count: number }[]>([]);
+  // DISAMBIG-01 / R25: Entity-Resolution-Modal im Cold-Path
+  const [disambig, setDisambig] = useState<{
+    listed: ResolveCandidate[];
+    connected: ResolveCandidate[];
+    truncated: boolean;
+  } | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     // Build popular from localStorage
@@ -245,17 +272,54 @@ function HeroState({
     onSelect(c);
   };
 
-  const handleSearch = () => {
+  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN aus /resolve.
+  const goToCompany = (companyName: string, isin?: string | null) => {
+    const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}`);
+  };
+
+  const handleSearch = async () => {
     if (!query.trim()) return;
     const q = query.trim();
+    // Warm-Path: lokaler DB-Spiegel-Treffer → direkt, KEIN GLEIF-Call (R1-Schutz).
     const match =
       companies.find((c) => c.name.toLowerCase() === q.toLowerCase()) ??
       companies.find((c) => matchesQuery(c, q));
     if (match) {
       handleSelect(match);
-    } else {
-      router.push(`/company/${encodeURIComponent(q)}?from=research&back=/?tab=research`);
+      return;
     }
+
+    // Cold-Path: Entity-Resolution vor dem Anlegen. Klärt erst, WAS gesucht ist.
+    setResolving(true);
+    try {
+      const res = await fetch(`${BACKEND_PROXY}/api/v1/resolve/${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error(`resolve ${res.status}`);
+      const r: ResolveResponse = await res.json();
+      if (r.show_modal && (r.candidates.length > 0 || (r.connected?.length ?? 0) > 0)) {
+        // Gelistete und/oder verbundene Treffer → Auswahl-Modal.
+        setDisambig({
+          listed: r.candidates,
+          connected: r.connected ?? [],
+          truncated: r.connected_truncated ?? false,
+        });
+      } else {
+        // Eindeutig (oder kein gelisteter Treffer) → direkt weiter.
+        // resolved_name = kanonischer Legal Name wenn aufgelöst, sonst Roh-Query.
+        goToCompany(r.resolved_name || q, r.resolved_isin);
+      }
+    } catch {
+      // GLEIF/Netz-Fehler darf One-Click nicht brechen → bestehender Flow mit Roh-Query.
+      goToCompany(q, null);
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  // Modal-Auswahl: User hat eine Entität gewählt → mit Legal Name + ISIN weiter.
+  const handleDisambigPick = (c: ResolveCandidate) => {
+    setDisambig(null);
+    goToCompany(c.legal_name, c.isin);
   };
 
   return (
@@ -275,7 +339,9 @@ function HeroState({
             onChange={(e) => handleInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           />
-          <button className="btn-primary" onClick={handleSearch}>Analysieren →</button>
+          <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
+            {resolving ? 'Prüfe…' : 'Analysieren →'}
+          </button>
         </div>
         {suggestions.length > 0 && (
           <div style={{
@@ -321,6 +387,109 @@ function HeroState({
           })}
         </div>
       </div>
+
+      {/* DISAMBIG-01 / R25: Entity-Auswahl — gelistete + verbundene Treffer */}
+      {disambig && (() => {
+        const renderRow = (c: ResolveCandidate) => (
+          <div
+            key={c.lei}
+            onClick={() => handleDisambigPick(c)}
+            style={{
+              padding: '11px 14px', cursor: 'pointer',
+              border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, transition: 'background .1s, border-color .1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-hover)';
+              e.currentTarget.style.borderColor = 'var(--border-md)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'var(--border)';
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: 'var(--t1)', fontWeight: 500, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {c.legal_name}
+              </div>
+              <div style={{ color: 'var(--t3)', fontSize: 11, marginTop: 2 }}>
+                {[c.legal_form, c.country].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+            {c.isin && (
+              <span style={{ color: 'var(--t2)', fontSize: 11, fontFamily: 'var(--font-m)', whiteSpace: 'nowrap' }}>
+                {c.isin}
+              </span>
+            )}
+          </div>
+        );
+        const sectionLabel = (txt: string) => (
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--t3)', margin: '4px 2px 2px' }}>
+            {txt}
+          </div>
+        );
+        return (
+        <div
+          onClick={() => setDisambig(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.55)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+              borderRadius: 'var(--r-lg)', maxWidth: 480, width: '100%',
+              padding: '20px 22px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+              maxHeight: '80vh', overflowY: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
+              Welches Unternehmen meinst du?
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--t3)', marginBottom: 16 }}>
+              Mehrere Treffer für „{query.trim()}". Bitte präzisieren.
+            </div>
+
+            {/* Gelistete (investierbar) */}
+            {disambig.listed.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {disambig.connected.length > 0 && sectionLabel('Börsennotiert')}
+                {disambig.listed.map(renderRow)}
+              </div>
+            )}
+
+            {/* Verbundene Treffer (ohne handelbares Wertpapier) */}
+            {disambig.connected.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                {sectionLabel('Weitere Treffer')}
+                {disambig.connected.map(renderRow)}
+              </div>
+            )}
+
+            {/* Cap überschritten → zum Verfeinern auffordern */}
+            {disambig.truncated && (
+              <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
+                Viele weitere verbundene Einheiten gefunden. Für ein genaueres Ergebnis bitte den Suchbegriff verfeinern (z.&nbsp;B. vollständige Firmierung).
+              </div>
+            )}
+
+            <div
+              onClick={() => { setDisambig(null); goToCompany(query.trim(), null); }}
+              style={{
+                marginTop: 14, fontSize: 12, color: 'var(--t3)', cursor: 'pointer',
+                textAlign: 'center', padding: '6px',
+              }}
+            >
+              Keine davon — trotzdem mit „{query.trim()}" suchen
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </div>
   );
 }
