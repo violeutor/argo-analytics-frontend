@@ -817,15 +817,18 @@ export default function CompanyDetailPage() {
   const fromPage = searchParams?.get("from") ?? "watchlist";
   const backUrl  = fromPage === "watchlist" ? "/?tab=watchlist" : "/?tab=research";
   const name = decodeURIComponent((params?.name ?? "") as string);
-  // DISAMBIG-01: ticker + isin + exchange aus /resolve via Landing-Page Query-Params
+  // DISAMBIG-01: ticker + isin + exchange + composite_figi aus /resolve via Landing-Page Query-Params
   // Werden einmalig beim Erst-Fetch an den Backend-Insert weitergegeben (Blank-Entry).
-  const _resolvedTicker = searchParams?.get("ticker") ?? null;
-  const _resolvedIsin   = searchParams?.get("isin")   ?? null;
-  const _resolvedExch   = searchParams?.get("exchange") ?? null;
+  // composite_figi → Exchange-Resolution in Phase A (Backend holt echtes XETRA/NYSE-Listing).
+  const _resolvedTicker   = searchParams?.get("ticker")         ?? null;
+  const _resolvedIsin     = searchParams?.get("isin")           ?? null;
+  const _resolvedExch     = searchParams?.get("exchange")       ?? null;
+  const _resolvedCompFigi = searchParams?.get("composite_figi") ?? null;
   const _resolveParams  = [
-    _resolvedTicker ? `ticker=${encodeURIComponent(_resolvedTicker)}` : null,
-    _resolvedIsin   ? `isin=${encodeURIComponent(_resolvedIsin)}`     : null,
-    _resolvedExch   ? `exchange=${encodeURIComponent(_resolvedExch)}` : null,
+    _resolvedTicker   ? `ticker=${encodeURIComponent(_resolvedTicker)}`           : null,
+    _resolvedIsin     ? `isin=${encodeURIComponent(_resolvedIsin)}`               : null,
+    _resolvedExch     ? `exchange=${encodeURIComponent(_resolvedExch)}`           : null,
+    _resolvedCompFigi ? `composite_figi=${encodeURIComponent(_resolvedCompFigi)}` : null,
   ].filter(Boolean).join("&");
   const _companyUrl = `${API_BASE}/api/v1/company/${encodeURIComponent(name)}${_resolveParams ? `?${_resolveParams}` : ""}`;
 

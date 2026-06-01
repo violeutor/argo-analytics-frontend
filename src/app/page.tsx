@@ -51,6 +51,7 @@ interface ResolveCandidate {
   display_exchange?: string | null;
   security_type?: string | null;
   isin?: string | null;
+  composite_figi?: string | null;
 }
 
 interface ResolveResponse {
@@ -60,6 +61,7 @@ interface ResolveResponse {
   resolved_isin?: string | null;
   resolved_ticker?: string | null;
   resolved_exchange?: string | null;
+  resolved_composite_figi?: string | null;
   candidates: ResolveCandidate[];
   reason: string;
 }
@@ -274,11 +276,12 @@ function HeroState({
   };
 
   // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN + Ticker + Exchange aus /resolve.
-  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null, exchange?: string | null) => {
+  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null, exchange?: string | null, compositeFigi?: string | null) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
     const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
     const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}`);
+    const compositeFigiParam = compositeFigi ? `&composite_figi=${encodeURIComponent(compositeFigi)}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}`);
   };
 
   const handleSearch = async () => {
@@ -304,7 +307,7 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi);
       }
     } catch {
       // OpenFIGI/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
@@ -324,7 +327,8 @@ function HeroState({
     // Exchange nur wenn echter Handelsplatz (display_exchange ≠ roher exchCode)
     const venue = (c.display_exchange && c.display_exchange !== c.exchange) ? c.display_exchange : null;
     const exchangeParam = venue ? `&exchange=${encodeURIComponent(venue)}` : '';
-    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}`);
+    const compositeFigiParam = c.composite_figi ? `&composite_figi=${encodeURIComponent(c.composite_figi)}` : '';
+    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}`);
     setDisambig(null);
   };
 
