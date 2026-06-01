@@ -43,10 +43,12 @@ interface Notification {
 
 // DISAMBIG-01 / R25: Entity-Resolution-Response (Backend /api/v1/resolve)
 interface ResolveCandidate {
-  lei: string;
-  legal_name: string;
-  legal_form?: string | null;
-  country?: string | null;
+  figi: string;
+  name: string;
+  ticker?: string | null;
+  exchange?: string | null;
+  display_exchange?: string | null;
+  security_type?: string | null;
   isin?: string | null;
 }
 
@@ -55,9 +57,8 @@ interface ResolveResponse {
   show_modal: boolean;
   resolved_name?: string | null;
   resolved_isin?: string | null;
+  resolved_ticker?: string | null;
   candidates: ResolveCandidate[];
-  connected?: ResolveCandidate[];
-  connected_truncated?: boolean;
   reason: string;
 }
 
@@ -227,9 +228,7 @@ function HeroState({
   const [popular, setPopular] = useState<{ name: string; count: number }[]>([]);
   // DISAMBIG-01 / R25: Entity-Resolution-Modal im Cold-Path
   const [disambig, setDisambig] = useState<{
-    listed: ResolveCandidate[];
-    connected: ResolveCandidate[];
-    truncated: boolean;
+    candidates: ResolveCandidate[];
   } | null>(null);
   const [resolving, setResolving] = useState(false);
 
@@ -296,30 +295,25 @@ function HeroState({
       const res = await fetch(`${BACKEND_PROXY}/api/v1/resolve/${encodeURIComponent(q)}`);
       if (!res.ok) throw new Error(`resolve ${res.status}`);
       const r: ResolveResponse = await res.json();
-      if (r.show_modal && (r.candidates.length > 0 || (r.connected?.length ?? 0) > 0)) {
-        // Gelistete und/oder verbundene Treffer → Auswahl-Modal.
-        setDisambig({
-          listed: r.candidates,
-          connected: r.connected ?? [],
-          truncated: r.connected_truncated ?? false,
-        });
+      if (r.show_modal && r.candidates.length > 0) {
+        // Mehrere Treffer → Auswahl-Modal.
+        setDisambig({ candidates: r.candidates });
       } else {
-        // Eindeutig (oder kein gelisteter Treffer) → direkt weiter.
-        // resolved_name = kanonischer Legal Name wenn aufgelöst, sonst Roh-Query.
+        // Eindeutig oder kein Treffer → direkt weiter.
         goToCompany(r.resolved_name || q, r.resolved_isin);
       }
     } catch {
-      // GLEIF/Netz-Fehler darf One-Click nicht brechen → bestehender Flow mit Roh-Query.
+      // OpenFIGI/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
       goToCompany(q, null);
     } finally {
       setResolving(false);
     }
   };
 
-  // Modal-Auswahl: User hat eine Entität gewählt → mit Legal Name + ISIN weiter.
+  // Modal-Auswahl: User hat eine Entität gewählt → mit kanonischem Name + ISIN weiter.
   const handleDisambigPick = (c: ResolveCandidate) => {
     setDisambig(null);
-    goToCompany(c.legal_name, c.isin);
+    goToCompany(c.name, c.isin);
   };
 
   return (
@@ -392,7 +386,7 @@ function HeroState({
       {disambig && (() => {
         const renderRow = (c: ResolveCandidate) => (
           <div
-            key={c.lei}
+            key={c.figi}
             onClick={() => handleDisambigPick(c)}
             style={{
               padding: '11px 14px', cursor: 'pointer',
@@ -411,10 +405,10 @@ function HeroState({
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ color: 'var(--t1)', fontWeight: 500, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {c.legal_name}
+                {c.name}
               </div>
               <div style={{ color: 'var(--t3)', fontSize: 11, marginTop: 2 }}>
-                {[c.legal_form, c.country].filter(Boolean).join(' · ')}
+                {[c.ticker, c.display_exchange].filter(Boolean).join(' · ')}
               </div>
             </div>
             {c.isin && (
@@ -454,28 +448,15 @@ function HeroState({
               Mehrere Treffer für „{query.trim()}". Bitte präzisieren.
             </div>
 
-            {/* Gelistete (investierbar) */}
-            {disambig.listed.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {disambig.connected.length > 0 && sectionLabel('Börsennotiert')}
-                {disambig.listed.map(renderRow)}
-              </div>
-            )}
+            {/* Börsennotierte Kandidaten */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {disambig.candidates.map(renderRow)}
+            </div>
 
-            {/* Verbundene Treffer (ohne handelbares Wertpapier) */}
-            {disambig.connected.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {sectionLabel('Weitere Treffer')}
-                {disambig.connected.map(renderRow)}
-              </div>
-            )}
-
-            {/* Cap überschritten → zum Verfeinern auffordern */}
-            {disambig.truncated && (
-              <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
-                Viele weitere verbundene Einheiten gefunden. Für ein genaueres Ergebnis bitte den Suchbegriff verfeinern (z.&nbsp;B. vollständige Firmierung).
-              </div>
-            )}
+            {/* Hinweis für nicht-gelistete Töchter/GmbHs */}
+            <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
+              Tochtergesellschaft oder GmbH gesucht? Vollständige Firmierung eingeben (z.&nbsp;B. „Bayer CropScience GmbH").
+            </div>
 
             <div
               onClick={() => { setDisambig(null); goToCompany(query.trim(), null); }}
