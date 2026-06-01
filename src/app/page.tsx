@@ -310,10 +310,14 @@ function HeroState({
     }
   };
 
-  // Modal-Auswahl: User hat eine Entität gewählt → mit kanonischem Name + ISIN weiter.
+  // Modal-Auswahl: User hat eine Entität gewählt.
+  // Name = letzter query (User-Input), nicht OpenFIGI-Instrumentenname ("BAYER AG-REG").
+  // ISIN + Ticker aus OpenFIGI als Query-Params für Enrichment.
   const handleDisambigPick = (c: ResolveCandidate) => {
+    const isinParam = c.isin ? `&isin=${encodeURIComponent(c.isin)}` : '';
+    const tickerParam = c.ticker ? `&ticker=${encodeURIComponent(c.ticker)}` : '';
+    router.push(`/company/${encodeURIComponent(query.trim())}?from=research&back=/?tab=research${isinParam}${tickerParam}`);
     setDisambig(null);
-    goToCompany(c.name, c.isin);
   };
 
   return (
