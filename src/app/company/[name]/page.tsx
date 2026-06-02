@@ -1053,6 +1053,41 @@ export default function CompanyDetailPage() {
     return () => window.clearTimeout(vdTimer);
   }, [name, loading, valueDriversData?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Beta-Poller (BETA-REVIEW-01) ─────────────────────────────────────────────
+  // Ad-hoc Beta-Enrich läuft in der Bridge (~5-10s nach Cold-Load). Der Poller
+  // holt das echte 252-Tage-Beta sobald es fertig ist — kein Reload nötig.
+  // Gate: nur listed Companies OHNE market-Beta (yahoo-Fallback oder kein Beta).
+  // Pollt /company (Beta steckt in fundamentals der Company-Response).
+  // MAX 6 Versuche × 6s = max 36s Polling-Fenster — passt zum yfinance-Zeitrahmen.
+  useEffect(() => {
+    if (!name || loading) return;
+    const fd = data?.fundamentals;
+    const isListed = data?.ipo_status === "listed";
+    // Nur pollen wenn listed und noch kein echtes Market-Beta
+    if (!isListed || fd?.beta_source === "market") return;
+
+    let attempts = 0;
+    const MAX = 6;
+    const poll = () => {
+      if (attempts++ >= MAX) return;
+      _f("").then((d: CompanyDetail | null) => {
+        if (!d?.fundamentals) return;
+        if (d.fundamentals.beta_source === "market") {
+          // Echtes Market-Beta angekommen — mergen und Poller beenden
+          setData(prev => prev ? {
+            ...prev,
+            fundamentals: d.fundamentals,
+          } : prev);
+          return; // kein weiterer setTimeout → Poller stoppt
+        }
+        if (attempts < MAX)
+          betaTimer = window.setTimeout(poll, 6000);
+      });
+    };
+    let betaTimer = window.setTimeout(poll, 6000); // erster Versuch nach 6s (Bridge braucht ~5s)
+    return () => window.clearTimeout(betaTimer);
+  }, [name, loading, data?.ipo_status, data?.fundamentals?.beta_source]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // UX-PEER-01: Peer-Score Live-Polling — startet wenn Tab 5 aktiv und Peers ohne Score vorhanden
   // Dependency-Array: [activeTab, pendingScoreCount] — kein .filter() im Array, kein fragiles Length-Proxy
   useEffect(() => {
