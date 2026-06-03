@@ -135,11 +135,16 @@ interface FundamentalsData {
   ba_last_report_year?: string; ba_source_url?: string;
   // Beta (YH-06)
   beta_1y?: number; beta_3y?: number; volatility_30d?: number;
-  beta_source?: string;           // 'market' | 'damodaran'
+  beta_source?: string;           // 'market' | 'damodaran' | 'yahoo'
   beta_benchmark?: string;        // '^GDAXI', '^GSPC', 'Damodaran · Power'
   beta_benchmark_is_fallback?: boolean;
   beta_calculated_at?: string;    // ISO 8601
   beta_data_quality?: string;     // 'full' | 'partial'
+  beta_is_sector_fallback?: boolean;  // company-Beta = Damodaran-Sektor-Beta (kein company-spezifischer Wert)
+  // Sektor-Beta (YH-04 S49) — eigenständiger Referenzwert, immer Damodaran
+  sector_beta?: number;           // levered Branchen-Beta (Ø-D/E der Branche)
+  sector_beta_label?: string;     // 'Power · D/E 0.74'
+  sector_beta_source?: string;    // 'damodaran'
   // FD-01 Routing (FD-04 Herkunfts-Badge)
   fundamentals_source?: string;           // 'yahoo' | 'ba_bridge' | 'edgar' | 'none'
   fundamentals_source_secondary?: string;
@@ -341,11 +346,63 @@ function BetaBadge({ fd }: { fd: FundamentalsData }) {
                 ⚠ Kein lokaler Index verfügbar · S&P 500 als Fallback
               </div>
             )}
+            {fd.beta_is_sector_fallback && (
+              <div style={{ marginTop: 6, fontSize: 10, color: C.amber, borderTop: `1px solid ${C.border}`, paddingTop: 6, lineHeight: 1.5 }}>
+                ⚠ Kein company-spezifischer Wert verfügbar — Branchenmittel (levered) als Näherung
+              </div>
+            )}
             {isPartial && (
               <div style={{ marginTop: 4, fontSize: 10, color: C.amber }}>
                 ⚠ Weniger als 200 Handelstage — Beta eingeschränkt aussagekräftig
               </div>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// YH-04 (S49) — Sektor-Beta-Tile: eigenständiger Damodaran-Referenzwert im Market Tab.
+// Levered (Branchen-Ø-D/E) → vergleichbar mit dem company-spezifischen Markt-Beta.
+function SectorBetaTile({ fd }: { fd: FundamentalsData }) {
+  const [hover, setHover] = useState(false);
+  if (fd.sector_beta == null) return null;
+  const b = fd.sector_beta;
+  const color = b >= 1.5 ? C.red : b >= 1.0 ? C.amber : C.teal;
+
+  return (
+    <div
+      style={{ position: "relative", background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px", display: "flex", flexDirection: "column", cursor: "default" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4, borderBottom: `1px dashed ${C.t3}`, alignSelf: "flex-start", paddingBottom: 1 }}>
+        β Branche · Damodaran
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color, lineHeight: 1 }}>
+        β {b.toFixed(2)}
+      </div>
+      <div style={{ fontSize: 9, color: C.t3, marginTop: 3 }}>
+        {fd.sector_beta_label ?? "Branchenmittel"}
+      </div>
+      {hover && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 200,
+          background: C.bgCard, border: `1px solid ${C.borderMd}`, borderRadius: C.rMd,
+          padding: "10px 14px", minWidth: 240, boxShadow: "0 4px 20px rgba(0,0,0,.5)",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.t1, marginBottom: 8, fontFamily: C.mono }}>
+            Branchen-Beta (levered)
+          </div>
+          <div style={{ fontSize: 10, color: C.t2, lineHeight: 1.5 }}>
+            Sektor-Durchschnitt aus NYU Damodaran, relevered mit der durchschnittlichen
+            Verschuldung der Branche. Vergleichswert zum company-spezifischen Beta —
+            zeigt, ob das Unternehmen volatiler als seine Branche ist. Die Company trägt
+            ihr echtes D/E, die Branche das mittlere.
+          </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: C.t3, fontFamily: C.mono, borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+            {fd.sector_beta_label ?? "—"}
           </div>
         </div>
       )}
@@ -1785,7 +1842,7 @@ export default function CompanyDetailPage() {
 
                 {/* ── SHARED: TAM · SAM · CAGR · Zyklus · Beta ───────────── */}
                 {md && (
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${[proxyBeta != null, isListed && mktcapVsTam != null].filter(Boolean).length + 4},1fr)`, gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${[proxyBeta != null, fd?.sector_beta != null, isListed && mktcapVsTam != null].filter(Boolean).length + 4},1fr)`, gap: 10 }}>
                     <FundTile
                       label="TAM 2035"
                       val={md.tam_2035_usd_bn != null ? `$${md.tam_2035_usd_bn.toFixed(0)}B` : fmtBn(data.tam_usd_bn)}
@@ -1827,6 +1884,9 @@ export default function CompanyDetailPage() {
                         sub={proxyBetaBench}
                         color={proxyBeta >= 1.5 ? C.red : proxyBeta >= 1.0 ? C.amber : C.teal}
                       />
+                    )}
+                    {fd?.sector_beta != null && (
+                      <SectorBetaTile fd={fd} />
                     )}
                     {isListed && mktcapVsTam != null && (
                       <FundTile
