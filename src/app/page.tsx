@@ -41,26 +41,31 @@ interface Notification {
   signal_category?: string;
 }
 
-// DISAMBIG-01 / R25: Entity-Resolution-Response (Backend /api/v1/resolve)
+// DISAMBIG-03: Entity-Resolution-Response (Backend /api/v1/resolve, Wikidata-first)
 interface ResolveCandidate {
-  figi: string;
+  wikidata_id: string;
   name: string;
   legal_name?: string | null;
+  display_name?: string | null;
+  is_listed: boolean;
+  is_subsidiary?: boolean;
+  parent_name?: string | null;
   ticker?: string | null;
-  exchange?: string | null;
+  exchange_label?: string | null;
   display_exchange?: string | null;
-  security_type?: string | null;
-  isin?: string | null;
-  composite_figi?: string | null;
+  headquarters?: string | null;
+  founded_year?: string | null;
 }
 
 interface ResolveResponse {
   query: string;
   show_modal: boolean;
   resolved_name?: string | null;
-  resolved_isin?: string | null;
+  resolved_is_listed?: boolean | null;
+  resolved_wikidata_id?: string | null;
   resolved_ticker?: string | null;
   resolved_exchange?: string | null;
+  resolved_isin?: string | null;
   resolved_composite_figi?: string | null;
   candidates: ResolveCandidate[];
   reason: string;
@@ -275,13 +280,23 @@ function HeroState({
     onSelect(c);
   };
 
-  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN + Ticker + Exchange aus /resolve.
-  const goToCompany = (companyName: string, isin?: string | null, ticker?: string | null, exchange?: string | null, compositeFigi?: string | null) => {
+  // Navigiert zur Result-Seite. Kanonischer Name + optional ISIN/Ticker/Exchange + is_listed aus /resolve.
+  const goToCompany = (
+    companyName: string,
+    isin?: string | null,
+    ticker?: string | null,
+    exchange?: string | null,
+    compositeFigi?: string | null,
+    isListed?: boolean | null,
+  ) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
     const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
     const exchangeParam = exchange ? `&exchange=${encodeURIComponent(exchange)}` : '';
     const compositeFigiParam = compositeFigi ? `&composite_figi=${encodeURIComponent(compositeFigi)}` : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}`);
+    // DISAMBIG-03: is_listed nur weitergeben wenn explizit bekannt (true/false).
+    // null/undefined → Param weglassen, Backend-Heuristik entscheidet.
+    const isListedParam = (isListed === true || isListed === false) ? `&is_listed=${isListed}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}${isListedParam}`);
   };
 
   const handleSearch = async () => {
@@ -307,10 +322,10 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi, r.resolved_is_listed);
       }
     } catch {
-      // OpenFIGI/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
+      // Resolver/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
       goToCompany(q, null);
     } finally {
       setResolving(false);
@@ -318,17 +333,17 @@ function HeroState({
   };
 
   // Modal-Auswahl: User hat eine Entität gewählt.
-  // Name = normalisierter Legal Name aus OpenFIGI ("Bayer AG"), Fallback User-Input.
-  // ISIN/Ticker/Exchange aus OpenFIGI als Query-Params für Enrichment.
+  // Name = display_name (Legal Name aus Wikidata P1448), Fallback User-Input.
+  // Ticker/Exchange aus Wikidata, is_listed direkt aus P414 → kein Backend-Guess.
   const handleDisambigPick = (c: ResolveCandidate) => {
-    const navName = c.legal_name || query.trim();
-    const isinParam = c.isin ? `&isin=${encodeURIComponent(c.isin)}` : '';
+    const navName = c.display_name || c.legal_name || query.trim();
     const tickerParam = c.ticker ? `&ticker=${encodeURIComponent(c.ticker)}` : '';
-    // Exchange nur wenn echter Handelsplatz (display_exchange ≠ roher exchCode)
-    const venue = (c.display_exchange && c.display_exchange !== c.exchange) ? c.display_exchange : null;
+    const venue = c.display_exchange || null;
     const exchangeParam = venue ? `&exchange=${encodeURIComponent(venue)}` : '';
-    const compositeFigiParam = c.composite_figi ? `&composite_figi=${encodeURIComponent(c.composite_figi)}` : '';
-    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}`);
+    // DISAMBIG-03: is_listed kommt direkt aus der User-Wahl (Wikidata P414).
+    // Das ist der Kern: User wählt "Bayer CropScience GmbH" → is_listed=false fix.
+    const isListedParam = `&is_listed=${c.is_listed}`;
+    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${tickerParam}${exchangeParam}${isListedParam}`);
     setDisambig(null);
   };
 
@@ -398,11 +413,11 @@ function HeroState({
         </div>
       </div>
 
-      {/* DISAMBIG-01 / R25: Entity-Auswahl — gelistete + verbundene Treffer */}
+      {/* DISAMBIG-03: Entity-Auswahl — listed + private + Töchter (Wikidata) */}
       {disambig && (() => {
         const renderRow = (c: ResolveCandidate) => (
           <div
-            key={c.figi}
+            key={c.wikidata_id || c.name}
             onClick={() => handleDisambigPick(c)}
             style={{
               padding: '11px 14px', cursor: 'pointer',
@@ -421,22 +436,25 @@ function HeroState({
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ color: 'var(--t1)', fontWeight: 500, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {c.legal_name || c.name}
+                {c.display_name || c.legal_name || c.name}
               </div>
               <div style={{ color: 'var(--t3)', fontSize: 11, marginTop: 2 }}>
-                {[c.ticker, c.display_exchange].filter(Boolean).join(' · ')}
+                {/* Tochter → "Tochter von X"; sonst Ticker · Exchange · HQ */}
+                {c.is_subsidiary && c.parent_name
+                  ? `Tochter von ${c.parent_name}`
+                  : [c.ticker, c.display_exchange, c.headquarters].filter(Boolean).join(' · ') || '—'}
               </div>
             </div>
-            {c.isin && (
-              <span style={{ color: 'var(--t2)', fontSize: 11, fontFamily: 'var(--font-m)', whiteSpace: 'nowrap' }}>
-                {c.isin}
-              </span>
-            )}
-          </div>
-        );
-        const sectionLabel = (txt: string) => (
-          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--t3)', margin: '4px 2px 2px' }}>
-            {txt}
+            {/* Listed/Private-Badge — der entscheidende visuelle Unterschied */}
+            <span style={{
+              fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase',
+              padding: '3px 8px', borderRadius: 'var(--r-sm)', whiteSpace: 'nowrap',
+              background: c.is_listed ? 'var(--accent-soft, rgba(80,160,255,0.12))' : 'var(--bg-hover)',
+              color: c.is_listed ? 'var(--accent, #5aa0ff)' : 'var(--t3)',
+              border: `1px solid ${c.is_listed ? 'var(--accent, #5aa0ff)' : 'var(--border)'}`,
+            }}>
+              {c.is_listed ? 'Börsennotiert' : 'Privat'}
+            </span>
           </div>
         );
         return (
@@ -464,14 +482,14 @@ function HeroState({
               Mehrere Treffer für „{query.trim()}". Bitte präzisieren.
             </div>
 
-            {/* Börsennotierte Kandidaten */}
+            {/* Kandidaten — listed + private + Töchter, je mit Badge */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {disambig.candidates.map(renderRow)}
             </div>
 
-            {/* Hinweis für nicht-gelistete Töchter/GmbHs */}
+            {/* Hinweis nur noch für sehr kleine GmbHs ohne Wikidata-Eintrag */}
             <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
-              Tochtergesellschaft oder GmbH gesucht? Vollständige Firmierung eingeben (z.&nbsp;B. „Bayer CropScience GmbH").
+              Gesuchte Tochter nicht dabei? Vollständige Firmierung eingeben (z.&nbsp;B. „Bayer CropScience GmbH").
             </div>
 
             <div
