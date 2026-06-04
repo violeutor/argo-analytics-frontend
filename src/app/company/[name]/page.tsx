@@ -881,11 +881,17 @@ export default function CompanyDetailPage() {
   const _resolvedIsin     = searchParams?.get("isin")           ?? null;
   const _resolvedExch     = searchParams?.get("exchange")       ?? null;
   const _resolvedCompFigi = searchParams?.get("composite_figi") ?? null;
+  // DISAMBIG-03: is_listed aus /resolve (Wikidata P414). Steuert Backend-Insert
+  // (private → pre_ipo_medium, listed → listed). Nur weitergeben wenn explizit
+  // gesetzt ("true"/"false") — fehlt der Param, entscheidet die Backend-Heuristik.
+  const _resolvedIsListed = searchParams?.get("is_listed");
   const _resolveParams  = [
     _resolvedTicker   ? `ticker=${encodeURIComponent(_resolvedTicker)}`           : null,
     _resolvedIsin     ? `isin=${encodeURIComponent(_resolvedIsin)}`               : null,
     _resolvedExch     ? `exchange=${encodeURIComponent(_resolvedExch)}`           : null,
     _resolvedCompFigi ? `composite_figi=${encodeURIComponent(_resolvedCompFigi)}` : null,
+    (_resolvedIsListed === "true" || _resolvedIsListed === "false")
+      ? `is_listed_hint=${_resolvedIsListed}` : null,
   ].filter(Boolean).join("&");
   const _companyUrl = `${API_BASE}/api/v1/company/${encodeURIComponent(name)}${_resolveParams ? `?${_resolveParams}` : ""}`;
 
