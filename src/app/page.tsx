@@ -55,6 +55,11 @@ interface ResolveCandidate {
   display_exchange?: string | null;
   headquarters?: string | null;
   founded_year?: string | null;
+  // DISAMBIG-03 Lifecycle
+  lifecycle_status?: string;
+  consolidated_into?: string | null;     // Anzeigename der überlebenden Einheit
+  consolidated_into_id?: string | null;  // Wikidata-QID
+  dissolved_year?: number | null;
 }
 
 interface ResolveResponse {
@@ -67,6 +72,11 @@ interface ResolveResponse {
   resolved_exchange?: string | null;
   resolved_isin?: string | null;
   resolved_composite_figi?: string | null;
+  // DISAMBIG-03 Lifecycle
+  resolved_lifecycle_status?: string | null;
+  resolved_consolidated_into?: string | null;
+  resolved_consolidated_into_id?: string | null;
+  resolved_dissolved_year?: number | null;
   candidates: ResolveCandidate[];
   reason: string;
 }
@@ -288,6 +298,10 @@ function HeroState({
     exchange?: string | null,
     compositeFigi?: string | null,
     isListed?: boolean | null,
+    lifecycleStatus?: string | null,
+    consolidatedIntoId?: string | null,
+    consolidatedIntoName?: string | null,
+    dissolvedYear?: number | null,
   ) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
     const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
@@ -296,7 +310,12 @@ function HeroState({
     // DISAMBIG-03: is_listed nur weitergeben wenn explizit bekannt (true/false).
     // null/undefined → Param weglassen, Backend-Heuristik entscheidet.
     const isListedParam = (isListed === true || isListed === false) ? `&is_listed=${isListed}` : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}${isListedParam}`);
+    // DISAMBIG-03 Lifecycle: nur bei nicht-aktiven Entitäten mitgeben (active = DB-Default).
+    const lifecycleParam = (lifecycleStatus && lifecycleStatus !== 'active') ? `&lifecycle_status=${encodeURIComponent(lifecycleStatus)}` : '';
+    const consolIdParam  = consolidatedIntoId   ? `&consolidated_into_id=${encodeURIComponent(consolidatedIntoId)}`     : '';
+    const consolNmParam  = consolidatedIntoName ? `&consolidated_into_name=${encodeURIComponent(consolidatedIntoName)}` : '';
+    const dissolvedParam = dissolvedYear        ? `&dissolved_year=${dissolvedYear}`                                     : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}`);
   };
 
   const handleSearch = async () => {
@@ -322,7 +341,7 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi, r.resolved_is_listed);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi, r.resolved_is_listed, r.resolved_lifecycle_status, r.resolved_consolidated_into_id, r.resolved_consolidated_into, r.resolved_dissolved_year);
       }
     } catch {
       // Resolver/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
@@ -340,10 +359,14 @@ function HeroState({
     const tickerParam = c.ticker ? `&ticker=${encodeURIComponent(c.ticker)}` : '';
     const venue = c.display_exchange || null;
     const exchangeParam = venue ? `&exchange=${encodeURIComponent(venue)}` : '';
-    // DISAMBIG-03: is_listed kommt direkt aus der User-Wahl (Wikidata P414).
-    // Das ist der Kern: User wählt "Bayer CropScience GmbH" → is_listed=false fix.
-    const isListedParam = `&is_listed=${c.is_listed}`;
-    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${tickerParam}${exchangeParam}${isListedParam}`);
+    // DISAMBIG-03: is_listed + Lifecycle direkt aus User-Wahl (Wikidata).
+    // Der Kern: User wählt "Bayer CropScience GmbH" → is_listed=false, lifecycle=acquired.
+    const isListedParam  = `&is_listed=${c.is_listed}`;
+    const lifecycleParam = (c.lifecycle_status && c.lifecycle_status !== 'active') ? `&lifecycle_status=${encodeURIComponent(c.lifecycle_status)}` : '';
+    const consolIdParam  = c.consolidated_into_id ? `&consolidated_into_id=${encodeURIComponent(c.consolidated_into_id)}`   : '';
+    const consolNmParam  = c.consolidated_into    ? `&consolidated_into_name=${encodeURIComponent(c.consolidated_into)}`    : '';
+    const dissolvedParam = c.dissolved_year       ? `&dissolved_year=${c.dissolved_year}`                                   : '';
+    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${tickerParam}${exchangeParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}`);
     setDisambig(null);
   };
 
@@ -445,16 +468,28 @@ function HeroState({
                   : [c.ticker, c.display_exchange, c.headquarters].filter(Boolean).join(' · ') || '—'}
               </div>
             </div>
-            {/* Listed/Private-Badge — der entscheidende visuelle Unterschied */}
-            <span style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase',
-              padding: '3px 8px', borderRadius: 'var(--r-sm)', whiteSpace: 'nowrap',
-              background: c.is_listed ? 'var(--accent-soft, rgba(80,160,255,0.12))' : 'var(--bg-hover)',
-              color: c.is_listed ? 'var(--accent, #5aa0ff)' : 'var(--t3)',
-              border: `1px solid ${c.is_listed ? 'var(--accent, #5aa0ff)' : 'var(--border)'}`,
-            }}>
-              {c.is_listed ? 'Börsennotiert' : 'Privat'}
-            </span>
+            {/* Lifecycle-Badge — Börsennotiert / Aufgegangen / Delisted / Privat */}
+            {(() => {
+              const LC: Record<string, { label: string; color: string; bg: string }> = {
+                acquired: { label: 'Aufgegangen', color: 'var(--amber, #F0A500)', bg: 'rgba(240,165,0,0.10)' },
+                delisted: { label: 'Delisted',    color: 'var(--t3)',             bg: 'var(--bg-hover)' },
+                defunct:  { label: 'Aufgelöst',   color: 'var(--red, #F04545)',   bg: 'rgba(240,69,69,0.10)' },
+              };
+              const lc = c.lifecycle_status && c.lifecycle_status !== 'active' ? LC[c.lifecycle_status] : null;
+              const label  = c.is_listed ? 'Börsennotiert' : (lc?.label ?? 'Privat');
+              const color  = c.is_listed ? 'var(--accent, #5aa0ff)' : (lc?.color ?? 'var(--t3)');
+              const bg     = c.is_listed ? 'var(--accent-soft, rgba(80,160,255,0.12))' : (lc?.bg ?? 'var(--bg-hover)');
+              const border = c.is_listed ? 'var(--accent, #5aa0ff)' : (lc?.color ?? 'var(--border)');
+              return (
+                <span style={{
+                  fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase',
+                  padding: '3px 8px', borderRadius: 'var(--r-sm)', whiteSpace: 'nowrap',
+                  background: bg, color, border: `1px solid ${border}`,
+                }}>
+                  {label}
+                </span>
+              );
+            })()}
           </div>
         );
         return (
