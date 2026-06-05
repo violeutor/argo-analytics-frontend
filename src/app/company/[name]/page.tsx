@@ -176,6 +176,7 @@ interface FundingMomentum {
 }
 
 interface CompanyDetail {
+  id?: string; // FE-COMPANYID-01: Supabase company_id für Watchlist-API-Call
   name: string; category?: string; core_technology?: string;
   website?: string; intro: string; industry?: string; risk?: string; enrichment_pending?: boolean;
   founded?: string; headquarters?: string; employee_count?: string;
