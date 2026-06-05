@@ -1629,7 +1629,14 @@ export default function CompanyDetailPage() {
                     if (data.id) {
                       fetch(`${API_BASE}/api/v1/watchlist/${encodeURIComponent(data.id)}`, {
                         method: newStarred ? "POST" : "DELETE",
-                      }).catch(() => {}); // Failure silent — localStorage hat's
+                      })
+                        .then(r => {
+                          if (!r.ok) console.warn(`[WATCHLIST] ${newStarred ? "POST" : "DELETE"} ${data.id} → HTTP ${r.status}`);
+                        })
+                        .catch(e => console.warn(`[WATCHLIST] Schreibfehler für ${data.id}:`, e));
+                    } else {
+                      // data.id fehlt → kein DB-Write möglich, nur localStorage. Sichtbar machen.
+                      console.warn(`[WATCHLIST] Kein company_id für "${data.name}" — Stern nur in localStorage, nicht in DB.`);
                     }
                   }}
                   style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: starred ? C.amber : C.t3, padding: "2px 4px", transition: "color .15s", lineHeight: 1 }}
