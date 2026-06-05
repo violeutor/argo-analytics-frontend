@@ -77,6 +77,8 @@ interface ResolveResponse {
   resolved_consolidated_into?: string | null;
   resolved_consolidated_into_id?: string | null;
   resolved_dissolved_year?: number | null;
+  // REGION-CLASS-01: Wikidata P159 (headquarters) — für region-Ableitung im Backend-Insert
+  resolved_headquarters?: string | null;
   candidates: ResolveCandidate[];
   reason: string;
 }
@@ -302,6 +304,7 @@ function HeroState({
     consolidatedIntoId?: string | null,
     consolidatedIntoName?: string | null,
     dissolvedYear?: number | null,
+    hq?: string | null,
   ) => {
     const isinParam = isin ? `&isin=${encodeURIComponent(isin)}` : '';
     const tickerParam = ticker ? `&ticker=${encodeURIComponent(ticker)}` : '';
@@ -315,7 +318,9 @@ function HeroState({
     const consolIdParam  = consolidatedIntoId   ? `&consolidated_into_id=${encodeURIComponent(consolidatedIntoId)}`     : '';
     const consolNmParam  = consolidatedIntoName ? `&consolidated_into_name=${encodeURIComponent(consolidatedIntoName)}` : '';
     const dissolvedParam = dissolvedYear        ? `&dissolved_year=${dissolvedYear}`                                     : '';
-    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}`);
+    // REGION-CLASS-01: headquarters für sofortige region-Ableitung im Cold-Path-Insert.
+    const hqParam = hq ? `&headquarters=${encodeURIComponent(hq)}` : '';
+    router.push(`/company/${encodeURIComponent(companyName)}?from=research&back=/?tab=research${isinParam}${tickerParam}${exchangeParam}${compositeFigiParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}${hqParam}`);
   };
 
   const handleSearch = async () => {
@@ -341,7 +346,7 @@ function HeroState({
         setDisambig({ candidates: r.candidates });
       } else {
         // Eindeutig oder kein Treffer → direkt weiter.
-        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi, r.resolved_is_listed, r.resolved_lifecycle_status, r.resolved_consolidated_into_id, r.resolved_consolidated_into, r.resolved_dissolved_year);
+        goToCompany(r.resolved_name || q, r.resolved_isin, r.resolved_ticker, r.resolved_exchange, r.resolved_composite_figi, r.resolved_is_listed, r.resolved_lifecycle_status, r.resolved_consolidated_into_id, r.resolved_consolidated_into, r.resolved_dissolved_year, r.resolved_headquarters);
       }
     } catch {
       // Resolver/Netz-Fehler darf One-Click nicht brechen → bestehender Flow.
@@ -366,7 +371,9 @@ function HeroState({
     const consolIdParam  = c.consolidated_into_id ? `&consolidated_into_id=${encodeURIComponent(c.consolidated_into_id)}`   : '';
     const consolNmParam  = c.consolidated_into    ? `&consolidated_into_name=${encodeURIComponent(c.consolidated_into)}`    : '';
     const dissolvedParam = c.dissolved_year       ? `&dissolved_year=${c.dissolved_year}`                                   : '';
-    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${tickerParam}${exchangeParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}`);
+    // REGION-CLASS-01: headquarters aus Wikidata-Kandidat für sofortige region-Ableitung.
+    const hqParam = c.headquarters ? `&headquarters=${encodeURIComponent(c.headquarters)}` : '';
+    router.push(`/company/${encodeURIComponent(navName)}?from=research&back=/?tab=research${tickerParam}${exchangeParam}${isListedParam}${lifecycleParam}${consolIdParam}${consolNmParam}${dissolvedParam}${hqParam}`);
     setDisambig(null);
   };
 
