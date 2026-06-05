@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -552,6 +553,76 @@ function HeroState({
   );
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+function LoginModal({ onClose }: { onClose: () => void }) {
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+
+  const handleSubmit = async () => {
+    setLoading(true); setError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { setError(error.message); setLoading(false); }
+    else onClose();
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }} onClick={onClose}>
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+        borderRadius: 14, padding: '28px 32px', width: 360,
+        boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 18, color: 'var(--t1)', marginBottom: 6 }}>
+          Anmelden
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 22 }}>
+          Argo Analytics · Investment Intelligence
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            type="email" placeholder="E-Mail" value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            style={{
+              background: 'var(--bg)', border: '1px solid var(--border-md)',
+              borderRadius: 8, padding: '9px 12px', color: 'var(--t1)',
+              fontSize: 13, fontFamily: 'var(--font-b)', outline: 'none',
+            }}
+          />
+          <input
+            type="password" placeholder="Passwort" value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            style={{
+              background: 'var(--bg)', border: '1px solid var(--border-md)',
+              borderRadius: 8, padding: '9px 12px', color: 'var(--t1)',
+              fontSize: 13, fontFamily: 'var(--font-b)', outline: 'none',
+            }}
+          />
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--red)', padding: '6px 10px', background: 'var(--red-bg)', borderRadius: 6 }}>
+              {error}
+            </div>
+          )}
+          <button
+            onClick={handleSubmit} disabled={loading}
+            className="btn-primary"
+            style={{ marginTop: 4, opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? 'Anmelden…' : 'Anmelden'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Watchlist ───────────────────────────────────────────────────────────────
 
 function WatchlistPage({
@@ -737,12 +808,22 @@ function PageContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [notifOpen, setNotifOpen] = useState(false);
-  // WATCHLIST-01: company_ids aus Backend-Watchlist (per ARGO_DEFAULT_USER_ID / JWT)
+  // AUTH-01: Supabase session
+  const [session, setSession] = useState<any>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // WATCHLIST-01: company_ids aus Backend-Watchlist
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
     setSeenIds(getSeenIds());
+    // AUTH-01: aktuelle Session laden + Listener
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (!s) setWatchlistIds(new Set());
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // Watchlist-IDs beim Tab-Wechsel laden (lazy — nur wenn Tab geöffnet wird)
@@ -1013,6 +1094,36 @@ function PageContent() {
           </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* AUTH-01: Login / User-Badge */}
+          {session ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                fontSize: 11, color: 'var(--t2)', fontFamily: 'var(--font-b)',
+                maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {session.user?.email}
+              </div>
+              <button
+                onClick={() => supabase.auth.signOut()}
+                style={{
+                  background: 'none', border: '1px solid var(--border-md)',
+                  borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
+                  fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--font-b)',
+                  transition: 'all .15s',
+                }}
+              >
+                Abmelden
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setLoginOpen(true)}
+              className="btn-primary"
+              style={{ fontSize: 12, padding: '6px 14px' }}
+            >
+              Anmelden
+            </button>
+          )}
           {/* Bell */}
           <div style={{ position: 'relative' }}>
             <button
@@ -1202,6 +1313,8 @@ function PageContent() {
           />
         </div>
       )}
+      {/* AUTH-01: Login Modal */}
+      {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
     </>
   );
 }
