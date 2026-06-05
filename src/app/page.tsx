@@ -796,7 +796,7 @@ function WatchlistPage({
 
 // ─── Root Page ────────────────────────────────────────────────────────────────
 
-type NavTab = 'research' | 'watchlist';
+type NavTab = 'research' | 'watchlist' | 'explore';
 
 function PageContent() {
   const router = useRouter();
@@ -813,6 +813,11 @@ function PageContent() {
   const [loginOpen, setLoginOpen] = useState(false);
   // WATCHLIST-01: company_ids aus Backend-Watchlist
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
+  // EXPLORE-01: personalisierter Feed
+  const [exploreData, setExploreData] = useState<{
+    companies: any[]; customer_type: string; sector_keys: string[]; total: number;
+  } | null>(null);
+  const [exploreLoading, setExploreLoading] = useState(false);
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
@@ -832,13 +837,20 @@ function PageContent() {
     fetch(`${BACKEND_PROXY}/api/v1/watchlist`)
       .then(r => r.ok ? r.json() : { company_ids: [] })
       .then(d => setWatchlistIds(new Set(d.company_ids ?? [])))
-      .catch(() => {
-        // Fallback: localStorage (pre-Auth)
-        const wl: string[] = JSON.parse(localStorage.getItem('argo_watchlist') ?? '[]');
-        // localStorage speichert Namen, nicht IDs — Name-basierter Fallback
-        setWatchlistIds(new Set()); // IDs unbekannt, zeige leer bis Auth gesetzt
-      });
+      .catch(() => setWatchlistIds(new Set()));
   }, [navTab]);
+
+  // EXPLORE-01: Feed beim Tab-Wechsel laden (lazy)
+  useEffect(() => {
+    if (navTab !== 'explore') return;
+    if (exploreData) return; // bereits geladen
+    setExploreLoading(true);
+    fetch(`${BACKEND_PROXY}/api/v1/explore`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setExploreData(d); })
+      .catch(() => {})
+      .finally(() => setExploreLoading(false));
+  }, [navTab, exploreData]);
 
   // ── Notification Refresh-Logik ───────────────────────────────────────────────
   // Strategie: visibilitychange (min 15min Cooldown) + 30min Interval
@@ -1092,6 +1104,12 @@ function PageContent() {
           >
             Watchlist
           </button>
+          <button
+            className={`nav-tab${navTab === 'explore' ? ' active' : ''}`}
+            onClick={() => setNavTab('explore')}
+          >
+            Explore
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* AUTH-01: Login / User-Badge */}
@@ -1311,6 +1329,116 @@ function PageContent() {
             companies={companies.filter(c => c.id && watchlistIds.has(c.id))}
             onSelectCompany={handleSelectFromWatchlist}
           />
+        </div>
+      )}
+      {/* ── Explore Page ── */}
+      {navTab === 'explore' && (
+        <div className="page">
+          {exploreLoading ? (
+            <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--t3)', fontSize: 13 }}>
+              Feed wird geladen…
+            </div>
+          ) : !exploreData || exploreData.companies.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '4rem 0' }}>
+              <div style={{ fontSize: 15, color: 'var(--t1)', marginBottom: 8 }}>Keine Empfehlungen</div>
+              <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                {!session
+                  ? 'Bitte anmelden um personalisierte Empfehlungen zu sehen.'
+                  : 'Industrie-Präferenzen noch nicht gesetzt — bitte in Supabase seeden.'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ maxWidth: 900, margin: '0 auto', padding: '1.5rem 0' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 3, height: 18, background: 'var(--teal)', borderRadius: 2, display: 'inline-block' }} />
+                  <span style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 16, color: 'var(--t1)' }}>
+                    Explore
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--t3)', marginLeft: 4 }}>
+                    {exploreData.total} Companies · {exploreData.sector_keys.join(', ')}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 10, color: 'var(--teal)', background: 'rgba(0,194,209,0.08)',
+                  border: '1px solid rgba(0,194,209,0.2)', borderRadius: 99,
+                  padding: '2px 10px', fontFamily: 'var(--font-b)', textTransform: 'uppercase', letterSpacing: '.05em',
+                }}>
+                  {exploreData.customer_type}
+                </span>
+              </div>
+
+              {/* Company Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {exploreData.companies.map((c: any, i: number) => (
+                  <div
+                    key={c.id ?? i}
+                    onClick={() => router.push(`/company/${encodeURIComponent(c.name)}?from=research&back=/?tab=explore`)}
+                    style={{
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      borderRadius: 10, padding: '14px 18px',
+                      cursor: 'pointer', transition: 'border-color .15s',
+                      display: 'flex', alignItems: 'center', gap: 16,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-md)')}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                  >
+                    {/* Rank */}
+                    <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--font-b)', minWidth: 20, textAlign: 'right' }}>
+                      {i + 1}
+                    </div>
+                    {/* Name + Meta */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--t1)', fontFamily: 'var(--font-d)' }}>
+                          {c.name}
+                        </span>
+                        {c.rating && (
+                          <span style={{
+                            fontSize: 10, padding: '1px 7px', borderRadius: 99,
+                            background: c.rating.startsWith('A') ? 'rgba(0,194,209,0.1)' : c.rating.startsWith('B') ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)',
+                            color: c.rating.startsWith('A') ? 'var(--teal)' : c.rating.startsWith('B') ? 'var(--blue)' : 'var(--amber)',
+                            border: `1px solid ${c.rating.startsWith('A') ? 'rgba(0,194,209,0.25)' : c.rating.startsWith('B') ? 'rgba(59,130,246,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                            fontFamily: 'var(--font-b)', fontWeight: 600,
+                          }}>
+                            {c.rating}
+                          </span>
+                        )}
+                        {c.ipo_status === 'listed' && (
+                          <span style={{ fontSize: 10, color: 'var(--blue)', fontFamily: 'var(--font-b)' }}>
+                            {c.ticker}{c.exchange ? `.${c.exchange}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--t3)', display: 'flex', gap: 10 }}>
+                        {c.industry && <span>{c.industry}</span>}
+                        {c.headquarters && <span>· {c.headquarters}</span>}
+                        {c.funding_stage && <span>· {c.funding_stage}</span>}
+                      </div>
+                    </div>
+                    {/* Score + Path */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, minWidth: 80 }}>
+                      {c.composite_score != null && (
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)', fontFamily: 'var(--font-b)' }}>
+                          {Number(c.composite_score).toFixed(1)}
+                        </span>
+                      )}
+                      {c.investment_path && (
+                        <span style={{
+                          fontSize: 10, color: 'var(--t3)', fontFamily: 'var(--font-b)',
+                          textAlign: 'right', maxWidth: 100,
+                        }}>
+                          {c.investment_path}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ color: 'var(--t3)', fontSize: 14 }}>›</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
       {/* AUTH-01: Login Modal */}
