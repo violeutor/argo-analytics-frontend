@@ -109,16 +109,19 @@ const PATH_COLOR: Record<string, string> = {
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
 async function fetchCompanies(): Promise<Company[]> {
-  const res = await fetch(`${BACKEND_PROXY}/api/v1/companies`);
+  // limit=500 — Backend erlaubt le=500. Hebt den 100er-Default auf, damit
+  // Nav-Zähler, Suche und Watchlist-Filter den vollen Pool sehen.
+  // (Pool > 500 → serverseitige Suche/Pagination nötig, Phase 2.)
+  const res = await fetch(`${BACKEND_PROXY}/api/v1/companies?limit=500`);
   if (!res.ok) return [];
   return res.json();
 }
 
-async function fetchNotifications(companyNames: string[]): Promise<Notification[]> {
-  if (!companyNames.length) return [];
+async function fetchNotifications(): Promise<Notification[]> {
+  // Session 55: Keine Namensliste mehr — Backend liefert global die neuesten
+  // Signals über alle Companies. Behebt 50er-alphabetisch-Cap + URL-Bombe.
   try {
     const params = new URLSearchParams();
-    companyNames.slice(0, 50).forEach(n => params.append('names', n));
     params.set('days', '7');
     params.set('min_score', '0.5');
     const res = await fetch(`${BACKEND_PROXY}/api/v1/notifications?${params}`);
@@ -858,49 +861,41 @@ function PageContent() {
   const NOTIF_COOLDOWN = 15 * 60 * 1000;   // 15 Minuten
   const NOTIF_INTERVAL = 30 * 60 * 1000;   // 30 Minuten
 
-  const refreshNotifications = useCallback((names: string[]) => {
-    if (!names.length) return;
+  const refreshNotifications = useCallback(() => {
     const now = Date.now();
     if (now - notifLastFetch.current < NOTIF_COOLDOWN) return;
     notifLastFetch.current = now;
-    fetchNotifications(names).then(setNotifications);
+    fetchNotifications().then(setNotifications);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initialer Load sobald Companies bekannt
+  // Initialer Load beim Mount — Notifications sind global, nicht companies-abhängig
   useEffect(() => {
-    if (!companies.length) return;
-    const names = companies.map(c => c.name);
     notifLastFetch.current = 0;   // erstes Laden immer
-    refreshNotifications(names);
-  }, [companies]); // eslint-disable-line react-hooks/exhaustive-deps
+    refreshNotifications();
+  }, [refreshNotifications]);
 
   // visibilitychange — Refresh wenn Tab wieder aktiv wird
   useEffect(() => {
-    if (!companies.length) return;
-    const names = companies.map(c => c.name);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') refreshNotifications(names);
+      if (document.visibilityState === 'visible') refreshNotifications();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [companies, refreshNotifications]);
+  }, [refreshNotifications]);
 
   // 30-Minuten-Interval als Backstop
   useEffect(() => {
-    if (!companies.length) return;
-    const names = companies.map(c => c.name);
-    const id = window.setInterval(() => refreshNotifications(names), NOTIF_INTERVAL);
+    const id = window.setInterval(() => refreshNotifications(), NOTIF_INTERVAL);
     return () => window.clearInterval(id);
-  }, [companies, refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unreadCount = notifications.filter(n => !seenIds.has(n.id)).length;
 
   const handleOpenNotif = () => setNotifOpen(o => !o);
 
   const handleRefreshNotif = () => {
-    if (!companies.length) return;
     notifLastFetch.current = 0;   // Cooldown überspringen
-    refreshNotifications(companies.map(c => c.name));
+    refreshNotifications();
   };
 
   const handleMarkAllRead = () => {
@@ -941,12 +936,12 @@ function PageContent() {
         body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
 
         /* Nav */
-        nav{display:flex;align-items:center;justify-content:space-between;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.97);position:sticky;top:0;z-index:100}
+        nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.97);position:sticky;top:0;z-index:100}
         .nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
         .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#0D1117}
         .nav-logo-text{font-family:var(--font-d);font-weight:600;font-size:15px;color:var(--t1)}
         .nav-logo-sub{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:1px}
-        .nav-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);padding:3px;border-radius:var(--r-md);border:1px solid var(--border)}
+        .nav-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);padding:3px;border-radius:var(--r-md);border:1px solid var(--border);justify-self:center}
         .nav-tab{padding:5px 16px;border-radius:7px;font-size:12px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .15s;letter-spacing:.04em;text-transform:uppercase;border:none;background:none}
         .nav-tab.active{background:var(--bg-card);color:var(--t1);border:1px solid var(--border-md)}
         .nav-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)}
@@ -1111,7 +1106,7 @@ function PageContent() {
             Explore
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifySelf: 'end' }}>
           {/* AUTH-01: Login / User-Badge */}
           {session ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
