@@ -182,6 +182,9 @@ interface CompanyDetail {
   product_description?: string; description?: string; technology_tags: string[];
   tam_usd_bn: number; tam_source: string; tam_confidence: string;
   ipo_status?: string; ipo_potential?: string; ipo_probability_pct?: number;
+  // DISAMBIG-03 Lifecycle
+  lifecycle_status?: string; consolidated_into?: string | null;
+  consolidated_into_id?: string | null; dissolved_year?: number | null;
   investment_path?: string; proxy_ticker?: string;
   proxy_beta_1y?: number; proxy_beta_benchmark?: string; proxy_beta_source?: string;
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
@@ -221,17 +224,17 @@ interface CompanyScores {
 // ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
 
 const C = {
-  // Hintergrundfarben aufgehellt
-  bg: "#181B20", bgCard: "#1F2328", bgHover: "#272C33",
-  border: "rgba(255,255,255,0.08)", borderMd: "rgba(255,255,255,0.13)",
-  teal: "#00D4A0", tealDim: "rgba(0,212,160,0.08)", tealBorder: "rgba(0,212,160,0.20)",
-  blue: "#3B6EF0", blueDim: "rgba(59,110,240,0.10)",
-  amber: "#F0A500", amberDim: "rgba(240,165,0,0.10)",
-  red: "#F04545", redDim: "rgba(240,69,69,0.10)",
+  // PALETTE-01: Slate Blue / Navy Graphite Palette
+  bg: "#0D1117", bgCard: "#161B22", bgHover: "#1F242C",
+  border: "rgba(45,51,59,0.9)", borderMd: "rgba(45,51,59,1)",
+  teal: "#00C2D1", tealDim: "rgba(0,194,209,0.08)", tealBorder: "rgba(0,194,209,0.22)",
+  blue: "#3B82F6", blueDim: "rgba(59,130,246,0.10)",
+  amber: "#F59E0B", amberDim: "rgba(245,158,11,0.10)",
+  red: "#EF4444", redDim: "rgba(239,68,68,0.10)",
   purple: "#9B6EF0", purpleDim: "rgba(155,110,240,0.10)",
-  // t2 + t3 heller — Labels und Überschriften besser lesbar
-  t1: "#F0F0EE", t2: "#B0B2B0", t3: "#6A6C6A",
-  // Kein DM Mono mehr — DM Sans durchgängig
+  // Text: Off-White / Cool Grey
+  t1: "#E6EAF0", t2: "#9BA3B4", t3: "#5A6270",
+  // Fonts + Radien unverändert
   mono: "'DM Sans',sans-serif",
   display: "'Plus Jakarta Sans',sans-serif",
   body: "'DM Sans',sans-serif",
@@ -885,6 +888,13 @@ export default function CompanyDetailPage() {
   // (private → pre_ipo_medium, listed → listed). Nur weitergeben wenn explizit
   // gesetzt ("true"/"false") — fehlt der Param, entscheidet die Backend-Heuristik.
   const _resolvedIsListed = searchParams?.get("is_listed");
+  // DISAMBIG-03 Lifecycle: aus /resolve-Pick (Landing) via Query-Param. Nur für
+  // nicht-aktive Entitäten gesetzt → werden in den Backend-Insert durchgereicht,
+  // damit auch der direkte Warm-Load den Status + die Referenz zeigt.
+  const _resolvedLifecycle = searchParams?.get("lifecycle_status");
+  const _resolvedConsolId  = searchParams?.get("consolidated_into_id");
+  const _resolvedConsolNm  = searchParams?.get("consolidated_into_name");
+  const _resolvedDissolved = searchParams?.get("dissolved_year");
   const _resolveParams  = [
     _resolvedTicker   ? `ticker=${encodeURIComponent(_resolvedTicker)}`           : null,
     _resolvedIsin     ? `isin=${encodeURIComponent(_resolvedIsin)}`               : null,
@@ -892,6 +902,11 @@ export default function CompanyDetailPage() {
     _resolvedCompFigi ? `composite_figi=${encodeURIComponent(_resolvedCompFigi)}` : null,
     (_resolvedIsListed === "true" || _resolvedIsListed === "false")
       ? `is_listed_hint=${_resolvedIsListed}` : null,
+    (_resolvedLifecycle && _resolvedLifecycle !== "active")
+      ? `lifecycle_status=${encodeURIComponent(_resolvedLifecycle)}` : null,
+    _resolvedConsolId ? `consolidated_into_id=${encodeURIComponent(_resolvedConsolId)}`     : null,
+    _resolvedConsolNm ? `consolidated_into_name=${encodeURIComponent(_resolvedConsolNm)}`   : null,
+    _resolvedDissolved ? `dissolved_year=${encodeURIComponent(_resolvedDissolved)}`         : null,
   ].filter(Boolean).join("&");
   const _companyUrl = `${API_BASE}/api/v1/company/${encodeURIComponent(name)}${_resolveParams ? `?${_resolveParams}` : ""}`;
 
@@ -1017,7 +1032,18 @@ export default function CompanyDetailPage() {
             else setAssessmentsData({ _error: "failed" });
           }),
           _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
-          _f(`/kpi-timeseries?company_id=${encodeURIComponent(d.id)}`).then(kd => setKpiData(kd?.metrics ?? {})),
+          // FE-COMPANYID-01: company_id erst senden wenn definiert — sonst Name-Fallback.
+          // d.id war undefined weil CompanyDetailResponse kein id-Feld hatte (jetzt gefixt).
+          // Guard bleibt als Defense-in-Depth: verhindert ?company_id=undefined → 400.
+          _f(`/kpi-timeseries?${d.id ? `company_id=${encodeURIComponent(d.id)}` : `name=${encodeURIComponent(d.name)}`}`).then(kd => setKpiData(kd?.metrics ?? {})),
+          // WATCHLIST-01: Watchlist-Status API-first laden (company_id aus Response).
+          // Fallback: localStorage (pre-Auth-Phase, bis ARGO_DEFAULT_USER_ID / JWT aktiv).
+          d.id
+            ? fetch(`${API_BASE}/api/v1/watchlist/status/${encodeURIComponent(d.id)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(s => { if (s?.starred !== undefined) setStarred(s.starred); })
+                .catch(() => {})
+            : Promise.resolve(),
         ]).finally(() => {
           setOwnershipLoading(false);
           setSignalsLoading(false);
@@ -1567,14 +1593,43 @@ export default function CompanyDetailPage() {
                 }}>
                   {data.ipo_status === "listed" ? "Public" : "Private"}
                 </span>
+                {/* DISAMBIG-03: Lifecycle-Badge — nur für nicht-aktive Entitäten */}
+                {data.lifecycle_status && data.lifecycle_status !== "active" && (() => {
+                  const LC: Record<string, { label: string; color: string }> = {
+                    acquired: { label: "Aufgegangen", color: C.amber },
+                    delisted: { label: "Delisted",    color: C.t2 },
+                    defunct:  { label: "Aufgelöst",   color: C.red },
+                  };
+                  const lc = LC[data.lifecycle_status!];
+                  if (!lc) return null;
+                  return (
+                    <span style={{
+                      fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 500,
+                      color: lc.color, background: lc.color + "18", border: `1px solid ${lc.color}33`,
+                    }}>
+                      {lc.label}
+                    </span>
+                  );
+                })()}
                 <button
                   onClick={() => {
+                    // WATCHLIST-01: Optimistisches Update sofort, API fire-and-forget.
+                    // localStorage als Fallback solange ARGO_DEFAULT_USER_ID / JWT aktiv.
+                    const newStarred = !starred;
+                    setStarred(newStarred);
+                    // localStorage dual-write (Fallback pre-Auth)
                     const key = "argo_watchlist";
                     const wl: string[] = JSON.parse(localStorage.getItem(key) ?? "[]");
                     const idx = wl.indexOf(data.name);
-                    if (idx >= 0) wl.splice(idx, 1); else wl.push(data.name);
+                    if (newStarred && idx < 0) wl.push(data.name);
+                    else if (!newStarred && idx >= 0) wl.splice(idx, 1);
                     localStorage.setItem(key, JSON.stringify(wl));
-                    setStarred(idx < 0);
+                    // API-Call (fire-and-forget — UX blockiert nicht)
+                    if (data.id) {
+                      fetch(`${API_BASE}/api/v1/watchlist/${encodeURIComponent(data.id)}`, {
+                        method: newStarred ? "POST" : "DELETE",
+                      }).catch(() => {}); // Failure silent — localStorage hat's
+                    }
                   }}
                   style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: starred ? C.amber : C.t3, padding: "2px 4px", transition: "color .15s", lineHeight: 1 }}
                   title={starred ? "Aus Watchlist entfernen" : "Zur Watchlist hinzufügen"}
@@ -1617,6 +1672,23 @@ export default function CompanyDetailPage() {
                 })()}
               </div>
             </div>
+
+            {/* DISAMBIG-03: Consolidation-Referenz — z.B. "2018 aufgegangen in Bayer Crop Science" */}
+            {data.consolidated_into && (
+              <div style={{ fontSize: 12, color: C.t2, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: C.amber, fontSize: 11 }}>⤳</span>
+                <span>
+                  {data.dissolved_year ? `${data.dissolved_year} ` : ""}aufgegangen in{" "}
+                  <span
+                    onClick={() => router.push(`/company/${encodeURIComponent(data.consolidated_into!)}?from=${fromPage}`)}
+                    style={{ color: C.teal, cursor: "pointer", fontWeight: 500, borderBottom: `1px dotted ${C.teal}66` }}
+                    title={`Zu ${data.consolidated_into} wechseln`}
+                  >
+                    {data.consolidated_into}
+                  </span>
+                </span>
+              </div>
+            )}
 
             {/* Row 2: Ticker+Exchange (public) OR Technologie+Series (private) */}
             <div style={{ fontSize: 12, color: C.t2, marginBottom: 14, fontFamily: data.ipo_status === "listed" ? C.mono : C.body }}>
