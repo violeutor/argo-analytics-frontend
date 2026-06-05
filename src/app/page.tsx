@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Company {
+  id?: string; // WATCHLIST-01: Supabase company_id für watchlistIds-Filter
   name: string;
   category: string;
   industry?: string;
