@@ -478,9 +478,9 @@ function HeroState({
             {/* Lifecycle-Badge — Börsennotiert / Aufgegangen / Delisted / Privat */}
             {(() => {
               const LC: Record<string, { label: string; color: string; bg: string }> = {
-                acquired: { label: 'Aufgegangen', color: 'var(--amber, #F0A500)', bg: 'rgba(240,165,0,0.10)' },
+                acquired: { label: 'Aufgegangen', color: 'var(--amber, #F59E0B)', bg: 'rgba(240,165,0,0.10)' },
                 delisted: { label: 'Delisted',    color: 'var(--t3)',             bg: 'var(--bg-hover)' },
-                defunct:  { label: 'Aufgelöst',   color: 'var(--red, #F04545)',   bg: 'rgba(240,69,69,0.10)' },
+                defunct:  { label: 'Aufgelöst',   color: 'var(--red, #EF4444)',   bg: 'rgba(240,69,69,0.10)' },
               };
               const lc = c.lifecycle_status && c.lifecycle_status !== 'active' ? LC[c.lifecycle_status] : null;
               const label  = c.is_listed ? 'Börsennotiert' : (lc?.label ?? 'Privat');
@@ -736,11 +736,27 @@ function PageContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [notifOpen, setNotifOpen] = useState(false);
+  // WATCHLIST-01: company_ids aus Backend-Watchlist (per ARGO_DEFAULT_USER_ID / JWT)
+  const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
     setSeenIds(getSeenIds());
   }, []);
+
+  // Watchlist-IDs beim Tab-Wechsel laden (lazy — nur wenn Tab geöffnet wird)
+  useEffect(() => {
+    if (navTab !== 'watchlist') return;
+    fetch(`${BACKEND_PROXY}/api/v1/watchlist`)
+      .then(r => r.ok ? r.json() : { company_ids: [] })
+      .then(d => setWatchlistIds(new Set(d.company_ids ?? [])))
+      .catch(() => {
+        // Fallback: localStorage (pre-Auth)
+        const wl: string[] = JSON.parse(localStorage.getItem('argo_watchlist') ?? '[]');
+        // localStorage speichert Namen, nicht IDs — Name-basierter Fallback
+        setWatchlistIds(new Set()); // IDs unbekannt, zeige leer bis Auth gesetzt
+      });
+  }, [navTab]);
 
   // ── Notification Refresh-Logik ───────────────────────────────────────────────
   // Strategie: visibilitychange (min 15min Cooldown) + 30min Interval
@@ -814,15 +830,15 @@ function PageContent() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         :root{
-          /* Hintergrundfarben aufgehellt — waren zu dunkel */
-          --bg:#181B20;--bg-card:#1F2328;--bg-hover:#272C33;
-          --border:rgba(255,255,255,0.08);--border-md:rgba(255,255,255,0.13);
-          --teal:#00D4A0;--teal-dim:#00A07A;--teal-bg:rgba(0,212,160,0.08);
-          --blue:#3B6EF0;--blue-bg:rgba(59,110,240,0.10);
-          --amber:#F0A500;--amber-bg:rgba(240,165,0,0.10);
-          --red:#F04545;--red-bg:rgba(240,69,69,0.10);
+          /* PALETTE-01: Slate Blue / Navy Graphite Palette */
+          --bg:#0D1117;--bg-card:#161B22;--bg-hover:#1F242C;
+          --border:rgba(45,51,59,0.9);--border-md:rgba(45,51,59,1);
+          --teal:#00C2D1;--teal-dim:#009BAA;--teal-bg:rgba(0,194,209,0.08);
+          --blue:#3B82F6;--blue-bg:rgba(59,130,246,0.10);
+          --amber:#F59E0B;--amber-bg:rgba(245,158,11,0.10);
+          --red:#EF4444;--red-bg:rgba(239,68,68,0.10);
           --purple:#9B6EF0;--purple-bg:rgba(155,110,240,0.10);
-          --t1:#F0F0EE;--t2:#B0B2B0;--t3:#6A6C6A;
+          --t1:#E6EAF0;--t2:#9BA3B4;--t3:#5A6270;
           --font-d:'Plus Jakarta Sans',sans-serif;
           --font-b:'DM Sans',sans-serif;
           --font-m:'DM Sans',sans-serif;
@@ -831,9 +847,9 @@ function PageContent() {
         body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
 
         /* Nav */
-        nav{display:flex;align-items:center;justify-content:space-between;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(24,27,32,0.97);position:sticky;top:0;z-index:100}
+        nav{display:flex;align-items:center;justify-content:space-between;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.97);position:sticky;top:0;z-index:100}
         .nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
-        .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#181B20}
+        .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#0D1117}
         .nav-logo-text{font-family:var(--font-d);font-weight:600;font-size:15px;color:var(--t1)}
         .nav-logo-sub{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:1px}
         .nav-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);padding:3px;border-radius:var(--r-md);border:1px solid var(--border)}
@@ -856,7 +872,7 @@ function PageContent() {
         .search-wrap{display:flex;gap:10px;background:var(--bg-card);border:1px solid var(--border-md);border-radius:var(--r-lg);padding:6px 6px 6px 14px;align-items:center}
         .search-wrap input{flex:1;background:none;border:none;outline:none;color:var(--t1);font-family:var(--font-b);font-size:14px}
         .search-wrap input::placeholder{color:var(--t3)}
-        .btn-primary{background:var(--teal);color:#181B20;font-family:var(--font-d);font-weight:600;font-size:13px;padding:9px 20px;border-radius:var(--r-md);border:none;cursor:pointer;white-space:nowrap}
+        .btn-primary{background:var(--teal);color:#0D1117;font-family:var(--font-d);font-weight:600;font-size:13px;padding:9px 20px;border-radius:var(--r-md);border:none;cursor:pointer;white-space:nowrap}
         .qa-section{margin-top:.5rem}
         .qa-label{font-size:10px;color:var(--t3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:.5rem;text-align:center}
         /* Chips aufgehellt */
@@ -1014,7 +1030,7 @@ function PageContent() {
               {unreadCount > 0 && (
                 <span style={{
                   position: 'absolute', top: 4, right: 4,
-                  background: 'var(--teal)', color: '#181B20',
+                  background: 'var(--teal)', color: '#0D1117',
                   borderRadius: 99, fontSize: 9, fontWeight: 700,
                   padding: '1px 4px', lineHeight: 1.4, minWidth: 14,
                   textAlign: 'center',
@@ -1121,7 +1137,7 @@ function PageContent() {
                               {!seen && (
                                 <span style={{
                                   marginLeft: 6, background: 'var(--teal)',
-                                  color: '#181B20', borderRadius: 99,
+                                  color: '#0D1117', borderRadius: 99,
                                   fontSize: 9, fontWeight: 700, padding: '1px 5px',
                                 }}>NEU</span>
                               )}
@@ -1180,7 +1196,7 @@ function PageContent() {
       {navTab === 'watchlist' && (
         <div className="page">
           <WatchlistPage
-            companies={companies}
+            companies={companies.filter(c => c.id && watchlistIds.has(c.id))}
             onSelectCompany={handleSelectFromWatchlist}
           />
         </div>
