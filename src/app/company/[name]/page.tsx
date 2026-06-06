@@ -950,6 +950,20 @@ export default function CompanyDetailPage() {
     setStarred(wl.includes(name));
   }, [name]);
 
+  // WATCHLIST-01: Watchlist-Status — eigener Effect, re-feuert wenn Session lädt.
+  // Vorher im Haupt-useEffect: feuerte ohne Auth (session war null beim ersten Render)
+  // → AUTH-GATE-01 gab {starred:false} → überschrieb localStorage-Wert (Bug sichtbar durch AUTH-GATE-01).
+  // Fix: eigener Effect mit [data?.id, session] — wartet bis beides bekannt ist.
+  useEffect(() => {
+    if (!data?.id || !session?.access_token) return;
+    fetch(`${API_BASE}/api/v1/watchlist/status/${encodeURIComponent(data.id)}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (s?.starred !== undefined) setStarred(s.starred); })
+      .catch(() => {});
+  }, [data?.id, session]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Zentraler Fetch-Orchestrator ─────────────────────────────────────────────
   // Alle DB-persistierten Daten werden parallel beim Load geholt.
   // Polling nur für Daten die aktiv berechnet werden (Market Enrichment, Value Drivers).
@@ -1046,16 +1060,7 @@ export default function CompanyDetailPage() {
           // d.id war undefined weil CompanyDetailResponse kein id-Feld hatte (jetzt gefixt).
           // Guard bleibt als Defense-in-Depth: verhindert ?company_id=undefined → 400.
           _f(`/kpi-timeseries?${d.id ? `company_id=${encodeURIComponent(d.id)}` : `name=${encodeURIComponent(d.name)}`}`).then(kd => setKpiData(kd?.metrics ?? {})),
-          // WATCHLIST-01: Watchlist-Status API-first laden (company_id aus Response).
-          // Fallback: localStorage (pre-Auth-Phase, bis ARGO_DEFAULT_USER_ID / JWT aktiv).
-          d.id
-            ? fetch(`${API_BASE}/api/v1/watchlist/status/${encodeURIComponent(d.id)}`, {
-                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-              })
-                .then(r => r.ok ? r.json() : null)
-                .then(s => { if (s?.starred !== undefined) setStarred(s.starred); })
-                .catch(() => {})
-            : Promise.resolve(),
+          Promise.resolve(), // Watchlist-Status in eigenem Effect (session-abhängig, siehe unten)
         ]).finally(() => {
           setOwnershipLoading(false);
           setSignalsLoading(false);
@@ -1584,10 +1589,14 @@ export default function CompanyDetailPage() {
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "1.5rem 2.5rem 4rem" }}>
 
         {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-            {[120, 60, 180].map((h, i) => (
-              <div key={i} style={{ height: h, background: C.bgCard, borderRadius: C.rLg, border: `1px solid ${C.border}`, opacity: 0.5 }} />
-            ))}
+          <div style={{
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            minHeight: "60vh",
+          }}>
+            <video autoPlay muted playsInline loop width={180} height={180} style={{ display: "block" }}>
+              <source src="/argo-loader.mp4" type="video/mp4" />
+            </video>
           </div>
         )}
 
