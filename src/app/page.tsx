@@ -948,9 +948,10 @@ function PageContent() {
         .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#0D1117}
         .nav-logo-text{font-family:var(--font-d);font-weight:600;font-size:15px;color:var(--t1)}
         .nav-logo-sub{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:1px}
-        .nav-tabs{display:flex;gap:2px;background:rgba(255,255,255,0.04);padding:3px;border-radius:var(--r-md);border:1px solid var(--border);justify-self:center}
-        .nav-tab{padding:5px 16px;border-radius:7px;font-size:12px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .15s;letter-spacing:.04em;text-transform:uppercase;border:none;background:none}
-        .nav-tab.active{background:var(--bg-card);color:var(--t1);border:1px solid var(--border-md)}
+        .nav-tabs{display:flex;justify-self:center}
+        .nav-tab{padding:0 18px;height:52px;border:none;border-bottom:2px solid transparent;background:none;font-size:13px;font-weight:500;color:var(--t3);cursor:pointer;transition:color .15s,border-color .15s;font-family:var(--font-b);letter-spacing:normal;text-transform:none}
+        .nav-tab.active{color:var(--t1);font-weight:600;border-bottom:2px solid var(--teal)}
+        .nav-tab:not(.active):hover{color:var(--t2)}
         .nav-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)}
         .status-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
