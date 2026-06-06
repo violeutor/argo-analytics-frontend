@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -934,6 +935,14 @@ export default function CompanyDetailPage() {
   });
   const statusPollRef = useRef<number | null>(null);
 
+  // AUTH-TEST-01: Session-State für Authorization-Header in Watchlist-Calls
+  const [session, setSession] = useState<any>(null);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
   // Watchlist
   useEffect(() => {
     if (!name) return;
@@ -1040,7 +1049,9 @@ export default function CompanyDetailPage() {
           // WATCHLIST-01: Watchlist-Status API-first laden (company_id aus Response).
           // Fallback: localStorage (pre-Auth-Phase, bis ARGO_DEFAULT_USER_ID / JWT aktiv).
           d.id
-            ? fetch(`${API_BASE}/api/v1/watchlist/status/${encodeURIComponent(d.id)}`)
+            ? fetch(`${API_BASE}/api/v1/watchlist/status/${encodeURIComponent(d.id)}`, {
+                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+              })
                 .then(r => r.ok ? r.json() : null)
                 .then(s => { if (s?.starred !== undefined) setStarred(s.starred); })
                 .catch(() => {})
@@ -1657,6 +1668,7 @@ export default function CompanyDetailPage() {
                     if (data.id) {
                       fetch(`${API_BASE}/api/v1/watchlist/${encodeURIComponent(data.id)}`, {
                         method: newStarred ? "POST" : "DELETE",
+                        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
                       })
                         .then(r => {
                           if (!r.ok) console.warn(`[WATCHLIST] ${newStarred ? "POST" : "DELETE"} ${data.id} → HTTP ${r.status}`);

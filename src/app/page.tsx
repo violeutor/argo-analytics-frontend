@@ -830,6 +830,7 @@ function PageContent() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       if (!s) setWatchlistIds(new Set());
+      setExploreData(null); // bei Login/Logout Feed neu laden (personalisiert)
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -837,23 +838,29 @@ function PageContent() {
   // Watchlist-IDs beim Tab-Wechsel laden (lazy — nur wenn Tab geöffnet wird)
   useEffect(() => {
     if (navTab !== 'watchlist') return;
-    fetch(`${BACKEND_PROXY}/api/v1/watchlist`)
+    const headers: HeadersInit = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    fetch(`${BACKEND_PROXY}/api/v1/watchlist`, { headers })
       .then(r => r.ok ? r.json() : { company_ids: [] })
       .then(d => setWatchlistIds(new Set(d.company_ids ?? [])))
       .catch(() => setWatchlistIds(new Set()));
-  }, [navTab]);
+  }, [navTab, session]);
 
   // EXPLORE-01: Feed beim Tab-Wechsel laden (lazy)
   useEffect(() => {
     if (navTab !== 'explore') return;
-    if (exploreData) return; // bereits geladen
+    if (exploreData) return; // bereits geladen (wird bei Session-Wechsel via onAuthStateChange genullt)
     setExploreLoading(true);
-    fetch(`${BACKEND_PROXY}/api/v1/explore`)
+    const headers: HeadersInit = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    fetch(`${BACKEND_PROXY}/api/v1/explore`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setExploreData(d); })
       .catch(() => {})
       .finally(() => setExploreLoading(false));
-  }, [navTab, exploreData]);
+  }, [navTab, exploreData, session]);
 
   // ── Notification Refresh-Logik ───────────────────────────────────────────────
   // Strategie: visibilitychange (min 15min Cooldown) + 30min Interval
@@ -1369,7 +1376,7 @@ function PageContent() {
                 {exploreData.companies.map((c: any, i: number) => (
                   <div
                     key={c.id ?? i}
-                    onClick={() => router.push(`/company/${encodeURIComponent(c.name)}?from=explore&back=/?tab=explore`)}
+                    onClick={() => router.push(`/company/${encodeURIComponent(c.name)}?from=research&back=/?tab=explore`)}
                     style={{
                       background: 'var(--bg-card)', border: '1px solid var(--border)',
                       borderRadius: 10, padding: '14px 18px',
