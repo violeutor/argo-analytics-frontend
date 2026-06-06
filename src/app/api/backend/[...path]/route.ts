@@ -18,6 +18,13 @@ export async function POST(
   return proxyRequest(request, params.path, "POST");
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { path: string[] } }
+) {
+  return proxyRequest(request, params.path, "DELETE");
+}
+
 async function proxyRequest(
   request: NextRequest,
   pathSegments: string[],
@@ -31,10 +38,14 @@ async function proxyRequest(
   const search = request.nextUrl.search ?? "";
   const url    = `${API_BASE}/${path}${search}`;
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-API-Key": API_KEY,
   };
+  // AUTH-PROXY-01: eingehenden Authorization-Header (Supabase JWT) durchreichen.
+  // Ohne das erreicht der Bearer-Token das Backend nie → _resolve_user_id() → None → 401.
+  const auth = request.headers.get("authorization");
+  if (auth) headers["Authorization"] = auth;
 
   const init: RequestInit = { method, headers };
 
