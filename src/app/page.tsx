@@ -1369,7 +1369,7 @@ function PageContent() {
                 {exploreData.companies.map((c: any, i: number) => (
                   <div
                     key={c.id ?? i}
-                    onClick={() => router.push(`/company/${encodeURIComponent(c.name)}?from=research&back=/?tab=explore`)}
+                    onClick={() => router.push(`/company/${encodeURIComponent(c.name)}?from=explore&back=/?tab=explore`)}
                     style={{
                       background: 'var(--bg-card)', border: '1px solid var(--border)',
                       borderRadius: 10, padding: '14px 18px',
