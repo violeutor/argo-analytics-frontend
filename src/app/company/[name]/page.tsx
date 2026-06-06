@@ -1522,12 +1522,14 @@ export default function CompanyDetailPage() {
         @keyframes argoPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }
       `}</style>
 
-      {/* Nav */}
+      {/* Nav — NAV-RESULTSTATE-01: Grid 1fr/auto/1fr, Tab-Gruppe mittig */}
       <nav style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        display: "grid", gridTemplateColumns: "1fr auto 1fr",
+        alignItems: "center",
         padding: "0 2rem", height: 52, borderBottom: `1px solid ${C.border}`,
         background: "rgba(13,15,18,0.97)", position: "sticky", top: 0, zIndex: 100,
       }}>
+        {/* Left: Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => router.push("/")}>
           <div style={{ width: 28, height: 28, background: C.teal, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 13, color: C.bg }}>A</div>
           <div>
@@ -1535,7 +1537,33 @@ export default function CompanyDetailPage() {
             <div style={{ fontSize: 10, color: C.t3, letterSpacing: ".04em" }}>Investment Intelligence</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3 }}>
+        {/* Center: Tab-Gruppe — navigiert zurück zur Landing Page */}
+        <div style={{ display: "flex", alignItems: "center", justifySelf: "center" }}>
+          {(["research", "watchlist", "explore"] as const).map((tab) => {
+            const label = tab === "research" ? "Research" : tab === "watchlist" ? "Watchlist" : "Explore";
+            const isActive = fromPage === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => router.push(`/?tab=${tab}`)}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "0 18px", height: 52,
+                  fontSize: 13, fontFamily: C.display, fontWeight: isActive ? 600 : 400,
+                  color: isActive ? C.t1 : C.t3,
+                  borderBottom: isActive ? `2px solid ${C.teal}` : "2px solid transparent",
+                  transition: "color .15s, border-color .15s",
+                }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.t2; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.t3; }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Right: Status (User-Badge folgt mit AUTH-TEST-01) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3, justifySelf: "end" }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} />
           Live · Research
         </div>
