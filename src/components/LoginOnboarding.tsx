@@ -167,24 +167,35 @@ export default function LoginOnboarding({
     return tiles.sort((a, b) => b.score - a.score).slice(0, 5);
   };
 
-  // ── Finish (Step 3 submit) ───────────────────────────────────────────────
+  // ── Finish (Step 3 submit) — ONBOARD-WIRE-01 ─────────────────────────────
   const handleFinish = async () => {
-    // ONBOARD-WIRE-01: Backend-Writes — Routes existieren noch nicht.
-    // try {
-    //   const { data: { session } } = await supabase.auth.getSession();
-    //   const token = session?.access_token;
-    //   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    //   await Promise.all([
-    //     fetch(`${BACKEND_PROXY}/api/v1/user-profile`, {
-    //       method: 'PUT', headers,
-    //       body: JSON.stringify({ job_title: role || null, customer_type: customerType }),
-    //     }),
-    //     fetch(`${BACKEND_PROXY}/api/v1/user-preferences`, {
-    //       method: 'POST', headers,
-    //       body: JSON.stringify({ sector_keys: Array.from(selectedSectors) }),
-    //     }),
-    //   ]);
-    // } catch { /* fail-open */ }
+    // Fail-open: Schreibfehler blockieren den User nicht — Onboarding trotzdem abschließen.
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const token = currentSession?.access_token;
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      await Promise.all([
+        fetch(`${BACKEND_PROXY}/api/v1/user-profile`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            job_title:                role.trim() || null,
+            customer_type:            customerType,
+            mark_onboarding_complete: true,
+          }),
+        }),
+        fetch(`${BACKEND_PROXY}/api/v1/user-preferences`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ sector_keys: Array.from(selectedSectors) }),
+        }),
+      ]);
+    } catch {
+      // Fail-open: Netzwerkfehler oder Route nicht deployed → trotzdem weiter
+    }
     setStep('complete');
   };
 
