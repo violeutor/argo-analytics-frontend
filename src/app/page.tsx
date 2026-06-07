@@ -649,16 +649,6 @@ function HeroState({
     </div>
   );
 }
-          <input
-            type="text"
-            placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, FRVO)"
-            value={query}
-            onChange={(e) => handleInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          />
-          <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
-            {resolving ? 'Prüfe…' : 'Analysieren →'}
-          </button>
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 function LoginModal({ onClose }: { onClose: () => void }) {
