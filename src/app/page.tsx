@@ -398,47 +398,73 @@ function HeroState({
       <div className="bg-grid" />
       <div className="r-wrap">
 
-        {/* ── Search Block ── */}
-        <div className="r-search-block">
-          <div className="r-eyebrow">// Private Market Intelligence · Public Market Edge</div>
-          <h1 className="r-h1">Sieh, wer profitiert —<br/><span>bevor es der Markt tut.</span></h1>
-          <div style={{ position: 'relative', maxWidth: 680, marginBottom: 36 }}>
-            <div className="r-search-wrap">
-              <input
-                type="text"
-                placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, BAYN)"
-                value={query}
-                onChange={(e) => handleInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
-                {resolving ? 'Prüfe…' : 'Analysieren →'}
-              </button>
+        {/* ── Hero Row: Suche links + Zuletzt rechts ── */}
+        <div className="r-hero-row">
+          <div className="r-search-block">
+            <div className="r-eyebrow">// Private Market Intelligence · Public Market Edge</div>
+            <h1 className="r-h1">Sieh, wer profitiert —<br/><span>bevor es der Markt tut.</span></h1>
+            <div style={{ position: 'relative' }}>
+              <div className="r-search-wrap">
+                <input
+                  type="text"
+                  placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, BAYN)"
+                  value={query}
+                  onChange={(e) => handleInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+                <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
+                  {resolving ? 'Prüfe…' : 'Analysieren →'}
+                </button>
+              </div>
+              {suggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 12, zIndex: 50, overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}>
+                  {suggestions.map((c) => (
+                    <div
+                      key={c.name}
+                      onClick={() => handleSelect(c)}
+                      style={{
+                        padding: '10px 16px', cursor: 'pointer', fontSize: 13,
+                        borderBottom: '1px solid var(--border)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'space-between',
+                        transition: 'background .1s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{c.name}</span>
+                      <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--font-m)' }}>{c.category}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {suggestions.length > 0 && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6,
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: 12, zIndex: 50, overflow: 'hidden',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              }}>
-                {suggestions.map((c) => (
-                  <div
-                    key={c.name}
-                    onClick={() => handleSelect(c)}
-                    style={{
-                      padding: '10px 16px', cursor: 'pointer', fontSize: 13,
-                      borderBottom: '1px solid var(--border)', display: 'flex',
-                      alignItems: 'center', justifyContent: 'space-between',
-                      transition: 'background .1s',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{c.name}</span>
-                    <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--font-m)' }}>{c.category}</span>
+          </div>
+
+          {/* Zuletzt aufgerufen — jetzt oben rechts neben Suche */}
+          <div className="card">
+            <div className="sec-h">Zuletzt aufgerufen</div>
+            {popular.map((p, i) => {
+              const company = companies.find(c => c.name === p.name);
+              const dotColors = ['var(--emerald)','var(--teal)','var(--blue)','var(--purple)','var(--amber)'];
+              return (
+                <div key={p.name} className="trend-row" onClick={() => company && onSelect(company)}>
+                  <span className="trend-dot" style={{ background: dotColors[i % dotColors.length] }} />
+                  <div className="trend-nm">
+                    <div className="trend-n">{p.name}</div>
+                    <div className="trend-s">{company?.industry || company?.category || '—'}</div>
                   </div>
-                ))}
+                  <div className="trend-sc">{company?.rating || '—'}</div>
+                </div>
+              );
+            })}
+            {popular.length === 0 && (
+              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
+                Noch keine Aufrufe
               </div>
             )}
           </div>
@@ -470,56 +496,29 @@ function HeroState({
           </div>
         </div>
 
-        {/* ── 2-col Grid: Live Signals + Zuletzt ── */}
-        <div className="r-grid">
-          {/* Live Signals */}
-          <div className="card">
-            <div className="sec-h">
-              Live Signals <span className="count">// was sich heute bewegt</span>
-              <span className="more" onClick={() => router.push('/?tab=watchlist')}>Alle →</span>
+        {/* ── Live Signals (voll breit) ── */}
+        <div className="card" style={{ marginBottom: 48 }}>
+          <div className="sec-h">
+            Live Signals <span className="count">// was sich heute bewegt</span>
+            <span className="more" onClick={() => router.push('/?tab=watchlist')}>Alle →</span>
+          </div>
+          {notifications.slice(0, 6).map((n) => (
+            <div key={n.id} className="signal-row">
+              <div className={`sig-ic ${n.direction === 'positive' ? 'pos' : n.direction === 'negative' ? 'neg' : 'neu'}`}>
+                {n.direction === 'positive' ? '▲' : n.direction === 'negative' ? '▼' : '●'}
+              </div>
+              <div className="sig-body">
+                <div className="sig-co">{n.company_name}</div>
+                <div className="sig-ev">{n.raw_title}</div>
+              </div>
+              <div className="sig-meta">{n.event_date}</div>
             </div>
-            {notifications.slice(0, 5).map((n) => (
-              <div key={n.id} className="signal-row">
-                <div className={`sig-ic ${n.direction === 'positive' ? 'pos' : n.direction === 'negative' ? 'neg' : 'neu'}`}>
-                  {n.direction === 'positive' ? '▲' : n.direction === 'negative' ? '▼' : '●'}
-                </div>
-                <div className="sig-body">
-                  <div className="sig-co">{n.company_name}</div>
-                  <div className="sig-ev">{n.raw_title}</div>
-                </div>
-                <div className="sig-meta">{n.event_date}</div>
-              </div>
-            ))}
-            {notifications.length === 0 && (
-              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
-                Signals werden geladen…
-              </div>
-            )}
-          </div>
-
-          {/* Zuletzt aufgerufen */}
-          <div className="card">
-            <div className="sec-h">Zuletzt aufgerufen</div>
-            {popular.map((p, i) => {
-              const company = companies.find(c => c.name === p.name);
-              const dotColors = ['var(--emerald)','var(--teal)','var(--blue)','var(--purple)','var(--amber)'];
-              return (
-                <div key={p.name} className="trend-row" onClick={() => company && onSelect(company)}>
-                  <span className="trend-dot" style={{ background: dotColors[i % dotColors.length] }} />
-                  <div className="trend-nm">
-                    <div className="trend-n">{p.name}</div>
-                    <div className="trend-s">{company?.industry || company?.category || '—'}</div>
-                  </div>
-                  <div className="trend-sc">{company?.rating || '—'}</div>
-                </div>
-              );
-            })}
-            {popular.length === 0 && (
-              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
-                Noch keine Aufrufe
-              </div>
-            )}
-          </div>
+          ))}
+          {notifications.length === 0 && (
+            <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
+              Signals werden geladen…
+            </div>
+          )}
         </div>
 
         {/* ── Sektor-Grid ── */}
@@ -904,6 +903,7 @@ function PageContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [notifOpen, setNotifOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   // AUTH-01: Supabase session
   const [session, setSession] = useState<any>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -1038,7 +1038,7 @@ function PageContent() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
         /* ── Background Grid ── */
-        .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,194,209,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,194,209,0.022) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 90% 50% at 50% 0%,#000 30%,transparent 100%)}
+        .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,194,209,0.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,194,209,0.045) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 110% 85% at 50% 0%,#000 55%,transparent 100%)}
 
         /* ── Pages ── */
         .page{padding:0 2rem 4rem;position:relative;z-index:1}
@@ -1046,7 +1046,9 @@ function PageContent() {
         .r-wrap{max-width:1160px;margin:0 auto;padding:0 2rem}
 
         /* ── Research: Search Block ── */
-        .r-search-block{padding:3rem 0 2rem}
+        .r-search-block{padding:0}
+        .r-hero-row{display:grid;grid-template-columns:1.55fr 1fr;gap:32px;align-items:start;padding:3rem 0 2.25rem}
+        .r-hero-row .card{margin-top:6px}
         .r-eyebrow{font-family:var(--font-m);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:14px;opacity:.9}
         .r-h1{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,4vw,46px);letter-spacing:-.03em;line-height:1.06;margin-bottom:20px;color:var(--t1)}
         .r-h1 span{color:var(--teal)}
@@ -1473,12 +1475,48 @@ function PageContent() {
 
           {/* User: Avatar (eingeloggt) oder Anmelden-Button */}
           {session ? (
-            <div
-              className="nav-user-av"
-              title={`${session.user?.email}\n→ Abmelden`}
-              onClick={() => supabase.auth.signOut()}
-            >
-              {(session.user?.email?.[0] ?? 'U').toUpperCase()}
+            <div style={{ position: 'relative' }}>
+              <div
+                className="nav-user-av"
+                title="Konto"
+                onClick={() => setUserMenuOpen(o => !o)}
+              >
+                {(session.user?.email?.[0] ?? 'U').toUpperCase()}
+              </div>
+              {userMenuOpen && (
+                <>
+                  {/* Klick-außerhalb-Schließer */}
+                  <div
+                    onClick={() => setUserMenuOpen(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 190 }}
+                  />
+                  <div style={{
+                    position: 'absolute', top: 42, right: 0, width: 240, zIndex: 200,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+                    borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden',
+                  }}>
+                    <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'var(--font-m)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>
+                        Angemeldet als
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--t1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {session.user?.email}
+                      </div>
+                    </div>
+                    <div
+                      onClick={() => { setUserMenuOpen(false); supabase.auth.signOut(); }}
+                      style={{
+                        padding: '11px 14px', cursor: 'pointer', fontSize: 13,
+                        color: 'var(--t2)', transition: 'background .1s, color .1s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--t1)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t2)'; }}
+                    >
+                      Abmelden
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <button
@@ -1503,11 +1541,14 @@ function PageContent() {
 
       {/* ── Watchlist Page ── */}
       {navTab === 'watchlist' && (
-        <div className="page">
-          <WatchlistPage
+        <div className="r-page">
+          <div className="bg-grid" />
+          <div className="page" style={{ position: 'relative', zIndex: 1 }}>
+            <WatchlistPage
             companies={companies.filter(c => c.id && watchlistIds.has(c.id))}
             onSelectCompany={handleSelectFromWatchlist}
           />
+          </div>
         </div>
       )}
       {/* ── Explore Page ── */}
