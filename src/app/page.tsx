@@ -1048,7 +1048,7 @@ function PageContent() {
 
         /* ── Research: Search Block ── */
         .r-search-block{padding:0}
-        .r-hero-row{display:grid;grid-template-columns:1.55fr 1fr;gap:32px;align-items:start;padding:calc(3rem + 10px) 0 2.25rem}
+        .r-hero-row{display:grid;grid-template-columns:1.55fr 1fr;gap:32px;align-items:start;padding:calc(3rem + 30px) 0 2.25rem}
         .r-hero-row .card{margin-top:6px}
         .r-eyebrow{font-family:var(--font-m);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:14px;opacity:.9}
         .r-h1{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,4vw,46px);letter-spacing:-.03em;line-height:1.06;margin-bottom:70px;color:var(--t1)}
