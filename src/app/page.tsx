@@ -246,9 +246,11 @@ type SubTab = 'uberblick' | 'ownership' | 'fundamentals' | 'investitionspfad';
 function HeroState({
   companies,
   onSelect,
+  notifications = [],
 }: {
   companies: Company[];
   onSelect: (c: Company) => void;
+  notifications?: Notification[];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -384,73 +386,173 @@ function HeroState({
     setDisambig(null);
   };
 
+  const SECTORS = [
+    {name:'Climate Tech', cc:'var(--emerald)'}, {name:'Fintech', cc:'var(--teal)'},
+    {name:'Enterprise Software', cc:'var(--blue)'}, {name:'Biotech & Pharma', cc:'var(--purple)'},
+    {name:'Space & Defense', cc:'var(--indigo)'}, {name:'Energy Transition', cc:'var(--amber)'},
+    {name:'Health Tech', cc:'var(--rose)'}, {name:'Deep Tech', cc:'var(--teal-g)'},
+  ];
+
   return (
-    <div className="hero">
-      <div className="hero-eyebrow">Private Market Intelligence · Public Market Edge</div>
-      <h1>Sieh, wer profitiert —<br /><span>bevor es der Markt tut.</span></h1>
-      <p className="hero-sub">
-        Argo identifiziert Gewinner branchenübergreifend —
-        für Investoren, die früher als der Konsens positioniert sein wollen.
-      </p>
-      <div style={{ position: 'relative', maxWidth: 560, margin: '0 auto 1.25rem' }}>
-        <div className="search-wrap">
-          <input
-            type="text"
-            placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, FRVO)"
-            value={query}
-            onChange={(e) => handleInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          />
-          <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
-            {resolving ? 'Prüfe…' : 'Analysieren →'}
-          </button>
+    <div className="r-page">
+      <div className="bg-grid" />
+      <div className="r-wrap">
+
+        {/* ── Search Block ── */}
+        <div className="r-search-block">
+          <div className="r-eyebrow">// Private Market Intelligence · Public Market Edge</div>
+          <h1 className="r-h1">Sieh, wer profitiert —<br/><span>bevor es der Markt tut.</span></h1>
+          <div style={{ position: 'relative', maxWidth: 680, marginBottom: 36 }}>
+            <div className="r-search-wrap">
+              <input
+                type="text"
+                placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, BAYN)"
+                value={query}
+                onChange={(e) => handleInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
+                {resolving ? 'Prüfe…' : 'Analysieren →'}
+              </button>
+            </div>
+            {suggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6,
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 12, zIndex: 50, overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}>
+                {suggestions.map((c) => (
+                  <div
+                    key={c.name}
+                    onClick={() => handleSelect(c)}
+                    style={{
+                      padding: '10px 16px', cursor: 'pointer', fontSize: 13,
+                      borderBottom: '1px solid var(--border)', display: 'flex',
+                      alignItems: 'center', justifyContent: 'space-between',
+                      transition: 'background .1s',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{c.name}</span>
+                    <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--font-m)' }}>{c.category}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        {suggestions.length > 0 && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
-            background: 'var(--bg-card)', border: '1px solid var(--border-md)',
-            borderRadius: 'var(--r-md)', zIndex: 50, overflow: 'hidden',
-          }}>
-            {suggestions.map((c) => (
-              <div
-                key={c.name}
-                onClick={() => handleSelect(c)}
-                style={{
-                  padding: '8px 14px', cursor: 'pointer', fontSize: 13,
-                  borderBottom: '1px solid var(--border)', display: 'flex',
-                  alignItems: 'center', justifyContent: 'space-between',
-                  transition: 'background .1s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{c.name}</span>
-                <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--font-m)' }}>{c.category}</span>
+
+        {/* ── Stat Strip ── */}
+        <div className="stat-strip">
+          <div className="stat">
+            <div className="stat-lbl">Companies tracked</div>
+            <div className="stat-val">{companies.length}</div>
+            <div className="stat-delta">live · rolling refresh</div>
+          </div>
+          <div className="stat">
+            <div className="stat-lbl">Sektoren live</div>
+            <div className="stat-val cyan">14</div>
+            <div className="stat-delta">Taxonomy v1.0</div>
+          </div>
+          <div className="stat">
+            <div className="stat-lbl">Signals · geladen</div>
+            <div className="stat-val amber">{notifications.length}</div>
+            <div className="stat-delta">Market Events</div>
+          </div>
+          <div className="stat">
+            <div className="stat-lbl">Top-Picks (≥ A)</div>
+            <div className="stat-val emerald">
+              {companies.filter(c => c.rating?.startsWith('A') || c.rating === 'STRONG').length}
+            </div>
+            <div className="stat-delta">höchste Rating-Klasse</div>
+          </div>
+        </div>
+
+        {/* ── 2-col Grid: Live Signals + Zuletzt ── */}
+        <div className="r-grid">
+          {/* Live Signals */}
+          <div className="card">
+            <div className="sec-h">
+              Live Signals <span className="count">// was sich heute bewegt</span>
+              <span className="more" onClick={() => router.push('/?tab=watchlist')}>Alle →</span>
+            </div>
+            {notifications.slice(0, 5).map((n) => (
+              <div key={n.id} className="signal-row">
+                <div className={`sig-ic ${n.direction === 'positive' ? 'pos' : n.direction === 'negative' ? 'neg' : 'neu'}`}>
+                  {n.direction === 'positive' ? '▲' : n.direction === 'negative' ? '▼' : '●'}
+                </div>
+                <div className="sig-body">
+                  <div className="sig-co">{n.company_name}</div>
+                  <div className="sig-ev">{n.raw_title}</div>
+                </div>
+                <div className="sig-meta">{n.event_date}</div>
               </div>
             ))}
+            {notifications.length === 0 && (
+              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
+                Signals werden geladen…
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      <div className="qa-section">
-        <div className="qa-label">Häufig aufgerufen</div>
-        <div className="qa-chips">
-          {popular.map((p) => {
-            const company = companies.find((c) => c.name === p.name);
+
+          {/* Zuletzt aufgerufen */}
+          <div className="card">
+            <div className="sec-h">Zuletzt aufgerufen</div>
+            {popular.map((p, i) => {
+              const company = companies.find(c => c.name === p.name);
+              const dotColors = ['var(--emerald)','var(--teal)','var(--blue)','var(--purple)','var(--amber)'];
+              return (
+                <div key={p.name} className="trend-row" onClick={() => company && onSelect(company)}>
+                  <span className="trend-dot" style={{ background: dotColors[i % dotColors.length] }} />
+                  <div className="trend-nm">
+                    <div className="trend-n">{p.name}</div>
+                    <div className="trend-s">{company?.industry || company?.category || '—'}</div>
+                  </div>
+                  <div className="trend-sc">{company?.rating || '—'}</div>
+                </div>
+              );
+            })}
+            {popular.length === 0 && (
+              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
+                Noch keine Aufrufe
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Sektor-Grid ── */}
+        <div className="sec-h" style={{ marginBottom: 16 }}>
+          Sektoren erkunden
+          <span className="count">// 14 live · Taxonomy v1.0</span>
+          <span className="more" onClick={() => router.push('/?tab=explore')}>Explore öffnen →</span>
+        </div>
+        <div className="sec-grid-board">
+          {SECTORS.map((s) => {
+            const key0 = s.name.toLowerCase().split(' ')[0];
+            const cnt = companies.filter(c =>
+              c.industry?.toLowerCase().includes(key0) ||
+              c.category?.toLowerCase().includes(key0)
+            ).length;
             return (
-              <span
-                key={p.name}
-                className="qa-chip"
-                onClick={() => company && handleSelect(company)}
-              >
-                {p.name}
-                <span className="qa-chip-count">{p.count}</span>
-              </span>
+              <div key={s.name} className="sec-cell"
+                style={{'--cc': s.cc} as React.CSSProperties}
+                onClick={() => router.push('/?tab=explore')}>
+                <div className="sec-top">
+                  <span className="sec-dot" />
+                  <span className="sec-arrow">→</span>
+                </div>
+                <h4 className="sec-h4">{s.name}</h4>
+                <div className="sec-cnt"><b>{cnt || '—'}</b> Companies</div>
+              </div>
             );
           })}
         </div>
+
       </div>
 
-      {/* DISAMBIG-03: Entity-Auswahl — listed + private + Töchter (Wikidata) */}
+      {/* ── Disambig-Modal (bleibt position:fixed) ── */}
       {disambig && (() => {
         const renderRow = (c: ResolveCandidate) => (
           <div
@@ -476,13 +578,11 @@ function HeroState({
                 {c.display_name || c.legal_name || c.name}
               </div>
               <div style={{ color: 'var(--t3)', fontSize: 11, marginTop: 2 }}>
-                {/* Tochter → "Tochter von X"; sonst Ticker · Exchange · HQ */}
                 {c.is_subsidiary && c.parent_name
                   ? `Tochter von ${c.parent_name}`
                   : [c.ticker, c.display_exchange, c.headquarters].filter(Boolean).join(' · ') || '—'}
               </div>
             </div>
-            {/* Lifecycle-Badge — Börsennotiert / Aufgegangen / Delisted / Privat */}
             {(() => {
               const LC: Record<string, { label: string; color: string; bg: string }> = {
                 acquired: { label: 'Aufgegangen', color: 'var(--amber, #F59E0B)', bg: 'rgba(240,165,0,0.10)' },
@@ -507,57 +607,58 @@ function HeroState({
           </div>
         );
         return (
-        <div
-          onClick={() => setDisambig(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(0,0,0,0.55)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', padding: 16,
-          }}
-        >
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setDisambig(null)}
             style={{
-              background: 'var(--bg-card)', border: '1px solid var(--border-md)',
-              borderRadius: 'var(--r-lg)', maxWidth: 480, width: '100%',
-              padding: '20px 22px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-              maxHeight: '80vh', overflowY: 'auto',
+              position: 'fixed', inset: 0, zIndex: 200,
+              background: 'rgba(0,0,0,0.55)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', padding: 16,
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
-              Welches Unternehmen meinst du?
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--t3)', marginBottom: 16 }}>
-              Mehrere Treffer für „{query.trim()}". Bitte präzisieren.
-            </div>
-
-            {/* Kandidaten — listed + private + Töchter, je mit Badge */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {disambig.candidates.map(renderRow)}
-            </div>
-
-            {/* Hinweis nur noch für sehr kleine GmbHs ohne Wikidata-Eintrag */}
-            <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
-              Gesuchte Tochter nicht dabei? Vollständige Firmierung eingeben (z.&nbsp;B. „Bayer CropScience GmbH").
-            </div>
-
             <div
-              onClick={() => { setDisambig(null); goToCompany(query.trim(), null); }}
+              onClick={(e) => e.stopPropagation()}
               style={{
-                marginTop: 14, fontSize: 12, color: 'var(--t3)', cursor: 'pointer',
-                textAlign: 'center', padding: '6px',
+                background: 'var(--bg-card)', border: '1px solid var(--border-md)',
+                borderRadius: 'var(--r-lg)', maxWidth: 480, width: '100%',
+                padding: '20px 22px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+                maxHeight: '80vh', overflowY: 'auto',
               }}
             >
-              Keine davon — trotzdem mit „{query.trim()}" suchen
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
+                Welches Unternehmen meinst du?
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--t3)', marginBottom: 16 }}>
+                Mehrere Treffer für „{query.trim()}". Bitte präzisieren.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {disambig.candidates.map(renderRow)}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 12, padding: '8px 10px', background: 'var(--bg-hover)', borderRadius: 'var(--r-md)', lineHeight: 1.5 }}>
+                Gesuchte Tochter nicht dabei? Vollständige Firmierung eingeben (z.&nbsp;B. „Bayer CropScience GmbH").
+              </div>
+              <div
+                onClick={() => { setDisambig(null); goToCompany(query.trim(), null); }}
+                style={{ marginTop: 14, fontSize: 12, color: 'var(--t3)', cursor: 'pointer', textAlign: 'center', padding: '6px' }}
+              >
+                Keine davon — trotzdem mit „{query.trim()}" suchen
+              </div>
             </div>
           </div>
-        </div>
         );
       })()}
     </div>
   );
 }
-
+          <input
+            type="text"
+            placeholder="Unternehmen oder Ticker… (z.B. CarbonCure, NEE, FRVO)"
+            value={query}
+            onChange={(e) => handleInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button className="btn-primary" onClick={handleSearch} disabled={resolving}>
+            {resolving ? 'Prüfe…' : 'Analysieren →'}
+          </button>
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 function LoginModal({ onClose }: { onClose: () => void }) {
@@ -927,27 +1028,144 @@ function PageContent() {
       <style>{`
         ${FONT_IMPORT}
         *{box-sizing:border-box;margin:0;padding:0}
-        :root{${ROOT_VARS}}
+        :root{${ROOT_VARS} --violet:#A78BFA;--rose:#F472B6;--indigo:#818CF8;--teal-g:#2DD4BF;}
         body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
 
-        /* Nav */
-        nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 2rem;height:52px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.97);position:sticky;top:0;z-index:100}
+        /* ── Nav (Redesign S59) ── */
+        nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 2rem;height:64px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.85);backdrop-filter:blur(14px);position:sticky;top:0;z-index:100}
         .nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
-        .nav-logo-icon{width:28px;height:28px;background:var(--teal);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:700;font-size:13px;color:#0D1117}
-        .nav-logo-text{font-family:var(--font-d);font-weight:600;font-size:15px;color:var(--t1)}
-        .nav-logo-sub{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:1px}
+        .nav-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--teal),var(--blue));border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:900;font-size:14px;color:#0D1117;box-shadow:0 0 14px rgba(0,194,209,0.28)}
+        .nav-logo-text{font-family:var(--font-d);font-weight:800;font-size:17px;letter-spacing:-0.02em;color:var(--t1)}
+        .nav-logo-sub{font-size:10px;color:var(--t3);font-family:var(--font-m);letter-spacing:.05em;margin-top:3px;text-transform:uppercase}
         .nav-tabs{display:flex;justify-self:center}
-        .nav-tab{padding:0 18px;height:52px;border:none;border-bottom:2px solid transparent;background:none;font-size:13px;font-weight:500;color:var(--t3);cursor:pointer;transition:color .15s,border-color .15s;font-family:var(--font-b);letter-spacing:normal;text-transform:none}
-        .nav-tab.active{color:var(--t1);font-weight:600;border-bottom:2px solid var(--teal)}
-        .nav-tab:not(.active):hover{color:var(--t2)}
-        .nav-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3)}
-        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+        .nav-tab{padding:0 14px;height:64px;border:none;background:none;font-size:14px;font-weight:600;color:var(--t2);cursor:pointer;transition:color .2s;font-family:var(--font-b);letter-spacing:normal;text-transform:none;position:relative}
+        .nav-tab.active{color:var(--t1)}
+        .nav-tab.active::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;background:var(--teal);box-shadow:0 0 10px var(--teal)}
+        .nav-tab:not(.active):hover{color:var(--t1)}
+        .nav-user-av{width:30px;height:30px;border-radius:50%;background:var(--bg-hover);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal);font-family:var(--font-m);cursor:pointer}
+        .nav-bell{width:36px;height:36px;border-radius:9px;background:var(--bg-card);border:1px solid var(--border);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:all .2s}
+        .nav-bell:hover{border-color:var(--border-md);color:var(--t1)}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-        /* Pages */
-        .page{padding:0 2rem 4rem}
+        /* ── Background Grid ── */
+        .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,194,209,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,194,209,0.022) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 90% 50% at 50% 0%,#000 30%,transparent 100%)}
 
-        /* Hero */
+        /* ── Pages ── */
+        .page{padding:0 2rem 4rem;position:relative;z-index:1}
+        .r-page{position:relative;z-index:1;padding-bottom:4rem}
+        .r-wrap{max-width:1160px;margin:0 auto;padding:0 2rem}
+
+        /* ── Research: Search Block ── */
+        .r-search-block{padding:3rem 0 2rem}
+        .r-eyebrow{font-family:var(--font-m);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:14px;opacity:.9}
+        .r-h1{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,4vw,46px);letter-spacing:-.03em;line-height:1.06;margin-bottom:20px;color:var(--t1)}
+        .r-h1 span{color:var(--teal)}
+        .r-search-wrap{display:flex;gap:12px;align-items:center}
+        .r-search-wrap input{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:18px 22px;color:var(--t1);font-family:var(--font-b);font-size:16px;outline:none;transition:border-color .2s,box-shadow .2s}
+        .r-search-wrap input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,194,209,0.08)}
+        .r-search-wrap input::placeholder{color:var(--t3)}
+        .r-search-wrap .btn-primary{background:var(--teal);color:var(--bg);border:none;border-radius:14px;padding:18px 28px;font-family:var(--font-b);font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;transition:all .2s}
+        .r-search-wrap .btn-primary:hover{background:#1ad0de;box-shadow:0 0 22px rgba(0,194,209,0.4)}
+        .r-search-wrap .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+
+        /* ── Legacy Hero (noch für qa-chips etc.) ── */
+        .hero{max-width:640px;margin:0 auto;padding:3.5rem 0 2rem;text-align:center}
+        .hero-eyebrow{font-size:11px;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1rem;opacity:.8}
+        .hero h1{font-family:var(--font-d);font-size:40px;font-weight:700;line-height:1.15;letter-spacing:-.02em;color:var(--t1);margin-bottom:.75rem}
+        .hero h1 span{color:var(--teal)}
+        .hero-sub{font-size:15px;color:var(--t2);line-height:1.65;max-width:460px;margin:0 auto 1.75rem}
+        .search-wrap{display:flex;gap:10px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:6px 6px 6px 14px;align-items:center}
+        .search-wrap input{flex:1;background:none;border:none;outline:none;color:var(--t1);font-family:var(--font-b);font-size:14px}
+        .search-wrap input::placeholder{color:var(--t3)}
+        .btn-primary{background:var(--teal);color:#0D1117;font-family:var(--font-d);font-weight:600;font-size:13px;padding:9px 20px;border-radius:var(--r-md);border:none;cursor:pointer;white-space:nowrap}
+        .qa-section{margin-top:.5rem}
+        .qa-label{font-size:10px;color:var(--t3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:.5rem;text-align:center}
+        .qa-chips{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap}
+        .qa-chip{background:var(--bg-card);border:1px solid var(--border);border-radius:99px;padding:5px 14px;font-size:12px;color:var(--t2);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px}
+        .qa-chip:hover{border-color:var(--teal);color:var(--teal)}
+        .qa-chip-count{font-size:10px;color:var(--t3);background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:99px}
+
+        /* ── Stat Strip ── */
+        .stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px}
+        .stat{background:var(--bg-card);border:1px solid var(--border);border-radius:13px;padding:18px 20px}
+        .stat-lbl{font-family:var(--font-m);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);margin-bottom:9px}
+        .stat-val{font-family:var(--font-d);font-weight:800;font-size:28px;letter-spacing:-.02em;line-height:1}
+        .stat-val.cyan{color:var(--teal)}.stat-val.amber{color:var(--amber)}.stat-val.emerald{color:var(--emerald)}
+        .stat-delta{font-family:var(--font-m);font-size:11px;margin-top:8px;color:var(--t3)}
+        .stat-delta.up{color:var(--emerald)}
+
+        /* ── R-Grid: 2 Spalten ── */
+        .r-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:24px;align-items:start;margin-bottom:48px}
+        .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px}
+        .sec-h{font-family:var(--font-d);font-weight:700;font-size:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+        .sec-h .count{font-family:var(--font-m);font-size:11px;color:var(--t3);font-weight:400}
+        .sec-h .more{margin-left:auto;font-family:var(--font-b);font-size:12px;color:var(--t2);cursor:pointer;font-weight:600;transition:color .15s}
+        .sec-h .more:hover{color:var(--teal)}
+        .signal-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+        .signal-row:last-child{border-bottom:none}
+        .sig-ic{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;margin-top:1px}
+        .sig-ic.pos{background:rgba(16,185,129,0.12);color:var(--emerald)}
+        .sig-ic.neg{background:rgba(239,68,68,0.12);color:var(--red)}
+        .sig-ic.neu{background:rgba(139,148,158,0.12);color:var(--t2)}
+        .sig-body{flex:1;min-width:0}
+        .sig-co{font-weight:600;font-size:13px;color:var(--t1)}
+        .sig-ev{font-size:12px;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sig-meta{font-family:var(--font-m);font-size:10px;color:var(--t3);white-space:nowrap;padding-top:2px}
+        .trend-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+        .trend-row:last-child{border-bottom:none}
+        .trend-row:hover .trend-n{color:var(--teal)}
+        .trend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+        .trend-nm{flex:1;min-width:0}
+        .trend-n{font-size:13px;font-weight:600;color:var(--t1);transition:color .15s}
+        .trend-s{font-size:11px;color:var(--t3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .trend-sc{font-family:var(--font-m);font-size:11px;color:var(--t2)}
+
+        /* ── Sektor-Grid ── */
+        .sec-grid-board{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:48px}
+        .sec-cell{background:var(--bg);padding:22px;cursor:pointer;transition:background .22s;position:relative}
+        .sec-cell:hover{background:var(--bg-hover)}
+        .sec-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+        .sec-dot{width:10px;height:10px;border-radius:50%;background:var(--cc);box-shadow:0 0 10px var(--cc)}
+        .sec-arrow{color:var(--t3);font-size:13px;transition:transform .2s,color .2s}
+        .sec-cell:hover .sec-arrow{color:var(--cc);transform:translateX(3px)}
+        .sec-h4{font-family:var(--font-d);font-weight:700;font-size:15px;letter-spacing:-.01em;margin-bottom:6px;color:var(--t1)}
+        .sec-cnt{font-family:var(--font-m);font-size:11.5px;color:var(--t3)}
+        .sec-cnt b{color:var(--t2);font-weight:600}
+
+        /* ── Explore Cards ── */
+        .ex-card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:48px}
+        .ex-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:border-color .2s,box-shadow .2s;position:relative;overflow:hidden}
+        .ex-card:hover{border-color:var(--cc,var(--border-md))}
+        .ex-card.primary{grid-column:span 3;display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px;background:linear-gradient(120deg,#15212b 0%,var(--bg-card) 60%);border-color:rgba(0,194,209,0.32)}
+        .ex-card.primary:hover{box-shadow:0 0 40px rgba(0,194,209,0.12)}
+        .ex-card.primary::after{content:'';position:absolute;top:-70px;right:-40px;width:280px;height:280px;background:radial-gradient(circle,rgba(0,194,209,0.16),transparent 70%);pointer-events:none}
+        .toppick{font-family:var(--font-m);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);margin-bottom:10px}
+        .ex-name{font-family:var(--font-d);font-weight:800;font-size:22px;letter-spacing:-.02em;color:var(--t1);margin-bottom:4px}
+        .ex-name-sm{font-family:var(--font-d);font-weight:700;font-size:16px;letter-spacing:-.01em;color:var(--t1)}
+        .ex-cat{font-size:13px;color:var(--t2);display:flex;align-items:center;gap:6px}
+        .ex-cat-dot{width:6px;height:6px;border-radius:50%;background:var(--cc,var(--teal));display:inline-block}
+        .ex-score-box{text-align:center;min-width:70px}
+        .ex-score-v{font-family:var(--font-d);font-weight:900;font-size:32px;letter-spacing:-.02em;color:var(--teal)}
+        .ex-score-v-sm{font-family:var(--font-d);font-weight:800;font-size:22px;color:var(--t1)}
+        .ex-score-l{font-family:var(--font-m);font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+        .ex-card-foot{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap}
+        .ex-rating{font-family:var(--font-m);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px}
+        .ex-rating.strong{background:rgba(0,194,209,0.12);color:var(--teal);border:1px solid rgba(0,194,209,0.25)}
+        .ex-rating.watch{background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
+        .ex-path{font-size:11px;color:var(--t2);background:var(--bg-hover);padding:3px 8px;border-radius:6px}
+        .ex-signal{font-family:var(--font-m);font-size:11px;color:var(--t3)}
+        .ex-head{margin-bottom:28px}
+        .ex-head h2{font-family:var(--font-d);font-weight:800;font-size:22px;letter-spacing:-.02em;margin-bottom:6px}
+        .ex-lead{font-size:13px;color:var(--t2);line-height:1.6}
+        .ex-mandate{color:var(--teal)}
+
+        /* Result */
+        .result-wrap{max-width:900px;margin:0 auto;padding-top:1.5rem}
+        .result-topbar{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem}
+        .btn-back{background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--t2);font-size:12px;padding:5px 12px;cursor:pointer;font-family:var(--font-b)}
+        .btn-back:hover{border-color:var(--teal);color:var(--teal)}
+        .result-breadcrumb{font-size:11px;color:var(--t3)}
+        .company-header-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.25rem 1.5rem;margin-bottom:1rem}
         .hero{max-width:640px;margin:0 auto;padding:3.5rem 0 2rem;text-align:center}
         .hero-eyebrow{font-size:11px;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1rem;opacity:.8}
         .hero h1{font-family:var(--font-d);font-size:40px;font-weight:700;line-height:1.15;letter-spacing:-.02em;color:var(--t1);margin-bottom:.75rem}
@@ -1102,59 +1320,23 @@ function PageContent() {
             Explore
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifySelf: 'end' }}>
-          {/* AUTH-01: Login / User-Badge */}
-          {session ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                fontSize: 11, color: 'var(--t2)', fontFamily: 'var(--font-b)',
-                maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {session.user?.email}
-              </div>
-              <button
-                onClick={() => supabase.auth.signOut()}
-                style={{
-                  background: 'none', border: '1px solid var(--border-md)',
-                  borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
-                  fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--font-b)',
-                  transition: 'all .15s',
-                }}
-              >
-                Abmelden
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setLoginOpen(true)}
-              className="btn-primary"
-              style={{ fontSize: 12, padding: '6px 14px' }}
-            >
-              Anmelden
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'end' }}>
           {/* Bell */}
           <div style={{ position: 'relative' }}>
             <button
               onClick={handleOpenNotif}
-              style={{
-                background: notifOpen ? 'var(--bg-hover)' : 'transparent',
-                border: '1px solid ' + (notifOpen ? 'var(--border-md)' : 'transparent'),
-                borderRadius: 8, width: 34, height: 34, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: unreadCount > 0 ? 'var(--t1)' : 'var(--t3)',
-                fontSize: 16, transition: 'all .15s',
-              }}
+              className="nav-bell"
               title="Notifications"
             >
               🔔
               {unreadCount > 0 && (
                 <span style={{
-                  position: 'absolute', top: 4, right: 4,
-                  background: 'var(--teal)', color: '#0D1117',
-                  borderRadius: 99, fontSize: 9, fontWeight: 700,
-                  padding: '1px 4px', lineHeight: 1.4, minWidth: 14,
-                  textAlign: 'center',
+                  position: 'absolute', top: -5, right: -5,
+                  minWidth: 17, height: 17, padding: '0 4px',
+                  background: 'var(--red)', color: '#fff',
+                  borderRadius: 9, fontSize: 10, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-m)',
                 }}>
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
@@ -1299,18 +1481,34 @@ function PageContent() {
             )}
           </div>
 
-          <div className="nav-status">
-            <div className="status-dot" />
-            Live · {companies.length} Companies
-          </div>
+          {/* User: Avatar (eingeloggt) oder Anmelden-Button */}
+          {session ? (
+            <div
+              className="nav-user-av"
+              title={`${session.user?.email}\n→ Abmelden`}
+              onClick={() => supabase.auth.signOut()}
+            >
+              {(session.user?.email?.[0] ?? 'U').toUpperCase()}
+            </div>
+          ) : (
+            <button
+              onClick={() => setLoginOpen(true)}
+              style={{
+                background: 'var(--teal)', color: 'var(--bg)',
+                border: 'none', borderRadius: 8, padding: '7px 16px',
+                fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-b)',
+                cursor: 'pointer', transition: 'all .2s',
+              }}
+            >
+              Anmelden
+            </button>
+          )}
         </div>
       </nav>
 
       {/* ── Research Page ── */}
       {navTab === 'research' && (
-        <div className="page">
-          <HeroState companies={companies} onSelect={handleSelectCompany} />
-        </div>
+        <HeroState companies={companies} onSelect={handleSelectCompany} notifications={notifications} />
       )}
 
       {/* ── Watchlist Page ── */}
@@ -1324,22 +1522,108 @@ function PageContent() {
       )}
       {/* ── Explore Page ── */}
       {navTab === 'explore' && (
-        <div className="page">
-          {exploreLoading ? (
-            <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--t3)', fontSize: 13 }}>
-              Feed wird geladen…
-            </div>
-          ) : !exploreData || exploreData.companies.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-              <div style={{ fontSize: 15, color: 'var(--t1)', marginBottom: 8 }}>Keine Empfehlungen</div>
-              <div style={{ fontSize: 12, color: 'var(--t3)' }}>
-                {!session
-                  ? 'Bitte anmelden um personalisierte Empfehlungen zu sehen.'
-                  : 'Industrie-Präferenzen noch nicht gesetzt — bitte in Supabase seeden.'}
+        <div className="r-page">
+          <div className="bg-grid" />
+          <div className="r-wrap" style={{ paddingTop: '2.5rem' }}>
+            {exploreLoading ? (
+              <div style={{ textAlign: 'center', padding: '6rem 0', color: 'var(--t3)', fontSize: 13 }}>
+                Feed wird geladen…
               </div>
-            </div>
-          ) : (
-            <div style={{ maxWidth: 900, margin: '0 auto', padding: '1.5rem 0' }}>
+            ) : !exploreData || exploreData.companies.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '6rem 0' }}>
+                <div style={{ fontSize: 15, color: 'var(--t1)', marginBottom: 8 }}>Keine Empfehlungen</div>
+                <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                  {!session
+                    ? 'Bitte anmelden um personalisierte Empfehlungen zu sehen.'
+                    : 'Industrie-Präferenzen noch nicht gesetzt.'}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Ex-Head */}
+                <div className="ex-head">
+                  <h2>Dein Explore-Tab</h2>
+                  <p className="ex-lead">
+                    Folgende Unternehmen könnten für dich interessant sein
+                    {exploreData.customer_type && (
+                      <span className="ex-mandate"> — gewichtet auf dein Mandat ({exploreData.customer_type}).</span>
+                    )}
+                  </p>
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--t3)', fontFamily: 'var(--font-m)' }}>
+                    {exploreData.total} Companies · {exploreData.sector_keys?.join(', ')}
+                  </div>
+                </div>
+
+                {/* Card Grid */}
+                <div className="ex-card-grid">
+                  {exploreData.companies.map((c: any, i: number) => {
+                    const isPrimary = i === 0;
+                    const accentColors = ['var(--teal)','var(--emerald)','var(--indigo)','var(--teal)','var(--emerald)','var(--violet)'];
+                    const cc = accentColors[i % accentColors.length];
+                    const ratingClass = c.rating?.startsWith('A') || c.rating === 'STRONG' ? 'strong' : 'watch';
+                    const navPath = `/company/${encodeURIComponent(c.name)}?from=explore&back=/?tab=explore`;
+
+                    if (isPrimary) return (
+                      <div key={c.id ?? c.name} className="ex-card primary"
+                        style={{'--cc': 'var(--teal)'} as React.CSSProperties}
+                        onClick={() => router.push(navPath)}>
+                        <div className="pickbody">
+                          <div className="toppick">// Top Pick · höchster Score in deinen Sektoren</div>
+                          <div className="ex-name">{c.name}</div>
+                          <div className="ex-cat">
+                            <span className="ex-cat-dot" />
+                            {[c.industry, c.headquarters].filter(Boolean).join(' · ')}
+                          </div>
+                          <div className="ex-card-foot">
+                            {c.rating && <span className={`ex-rating ${ratingClass}`}>{c.rating}</span>}
+                            {c.investment_path && <span className="ex-path">{c.investment_path}</span>}
+                            {c.composite_score != null && (
+                              <span className="ex-signal">Score {Number(c.composite_score).toFixed(1)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="ex-score-box">
+                          <div className="ex-score-v">
+                            {c.composite_score != null ? Number(c.composite_score).toFixed(1) : '—'}
+                          </div>
+                          <div className="ex-score-l">Argo Score</div>
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <div key={c.id ?? c.name} className="ex-card"
+                        style={{'--cc': cc} as React.CSSProperties}
+                        onClick={() => router.push(navPath)}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                          <div>
+                            <div className="ex-name-sm">{c.name}</div>
+                            <div className="ex-cat" style={{ marginTop: 4 }}>
+                              <span className="ex-cat-dot" />
+                              {[c.industry, c.headquarters].filter(Boolean).join(' · ')}
+                            </div>
+                          </div>
+                          <div className="ex-score-box">
+                            <div className="ex-score-v-sm">
+                              {c.composite_score != null ? Number(c.composite_score).toFixed(1) : '—'}
+                            </div>
+                            <div className="ex-score-l">Score</div>
+                          </div>
+                        </div>
+                        <div className="ex-card-foot">
+                          {c.rating && <span className={`ex-rating ${ratingClass}`}>{c.rating}</span>}
+                          {c.investment_path && <span className="ex-path">{c.investment_path}</span>}
+                          {c.last_signal && <span className="ex-signal">{c.last_signal}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1405,33 +1689,6 @@ function PageContent() {
                       <div style={{ fontSize: 12, color: 'var(--t3)', display: 'flex', gap: 10 }}>
                         {c.industry && <span>{c.industry}</span>}
                         {c.headquarters && <span>· {c.headquarters}</span>}
-                        {c.funding_stage && <span>· {c.funding_stage}</span>}
-                      </div>
-                    </div>
-                    {/* Score + Path */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, minWidth: 80 }}>
-                      {c.composite_score != null && (
-                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)', fontFamily: 'var(--font-b)' }}>
-                          {Number(c.composite_score).toFixed(1)}
-                        </span>
-                      )}
-                      {c.investment_path && (
-                        <span style={{
-                          fontSize: 10, color: 'var(--t3)', fontFamily: 'var(--font-b)',
-                          textAlign: 'right', maxWidth: 100,
-                        }}>
-                          {c.investment_path}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ color: 'var(--t3)', fontSize: 14 }}>›</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       {/* AUTH-01: Login Modal */}
       {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
     </>
