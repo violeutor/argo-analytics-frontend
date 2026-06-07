@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ROOT_VARS, FONT_IMPORT } from '@/lib/tokens';
 import MarketingLanding from '@/components/MarketingLanding';
+import LoginOnboarding from '@/components/LoginOnboarding';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1255,7 +1256,7 @@ function PageContent() {
         /* Watchlist */
         .btn-export{background:none;border:1px solid var(--border);border-radius:5px;color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:all .15s}
         .btn-export:hover{border-color:var(--teal);color:var(--teal)}
-        .watchlist-wrap{padding-top:1.5rem;width:100%}
+        .watchlist-wrap{padding-top:1.5rem;width:100%;background:var(--bg)}
         .wl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
         .wl-title{font-family:var(--font-d);font-size:16px;font-weight:600;color:var(--t1);display:flex;align-items:center;gap:8px}
         .wl-count{font-size:12px;color:var(--t3)}
@@ -1270,7 +1271,7 @@ function PageContent() {
         /* Spaltenüberschriften: heller (t2 statt t3), größer, kein Mono */
         thead th{background:var(--bg-card);font-family:var(--font-b);font-size:11px;font-weight:600;color:var(--t2);text-align:left;padding:9px 12px;border-bottom:1px solid var(--border-md);white-space:nowrap;text-transform:uppercase;letter-spacing:.06em;position:relative;cursor:default}
         thead th[data-tip]:hover::after{content:attr(data-tip);position:absolute;top:100%;left:0;background:var(--bg-hover);color:var(--t2);font-size:11px;padding:5px 9px;border-radius:var(--r-sm);white-space:nowrap;z-index:50;border:1px solid var(--border-md);pointer-events:none;font-family:var(--font-b);text-transform:none;letter-spacing:0;margin-top:2px}
-        tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+        tbody tr{background:var(--bg-card);border-bottom:1px solid var(--border);transition:background .1s}
         tbody tr:last-child{border-bottom:none}
         tbody tr:hover{background:var(--bg-hover)}
         tbody td{padding:8px 12px;vertical-align:middle}
@@ -1661,33 +1662,34 @@ function PageContent() {
   );
 }
 
-// ─── Gate (LANDING-01) ────────────────────────────────────────────────────
+// ─── Gate (LANDING-01 + LOGIN-MODAL-01) ──────────────────────────────────────
 // Ausgeloggt → öffentliche MarketingLanding (Request Access + Login).
-// Eingeloggt → bestehende App (PageContent), unverändert.
-// Sales-led / Closed Beta: kalter Besucher sieht Marketing, Beta-User die App.
+// Login-Button → LoginOnboarding als vollständige Seite (kein Modal).
+// Nach Login + Onboarding → PageContent. Kein Overlay übereinander.
 function Gate() {
   const [session, setSession] = useState<any>(undefined); // undefined = Auth-Check läuft
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (!s) setShowLogin(false); // Logout → zurück auf Landing
+    });
     return () => subscription.unsubscribe();
   }, []);
 
   if (session === undefined) return null; // kurzer Auth-Check (lokal, schnell)
 
-  if (!session) {
-    // TODO ONBOARD-WIRE-01: nach Login first-login prüfen (user_profiles.onboarding_completed_at == null)
-    //   → Onboarding-Flow vor PageContent zwischenschalten.
-    return (
-      <>
-        <MarketingLanding onLogin={() => setLoginOpen(true)} />
-        {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
-      </>
-    );
-  }
-
+  // showLogin bleibt aktiv auch wenn Supabase-Session gesetzt wird —
+  // LoginOnboarding läuft Onboarding-Steps NACH dem Login durch, bevor die App öffnet.
+  if (showLogin) return (
+    <LoginOnboarding
+      onBack={() => setShowLogin(false)}
+      onComplete={() => setShowLogin(false)}
+    />
+  );
+  if (!session) return <MarketingLanding onLogin={() => setShowLogin(true)} />;
   return <PageContent />;
 }
 
