@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { C, FONT_IMPORT } from "@/lib/tokens";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -225,25 +226,7 @@ interface CompanyScores {
 
 // ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
 
-const C = {
-  // PALETTE-01: Slate Blue / Navy Graphite Palette
-  bg: "#0D1117", bgCard: "#161B22", bgHover: "#1F242C",
-  border: "rgba(45,51,59,0.9)", borderMd: "rgba(45,51,59,1)",
-  teal: "#00C2D1", tealDim: "rgba(0,194,209,0.08)", tealBorder: "rgba(0,194,209,0.22)",
-  blue: "#3B82F6", blueDim: "rgba(59,130,246,0.10)",
-  amber: "#F59E0B", amberDim: "rgba(245,158,11,0.10)",
-  red: "#EF4444", redDim: "rgba(239,68,68,0.10)",
-  purple: "#9B6EF0", purpleDim: "rgba(155,110,240,0.10)",
-  // Text: Off-White / Cool Grey
-  t1: "#E6EAF0", t2: "#9BA3B4", t3: "#5A6270",
-  // Fonts + Radien unverändert
-  mono: "'DM Sans',sans-serif",
-  display: "'Plus Jakarta Sans',sans-serif",
-  body: "'DM Sans',sans-serif",
-  rSm: "6px", rMd: "10px", rLg: "14px",
-  // Fließtext-Größe — einziger Hebel für alle Body-Texte in Karten
-  fsBody: 13,
-};
+// ── Design-Tokens: C kommt aus der SSOT src/lib/tokens.ts (GLOBALS-MIGRATION-01) ──
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -590,7 +573,7 @@ function KpiTimelineModal({
                 <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y}
                   stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
                 <text x={PAD.l - 5} y={t.y + 4} textAnchor="end"
-                  fill="rgba(255,255,255,0.28)" fontSize="9" fontFamily="DM Sans,sans-serif">
+                  fill="rgba(255,255,255,0.28)" fontSize="9" fontFamily={C.mono}>
                   {metric === "headcount"
                     ? Math.round(t.val).toLocaleString("de-DE")
                     : `${t.val.toFixed(0)}M`}
@@ -611,7 +594,7 @@ function KpiTimelineModal({
                 <circle cx={xS(i)} cy={yS(p.value)} r="3.5" fill={C.teal} />
                 <circle cx={xS(i)} cy={yS(p.value)} r="8" fill={C.teal} fillOpacity="0.12" />
                 <text x={xS(i)} y={H - 6} textAnchor="middle"
-                  fill="rgba(255,255,255,0.35)" fontSize="9" fontFamily="DM Sans,sans-serif">
+                  fill="rgba(255,255,255,0.35)" fontSize="9" fontFamily={C.mono}>
                   {p.fiscal_year}
                 </text>
               </g>
@@ -1528,9 +1511,9 @@ export default function CompanyDetailPage() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: C.body, fontSize: 15 }}>
       {ExportModal}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
+        ${FONT_IMPORT}
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::selection { background: rgba(0,212,160,0.2); }
+        ::selection { background: rgba(0,194,209,0.2); }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
         button { font-family: inherit; }
@@ -4112,7 +4095,7 @@ export default function CompanyDetailPage() {
                                 textAnchor={anchor}
                                 dominantBaseline="middle"
                                 fill={s.color} fontSize={9}
-                                fontFamily="DM Sans, sans-serif" fontWeight={600}
+                                fontFamily={C.mono} fontWeight={600}
                               >
                                 {s.label}
                               </text>
@@ -4122,7 +4105,7 @@ export default function CompanyDetailPage() {
                                   textAnchor={anchor}
                                   dominantBaseline="middle"
                                   fill={scoreColor(scoreV)} fontSize={8}
-                                  fontFamily="DM Sans, sans-serif"
+                                  fontFamily={C.mono}
                                 >
                                   {scoreV.toFixed(1)}
                                 </text>

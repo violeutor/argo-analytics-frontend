@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { C } from "@/lib/tokens";
 
 export const metadata: Metadata = {
   title: "Argo Analytics · Climate Tech Intelligence",
@@ -17,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <body style={{ margin: 0, padding: 0, background: "#09090B" }}>
+      <body style={{ margin: 0, padding: 0, background: C.bg }}>
         {children}
       </body>
     </html>

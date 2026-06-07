@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { ROOT_VARS, FONT_IMPORT } from '@/lib/tokens';
 import MarketingLanding from './components/MarketingLanding';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -924,23 +925,9 @@ function PageContent() {
     <>
       {/* ── Global Styles ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
+        ${FONT_IMPORT}
         *{box-sizing:border-box;margin:0;padding:0}
-        :root{
-          /* PALETTE-01: Slate Blue / Navy Graphite Palette */
-          --bg:#0D1117;--bg-card:#161B22;--bg-hover:#1F242C;
-          --border:rgba(45,51,59,0.9);--border-md:rgba(45,51,59,1);
-          --teal:#00C2D1;--teal-dim:#009BAA;--teal-bg:rgba(0,194,209,0.08);
-          --blue:#3B82F6;--blue-bg:rgba(59,130,246,0.10);
-          --amber:#F59E0B;--amber-bg:rgba(245,158,11,0.10);
-          --red:#EF4444;--red-bg:rgba(239,68,68,0.10);
-          --purple:#9B6EF0;--purple-bg:rgba(155,110,240,0.10);
-          --t1:#E6EAF0;--t2:#9BA3B4;--t3:#5A6270;
-          --font-d:'Plus Jakarta Sans',sans-serif;
-          --font-b:'DM Sans',sans-serif;
-          --font-m:'DM Sans',sans-serif;
-          --r-sm:6px;--r-md:10px;--r-lg:14px;
-        }
+        :root{${ROOT_VARS}}
         body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
 
         /* Nav */
