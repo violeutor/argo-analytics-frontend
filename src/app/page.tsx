@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ROOT_VARS, FONT_IMPORT } from '@/lib/tokens';
-import MarketingLanding from './components/MarketingLanding';
+import MarketingLanding from '@/components/MarketingLanding';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
