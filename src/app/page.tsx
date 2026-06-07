@@ -1043,7 +1043,7 @@ function PageContent() {
         /* ── Pages ── */
         .page{padding:0 2rem 4rem;position:relative;z-index:1}
         .r-page{position:relative;z-index:1;padding-bottom:4rem}
-        .r-wrap{max-width:1160px;margin:0 auto;padding:0 2rem}
+        .r-wrap{max-width:1160px;margin:0 auto;padding:0 2rem;position:relative;z-index:1}
 
         /* ── Research: Search Block ── */
         .r-search-block{padding:0}
