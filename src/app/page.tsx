@@ -1048,10 +1048,10 @@ function PageContent() {
 
         /* ── Research: Search Block ── */
         .r-search-block{padding:0}
-        .r-hero-row{display:grid;grid-template-columns:1.55fr 1fr;gap:32px;align-items:start;padding:3rem 0 2.25rem}
+        .r-hero-row{display:grid;grid-template-columns:1.55fr 1fr;gap:32px;align-items:start;padding:calc(3rem + 10px) 0 2.25rem}
         .r-hero-row .card{margin-top:6px}
         .r-eyebrow{font-family:var(--font-m);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:14px;opacity:.9}
-        .r-h1{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,4vw,46px);letter-spacing:-.03em;line-height:1.06;margin-bottom:80px;color:var(--t1)}
+        .r-h1{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,4vw,46px);letter-spacing:-.03em;line-height:1.06;margin-bottom:70px;color:var(--t1)}
         .r-h1 span{color:var(--teal)}
         .r-search-wrap{display:flex;gap:12px;align-items:center}
         .r-search-wrap input{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:18px 22px;color:var(--t1);font-family:var(--font-b);font-size:16px;outline:none;transition:border-color .2s,box-shadow .2s}
