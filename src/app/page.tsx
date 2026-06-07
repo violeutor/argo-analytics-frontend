@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import MarketingLanding from './components/MarketingLanding';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1450,10 +1451,40 @@ function PageContent() {
   );
 }
 
+// ─── Gate (LANDING-01) ────────────────────────────────────────────────────
+// Ausgeloggt → öffentliche MarketingLanding (Request Access + Login).
+// Eingeloggt → bestehende App (PageContent), unverändert.
+// Sales-led / Closed Beta: kalter Besucher sieht Marketing, Beta-User die App.
+function Gate() {
+  const [session, setSession] = useState<any>(undefined); // undefined = Auth-Check läuft
+  const [loginOpen, setLoginOpen] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return null; // kurzer Auth-Check (lokal, schnell)
+
+  if (!session) {
+    // TODO ONBOARD-WIRE-01: nach Login first-login prüfen (user_profiles.onboarding_completed_at == null)
+    //   → Onboarding-Flow vor PageContent zwischenschalten.
+    return (
+      <>
+        <MarketingLanding onLogin={() => setLoginOpen(true)} />
+        {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
+      </>
+    );
+  }
+
+  return <PageContent />;
+}
+
 export default function Page() {
   return (
     <Suspense fallback={null}>
-      <PageContent />
+      <Gate />
     </Suspense>
   );
 }
