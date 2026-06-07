@@ -86,7 +86,7 @@ const T = {
     modal: {
       eyebrow: '// Request Access', title: 'Zugang anfragen',
       lede: 'Argo ist in geschlossener Beta. Sag uns kurz, wer du bist — wir melden uns persönlich.',
-      name: 'Name', company: 'Firma / Fund', email: 'E-Mail', role: 'Du bist…',
+      name: 'Name', company: 'Firma / Fund', email: 'E-Mail', role: 'Ich vertrete…',
       choose: 'Bitte wählen', msg: 'Nachricht (optional)', msgPh: 'Worauf willst du Argo loslassen?',
       submit: 'Anfrage senden →', sending: 'Senden…',
       fine: 'Mit dem Absenden stimmst du zu, dass wir dich kontaktieren. Keine Weitergabe an Dritte.',
@@ -160,7 +160,7 @@ const T = {
     modal: {
       eyebrow: '// Request Access', title: 'Request access',
       lede: 'Argo is in closed beta. Tell us briefly who you are — we will get back to you personally.',
-      name: 'Name', company: 'Company / Fund', email: 'Email', role: 'You are…',
+      name: 'Name', company: 'Company / Fund', email: 'Email', role: 'I represent…',
       choose: 'Please select', msg: 'Message (optional)', msgPh: 'What do you want to point Argo at?',
       submit: 'Send request →', sending: 'Sending…',
       fine: 'By submitting you agree to be contacted. No sharing with third parties.',
@@ -550,7 +550,7 @@ export default function MarketingLanding({ onLogin }: { onLogin: () => void }) {
         .ml-field select { cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238B949E' d='M6 8L2 4h8z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; }
         .ml-modal-body .ml-btn-primary { width:100%; justify-content:center; padding:14px; font-size:15px; margin-top:6px; }
         .ml-modal-fine { font-size:11.5px; color:var(--ml-mute); text-align:center; margin-top:14px; line-height:1.5; }
-        .ml-hp { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+        .ml-hp { display:none !important; position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
         .ml-form-error { font-size:12.5px; color:var(--ml-vermillion); margin-top:10px; text-align:center; }
         .ml-modal-success { padding:48px 34px 44px; text-align:center; }
         .ml-check { width:58px; height:58px; border-radius:50%; margin:0 auto 22px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; font-size:28px; color:var(--ml-emerald); }
