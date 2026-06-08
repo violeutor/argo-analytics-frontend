@@ -157,6 +157,7 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [activeTab, setActiveTab]       = useState<ActiveTab>('requests');
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [session, setSession]           = useState<any>(null);
   const [loading, setLoading]           = useState(true);
   const [forbidden, setForbidden]       = useState(false);
@@ -174,14 +175,20 @@ export default function AdminPage() {
 
   // ── Session ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setSessionLoaded(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setSessionLoaded(true);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (session === null) router.push('/');
-  }, [session, router]);
+    if (sessionLoaded && session === null) router.push('/');
+  }, [session, sessionLoaded, router]);
 
   // ── Fetch Access Requests ──────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
@@ -254,7 +261,7 @@ export default function AdminPage() {
   const doneCount   = Object.values(checked).filter(Boolean).length;
 
   // ── Guards ─────────────────────────────────────────────────────────────────
-  if (session === undefined || session === null) return null;
+  if (!sessionLoaded) return null;
 
   if (forbidden) return (
     <div style={S.center}>
