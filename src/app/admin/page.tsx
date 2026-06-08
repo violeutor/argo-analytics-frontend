@@ -175,15 +175,24 @@ export default function AdminPage() {
 
   // ── Session ────────────────────────────────────────────────────────────────
   useEffect(() => {
+    let mounted = true;
+    // getSession ist die autoritative Quelle für authed/unauthed.
     supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
       setSession(data.session);
       setSessionLoaded(true);
     });
+    // onAuthStateChange darf nur UPGRADEN (null → Session) — nie den Redirect
+    // auslösen. Sonst feuert ein frühes null-Event den Redirect bevor getSession
+    // die gültige Session aus dem Storage geladen hat.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      setSessionLoaded(true);
+      if (!mounted) return;
+      if (s) {
+        setSession(s);
+        setSessionLoaded(true);
+      }
     });
-    return () => subscription.unsubscribe();
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
