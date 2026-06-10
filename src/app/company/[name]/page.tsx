@@ -195,6 +195,12 @@ interface CompanyDetail {
   funding_momentum?: FundingMomentum | null;
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
   scorings: ScoringDetail[];
+  ma_aggregate?: {
+    aggregate_score: number | null; basis: string;
+    deals_considered: number; feasible_count: number;
+    contributors: { buyer: string; deal_success_score: number; mfr_signal: string; srr_category: string }[];
+  };
+  lens?: { mode: string; label: string; customer_type: string };
   supply_chain_upstream: SupplyItem[]; supply_chain_downstream: SupplyItem[];
   supply_chain_etfs: { ticker: string; name: string; relevance: number }[];
   last_signal?: string; last_signal_date?: string;
@@ -918,11 +924,14 @@ export default function CompanyDetailPage() {
   });
   const statusPollRef = useRef<number | null>(null);
 
-  // AUTH-TEST-01: Session-State für Authorization-Header in Watchlist-Calls
+  // AUTH-TEST-01: Session-State für Authorization-Header.
+  // sessionResolved trennt "Session lädt noch" (null, initial) von "ausgeloggt"
+  // (aufgelöst + kein Token) — company_detail ist seit AUTH-GATE-01 auth-pflichtig.
   const [session, setSession] = useState<any>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setSessionResolved(true); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => { setSession(s); setSessionResolved(true); });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -971,7 +980,9 @@ export default function CompanyDetailPage() {
   const [kpiModalMetric, setKpiModalMetric]     = useState<string | null>(null);
 
   const _f = (path: string) =>
-    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}${path}`)
+    fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}${path}`, {
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+    })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
 
@@ -1012,9 +1023,13 @@ export default function CompanyDetailPage() {
 
   useEffect(() => {
     if (!name) return;
+    // AUTH-GATE-01: company_detail ist auth-pflichtig. Auf Session-Status warten,
+    // sonst feuert der Fetch tokenlos → 401. sessionResolved trennt "lädt" von "ausgeloggt".
+    if (!sessionResolved) return;
+    if (!session?.access_token) { setError("auth_required"); setLoading(false); return; }
 
     // 1) Basis-Fetch (blocking — alles andere hängt davon ab)
-    fetch(_companyUrl)
+    fetch(_companyUrl, { headers: { Authorization: `Bearer ${session.access_token}` } })
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(d => {
         setData(d);
@@ -1053,7 +1068,7 @@ export default function CompanyDetailPage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, sessionResolved, session?.access_token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Polling: nur für async-berechnete Daten ──────────────────────────────────
   // Market Enrichment: läuft async im Backend, kann 10–60s dauern
@@ -1100,7 +1115,9 @@ export default function CompanyDetailPage() {
     const MAX = 6;
     const poll = () => {
       if (attempts++ >= MAX) return;
-      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`)
+      fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      })
         .then(r => r.ok ? r.json() : null)
         .then((d: CompanyDetail | null) => {
           if (!d) return;
@@ -1585,7 +1602,9 @@ export default function CompanyDetailPage() {
 
         {error && (
           <div style={{ padding: "16px 20px", background: C.redDim, border: `1px solid ${C.red}33`, borderRadius: C.rMd, color: C.red, marginTop: 16 }}>
-            Unternehmen nicht gefunden: {error}
+            {error === "auth_required"
+              ? "Anmeldung erforderlich — dieser Bereich ist aktiven Accounts vorbehalten."
+              : `Unternehmen nicht gefunden: ${error}`}
           </div>
         )}
 
@@ -4461,6 +4480,11 @@ export default function CompanyDetailPage() {
                         {path.key === "m_and_a" && (
                           data.scorings.length > 0 ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                              {data.lens?.label && (
+                                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginBottom: 2 }}>
+                                  Linse: {data.lens.label} · {data.lens.mode === "probability" ? "sortiert nach Feasibility" : "sortiert nach Transformativität"}
+                                </div>
+                              )}
                               {data.scorings.slice(0, 4).map(s => (
                                 <div key={s.buyer_name} style={{
                                   display: "flex", alignItems: "center", gap: 12,
@@ -4472,6 +4496,11 @@ export default function CompanyDetailPage() {
                                     <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 1 }}>
                                       SRR {s.srr_value.toFixed(2)}× · MFR {s.mfr_value.toFixed(2)}× · {s.mfr_signal}
                                     </div>
+                                    {s.execution_warning && (
+                                      <div style={{ fontSize: 10, color: C.amber, fontFamily: C.mono, marginTop: 2 }}>
+                                        Integrationsrisiko — kleiner Käufer, hoher SRR
+                                      </div>
+                                    )}
                                   </div>
                                   {s.ticker && (
                                     <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.blue }}>{s.ticker}</span>
