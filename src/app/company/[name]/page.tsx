@@ -66,6 +66,20 @@ interface OwnershipData {
   cap_table?: CapTableScore;
   enriched_at?: string;
 }
+// TR-MODAL-01: Pro-User TechReadiness-Override — Company-intrinsisch (ein
+// Wert pro User+Company, nicht pro Buyer), s. score_calculator.py.
+interface TrOverrideData {
+  company_id?: string;
+  tr_mode: "auto" | "manual" | "neutral";
+  tech_stack_fit: number | null;
+  gtm_fit: number | null;
+  integration_capacity: number | null;
+  rd_intensity: number | null;
+  capital_deployment_velocity: number | null;
+  regulatory_readiness: number | null;
+  strategic_coherence: number | null;
+  updated_at?: string | null;
+}
 
 interface FundingRoundItem {
   date?: string; type?: string; amount_usd_mn?: number;
@@ -856,6 +870,173 @@ function PeerScoreModal({ peer, onClose }: { peer: PeerCompany; onClose: () => v
   );
 }
 
+// TR-MODAL-01: Pro-User TechReadiness-Override — geführter Mini-Fragebogen
+// (7 Faktoren, identisch zu schemas.py::TechReadinessInputs) + auto/manual/
+// neutral-Toggle. Pro User, beeinflusst nie die Sicht anderer Nutzer auf
+// dieselbe Company (s. user_tr_overrides RLS + Cache-Bypass backend-seitig).
+const TR_FACTORS: { key: keyof TrOverrideData; label: string; hint: string }[] = [
+  { key: "tech_stack_fit",              label: "Tech-Stack-Fit",            hint: "Wie ausgereift/differenziert ist der technische Stack?" },
+  { key: "integration_capacity",        label: "Integrationsfähigkeit",     hint: "Wie leicht lässt sich die Technologie in bestehende Systeme einbinden?" },
+  { key: "gtm_fit",                     label: "Go-to-Market-Fit",          hint: "Wie gut passt die Tech zum adressierten Markt/Vertriebsmodell?" },
+  { key: "capital_deployment_velocity", label: "Kapitaleinsatz-Geschwindigkeit", hint: "Wie schnell setzt das Unternehmen Kapital in Produktfortschritt um?" },
+  { key: "rd_intensity",                label: "F&E-Intensität",            hint: "Wie hoch ist der relative F&E-Einsatz?" },
+  { key: "regulatory_readiness",        label: "Regulatorische Reife",      hint: "Wie weit ist die Technologie regulatorisch abgesichert/zugelassen?" },
+  { key: "strategic_coherence",         label: "Strategische Kohärenz",     hint: "Wie konsistent ist die Tech-Strategie mit dem Geschäftsmodell?" },
+];
+
+function TrOverrideModal({
+  name, session, current, onClose, onSaved,
+}: {
+  name: string;
+  session: { access_token?: string } | null;
+  current: TrOverrideData | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [mode, setMode]   = useState<"auto" | "manual" | "neutral">(current?.tr_mode ?? "auto");
+  const [factors, setFactors] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    for (const f of TR_FACTORS) init[f.key as string] = (current?.[f.key] as number | null) ?? 0.5;
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const body: Record<string, unknown> = { tr_mode: mode };
+      if (mode === "manual") {
+        for (const f of TR_FACTORS) body[f.key as string] = factors[f.key as string];
+      }
+      const r = await fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(name)}/tr-override`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => null);
+        throw new Error(detail?.detail || `HTTP ${r.status}`);
+      }
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setSaveError(e?.message || "Speichern fehlgeschlagen.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.65)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.bgCard, border: `1px solid ${C.borderMd}`,
+          borderRadius: C.rLg, padding: "24px 28px", width: "100%", maxWidth: 480,
+          maxHeight: "85vh", overflowY: "auto",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>TechReadiness anpassen</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.t3, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 2 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5, marginBottom: 18 }}>
+          Gilt nur für deine Sicht auf diese Company — andere Nutzer sind davon nicht betroffen.
+        </div>
+
+        {/* Mode Toggle */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+          {([
+            { key: "auto",    label: "Auto",    hint: "Stage-basierte Schätzung" },
+            { key: "manual",  label: "Manuell", hint: "Eigene Einschätzung, 7 Faktoren" },
+            { key: "neutral", label: "Neutral",  hint: "Fix 0,5 — Vergleich ohne TR-Einfluss" },
+          ] as const).map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              title={m.hint}
+              style={{
+                flex: 1, padding: "8px 6px", borderRadius: C.rMd, cursor: "pointer",
+                fontFamily: C.mono, fontSize: 11, fontWeight: 600,
+                background: mode === m.key ? C.teal + "18" : "transparent",
+                border: `1px solid ${mode === m.key ? C.teal + "44" : C.border}`,
+                color: mode === m.key ? C.teal : C.t2,
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "manual" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 18 }}>
+            {TR_FACTORS.map(f => (
+              <div key={f.key as string}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: C.t1 }}>{f.label}</span>
+                  <span style={{ fontSize: 12, fontFamily: C.mono, color: C.teal, fontWeight: 600 }}>
+                    {factors[f.key as string].toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  type="range" min={0} max={1} step={0.05}
+                  value={factors[f.key as string]}
+                  onChange={e => setFactors(prev => ({ ...prev, [f.key as string]: parseFloat(e.target.value) }))}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{f.hint}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mode === "neutral" && (
+          <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5, marginBottom: 18, fontStyle: "italic" }}>
+            TechReadiness wird für deine Sicht konstant auf 0,5 gesetzt — Scores werden vergleichbar, unabhängig von der tatsächlichen Tech-Reife.
+          </div>
+        )}
+
+        {mode === "auto" && (
+          <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5, marginBottom: 18, fontStyle: "italic" }}>
+            Stage-basierte Schätzung (Funding-Stage, Kategorie, Funding-Historie) — kein manueller Eingriff.
+          </div>
+        )}
+
+        {saveError && (
+          <div style={{ fontSize: 11, color: C.red, marginBottom: 12 }}>{saveError}</div>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            width: "100%", padding: "10px 0", borderRadius: C.rMd, cursor: saving ? "default" : "pointer",
+            fontFamily: C.mono, fontSize: 12, fontWeight: 700,
+            background: C.teal, border: "none", color: "#04211c",
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? "Speichert…" : "Speichern"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
@@ -961,6 +1142,9 @@ export default function CompanyDetailPage() {
   // Polling nur für Daten die aktiv berechnet werden (Market Enrichment, Value Drivers).
   const [ownershipData, setOwnershipData]       = useState<OwnershipData | null>(null);
   const [ownershipLoading, setOwnershipLoading] = useState(false);
+  // TR-MODAL-01
+  const [trOverride, setTrOverride] = useState<TrOverrideData | null>(null);
+  const [trModalOpen, setTrModalOpen] = useState(false);
   const [sigFilter, setSigFilter]               = useState<string>("all");
   const [signalsData, setSignalsData]           = useState<SignalsData | null>(null);
   const [signalsLoading, setSignalsLoading]     = useState(false);
@@ -985,6 +1169,18 @@ export default function CompanyDetailPage() {
     })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
+
+  // TR-MODAL-01: nach dem Speichern eines Overrides müssen die Company-Level-
+  // Scores neu geladen werden — das Backend liest bei aktivem Override nie
+  // aus dem (globalen) Score-Cache, ein einfacher Re-Fetch der Haupt-Company-
+  // URL liefert daher garantiert frisch berechnete Scores mit dem neuen Wert.
+  const refetchAfterTrSave = () => {
+    if (!session?.access_token) return;
+    fetch(_companyUrl, { headers: { Authorization: `Bearer ${session.access_token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setData(d));
+    _f("/tr-override").then(td => td && setTrOverride(td));
+  };
 
   // ── Signal Refresh-Logik ──────────────────────────────────────────────────────
   // visibilitychange (min 15min Cooldown) + 30min Interval + manueller Trigger
@@ -1054,6 +1250,7 @@ export default function CompanyDetailPage() {
             else setAssessmentsData({ _error: "failed" });
           }),
           _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
+          _f("/tr-override").then(td => td && setTrOverride(td)),   // TR-MODAL-01
           // FE-COMPANYID-01: company_id erst senden wenn definiert — sonst Name-Fallback.
           // d.id war undefined weil CompanyDetailResponse kein id-Feld hatte (jetzt gefixt).
           // Guard bleibt als Defense-in-Depth: verhindert ?company_id=undefined → 400.
@@ -2229,40 +2426,37 @@ export default function CompanyDetailPage() {
               return null;
             };
 
-            // Einträge: Pipeline-Daten bevorzugen, curated als Fallback
+            // OWNERSHIP-CROSSWRITE-01 (gelöst): Backend (company_detail.py) ist die
+            // EINZIGE Quelle für den Funding→Investor-Merge — data.ownership enthält
+            // die aus funding_rounds abgeleiteten Lead-/Co-Investoren bereits (s. dort
+            // "Funding History → Investoren immer in Ownership aufnehmen"). Vorher
+            // berechnete das Frontend dieselbe Ableitung ein zweites Mal direkt aus
+            // data.funding_rounds — UND warf data.ownership komplett weg, sobald die
+            // separate Pipeline (ownershipData.entries) etwas lieferte. Fix: beide
+            // Ownership-Quellen werden zusammengeführt statt sich gegenseitig
+            // auszuschließen; nichts wird mehr eigenständig aus funding_rounds
+            // abgeleitet.
             const pipelineEntries = ownershipData?.entries ?? [];
-            const curatedEntries  = data.ownership ?? [];
+            const curatedEntries  = (data.ownership ?? []).filter((o: any) => o.name !== "Not publicly disclosed");
             const showPipeline    = pipelineEntries.length > 0;
 
-            // BUG-30: Funding Investors mergen (Lead + Co-Investoren aus funding_rounds)
-            // Dedupe-Basis: pipeline + curated + data.ownership (Backend hat bereits gemerged)
-            // data.ownership einbeziehen verhindert Duplikate wenn Backend-Merge und
-            // Frontend-Merge denselben Investor aus verschiedenen Quellen ziehen.
-            const fundingEntries: OwnershipItem[] = (() => {
-              const base = showPipeline ? pipelineEntries : curatedEntries;
-              const allKnownNames = new Set([
-                ...base.map((o: any) => o.name.toLowerCase()),
-                ...(data.ownership ?? []).map((o: any) => o.name.toLowerCase()),
-              ]);
-              const existingNames = allKnownNames;
-              const result: OwnershipItem[] = [];
-              for (const r of data.funding_rounds ?? []) {
-                if (r.lead_investor && !existingNames.has(r.lead_investor.toLowerCase())) {
-                  existingNames.add(r.lead_investor.toLowerCase());
-                  result.push({ name: r.lead_investor, type: "VC/Investor", role: "Lead Investor", notes: `${r.type ?? "Funding"} ${r.date?.slice(0, 4) ?? ""}`.trim() });
-                }
-                for (const co of r.co_investors ?? []) {
-                  if (co && !existingNames.has(co.toLowerCase())) {
-                    existingNames.add(co.toLowerCase());
-                    result.push({ name: co, type: "VC/Investor", role: "Co-Investor", notes: "Funding History" });
-                  }
-                }
+            const entries: (OwnershipItem | OwnershipEntryPipeline)[] = (() => {
+              const seen = new Set<string>();
+              const result: (OwnershipItem | OwnershipEntryPipeline)[] = [];
+              // Pipeline zuerst — dedizierte Ownership-Pipeline (EN-08/BA-Bridge/EDGAR),
+              // reichhaltigere Felder (share_pct, source, as_of_date).
+              for (const o of pipelineEntries) {
+                const key = o.name.toLowerCase();
+                if (!seen.has(key)) { seen.add(key); result.push(o); }
+              }
+              // Curated ergänzt nur, was die Pipeline nicht kennt — enthält bereits
+              // den Backend-seitigen Funding-Investor-Merge.
+              for (const o of curatedEntries) {
+                const key = o.name.toLowerCase();
+                if (!seen.has(key)) { seen.add(key); result.push(o); }
               }
               return result;
             })();
-
-            const baseEntries = showPipeline ? pipelineEntries : curatedEntries.filter((o: any) => o.name !== "Not publicly disclosed");
-            const entries     = [...baseEntries, ...fundingEntries];
             const cap         = ownershipData?.cap_table;
             const isPending   = ownershipLoading || (ownershipData?.status === "pending" || ownershipData?.status === "running");
 
@@ -4067,6 +4261,31 @@ export default function CompanyDetailPage() {
                         );
                       })}
                     </div>
+
+                    {/* TR-MODAL-01: Pro-User TechReadiness-Override */}
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>TechReadiness-Modus</span>
+                        <div style={{ fontSize: 12, color: C.t1, marginTop: 2 }}>
+                          {trOverride?.tr_mode === "manual" ? "Manuell · eigene Einschätzung"
+                            : trOverride?.tr_mode === "neutral" ? "Neutral · fix 0,5"
+                            : "Auto · Stage-basiert"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setTrModalOpen(true)}
+                        style={{
+                          padding: "6px 12px", borderRadius: C.rMd, cursor: "pointer",
+                          fontFamily: C.mono, fontSize: 10, fontWeight: 600,
+                          background: "transparent", border: `1px solid ${C.border}`, color: C.teal,
+                        }}
+                      >
+                        Anpassen
+                      </button>
+                    </div>
                   </Card>
                 </div>
 
@@ -4864,6 +5083,17 @@ export default function CompanyDetailPage() {
               metric={kpiModalMetric}
               points={kpiData[kpiModalMetric]}
               onClose={() => setKpiModalMetric(null)}
+            />
+          )}
+
+          {/* TR-MODAL-01: TechReadiness-Override Modal */}
+          {trModalOpen && (
+            <TrOverrideModal
+              name={name}
+              session={session}
+              current={trOverride}
+              onClose={() => setTrModalOpen(false)}
+              onSaved={refetchAfterTrSave}
             />
           )}
 
