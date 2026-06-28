@@ -1233,7 +1233,9 @@ export default function CompanyDetailPage() {
 
         const results = await Promise.allSettled(
           stillMissing.map(p =>
-            fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(p.name)}/scores`)
+            fetch(`${API_BASE}/api/v1/company/${encodeURIComponent(p.name)}/scores`, {
+              headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+            })
               .then(r => r.ok ? r.json() : null)
               .catch(() => null)
           )
