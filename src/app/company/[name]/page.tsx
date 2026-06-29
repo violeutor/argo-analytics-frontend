@@ -1365,7 +1365,7 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!name || loading) return;
     const fd = data?.fundamentals;
-    const isListed = data?.ipo_status === "listed";
+    const isListed = data?.fundamentals?.is_listed === true;
     // Nur pollen wenn listed und noch kein echtes Market-Beta
     if (!isListed || fd?.beta_source === "market") return;
 
@@ -1389,7 +1389,7 @@ export default function CompanyDetailPage() {
     };
     let betaTimer = window.setTimeout(poll, 6000); // erster Versuch nach 6s (Bridge braucht ~5s)
     return () => window.clearTimeout(betaTimer);
-  }, [name, loading, data?.ipo_status, data?.fundamentals?.beta_source]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, loading, data?.fundamentals?.is_listed, data?.fundamentals?.beta_source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // UX-PEER-01: Peer-Score Live-Polling — startet wenn Tab 5 aktiv und Peers ohne Score vorhanden
   // Dependency-Array: [activeTab, pendingScoreCount] — kein .filter() im Array, kein fragiles Length-Proxy
@@ -1837,11 +1837,11 @@ export default function CompanyDetailPage() {
                 <span style={{ fontFamily: C.display, fontSize: 22, fontWeight: 700, color: C.t1 }}>{data.name}</span>
                 <span style={{
                   fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 500,
-                  color: data.ipo_status === "listed" ? C.teal : C.t2,
-                  background: data.ipo_status === "listed" ? C.tealDim : "rgba(255,255,255,0.05)",
-                  border: `1px solid ${data.ipo_status === "listed" ? C.tealBorder : C.border}`,
+                  color: data.fundamentals.is_listed ? C.teal : C.t2,
+                  background: data.fundamentals.is_listed ? C.tealDim : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${data.fundamentals.is_listed ? C.tealBorder : C.border}`,
                 }}>
-                  {data.ipo_status === "listed" ? "Public" : "Private"}
+                  {data.fundamentals.is_listed ? "Public" : "Private"}
                 </span>
                 {/* DISAMBIG-03: Lifecycle-Badge — nur für nicht-aktive Entitäten */}
                 {data.lifecycle_status && data.lifecycle_status !== "active" && (() => {
@@ -1949,8 +1949,8 @@ export default function CompanyDetailPage() {
             )}
 
             {/* Row 2: Ticker+Exchange (public) OR Technologie+Series (private) */}
-            <div style={{ fontSize: 12, color: C.t2, marginBottom: 14, fontFamily: data.ipo_status === "listed" ? C.mono : C.body }}>
-              {data.ipo_status === "listed"
+            <div style={{ fontSize: 12, color: C.t2, marginBottom: 14, fontFamily: data.fundamentals.is_listed ? C.mono : C.body }}>
+              {data.fundamentals.is_listed
                 ? (() => {
                     // BUG-15: Ticker-Format normalisieren — "SIE·XETRA" → "SIE · Xetra"
                     // Yahoo-Suffix (.F, .DE, .L, .PA etc.) strippen — nur reinen Ticker zeigen
@@ -1975,22 +1975,17 @@ export default function CompanyDetailPage() {
 
             {/* Row 3: Badges */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-              {data.ipo_potential && data.ipo_status !== "listed" && (
+              {data.ipo_potential && !data.fundamentals.is_listed && (
                 <Badge
-                  label={`Potenzial: ${data.ipo_potential}`}
+                  label={`IPO-Potenzial: ${data.ipo_potential}`}
                   color={data.ipo_potential === "Hoch" ? C.teal : C.amber}
                   bg={data.ipo_potential === "Hoch" ? C.tealDim : C.amberDim}
                   border={data.ipo_potential === "Hoch" ? C.tealBorder : C.amber + "33"} />
               )}
-              {data.ipo_potential && (
+              {data.risk && (
                 <Badge
-                  label={`Risiko: ${data.risk ?? "—"}`}
+                  label={`Risiko: ${data.risk}`}
                   color={C.t2} bg="rgba(255,255,255,0.05)" border={C.border} />
-              )}
-              {data.ipo_status !== "listed" && data.ipo_potential && (
-                <Badge
-                  label={`IPO: ${data.ipo_potential}`}
-                  color={C.blue} bg={C.blueDim} border={C.blue + "33"} />
               )}
               {data.investment_path && (
                 <Badge
@@ -2003,7 +1998,7 @@ export default function CompanyDetailPage() {
 
             {/* Row 4: Meta-Grid — Public vs. Private */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-              {(data.ipo_status === "listed" ? [
+              {(data.fundamentals.is_listed ? [
                 { label: "Marktcap", val: fmtBn(data.fundamentals?.market_cap_bn), color: C.t1 },
                 { label: "Kurs", val: data.fundamentals?.price != null ? `${data.fundamentals.currency === "EUR" ? "€" : "$"}${data.fundamentals.price.toFixed(2)}` : "—", color: C.t1 },
                 { label: "Sektor", val: data.industry ?? "—" },
@@ -2115,7 +2110,7 @@ export default function CompanyDetailPage() {
           {activeTab === 1 && (() => {
             const md = data.market_data;
             const fd = data.fundamentals;
-            const isListed = data.ipo_status === "listed";
+            const isListed = data.fundamentals.is_listed;
             const tamBn = md?.tam_2035_usd_bn ?? data.tam_usd_bn ?? null;
             const mktcapVsTam = fd?.market_cap_bn != null && tamBn != null && tamBn > 0
               ? (fd.market_cap_bn / tamBn) : null;
@@ -3662,7 +3657,7 @@ export default function CompanyDetailPage() {
                     <TabScoreBar
                       label="Strategic Score"
                       score={data.scores?.strategic_score}
-                      tooltip="SRR × TechReadiness × Käufer-Universum. Misst strategische Attraktivität für M&A, Partnerschaften und Peer-Positionierung."
+                      tooltip="Basiert auf dem besten Käufer-Match (Deal-Success = SRR × MFR × TechReadiness, je Buyer). Dieselbe Grundgröße wie der M&A-Score, nur auf den stärksten statt die Top-3 gemittelt — SC-02 fragt 'gibt es überhaupt eine starke Story', M&A-Score 'wie wahrscheinlich über die realistischsten Käufer'."
                     />
 
                     {/* Block 1: Benchmark — gibt Kontext für alle Peer-Karten */}
@@ -4139,7 +4134,7 @@ export default function CompanyDetailPage() {
               { key: "ma_score", heroKey: "m_and_a", label: "M&A",       color: C.blue   },
               { key: "etf_score",     heroKey: "etf",     label: "ETF-Proxy", color: C.amber  },
               { key: "enabler_score", heroKey: "enabler", label: "Enabler",   color: C.purple },
-            ].filter(p => !(p.heroKey === "ipo" && data.ipo_status === "listed"));
+            ].filter(p => !(p.heroKey === "ipo" && data.fundamentals.is_listed));
 
             const scVal = (key: keyof CompanyScores) =>
               (sc[key] as number | undefined) ?? 0;
@@ -4402,7 +4397,7 @@ export default function CompanyDetailPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
                     {([
                       // VC Funds / IPO — nur wenn noch nicht listed
-                      ...(data.ipo_status !== "listed" ? [{
+                      ...(!data.fundamentals.is_listed ? [{
                         segment: "VC Funds",
                         scoreKey: "ipo_score" as keyof CompanyScores,
                         focus: "IPO-Readiness · TechReadiness · Time-to-Market",
@@ -4706,34 +4701,12 @@ export default function CompanyDetailPage() {
                                   Linse: {data.lens.label} · {data.lens.mode === "probability" ? "sortiert nach Feasibility" : "sortiert nach Transformativität"}
                                 </div>
                               )}
-                              {data.scorings.slice(0, 4).map(s => (
-                                <div key={s.buyer_name} style={{
-                                  display: "flex", alignItems: "center", gap: 12,
-                                  padding: "9px 14px", borderRadius: C.rMd,
-                                  background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
-                                }}>
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: 12, fontWeight: 600, color: C.t1 }}>{s.buyer_name}</div>
-                                    <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, marginTop: 1 }}>
-                                      SRR {s.srr_value.toFixed(2)}× · MFR {s.mfr_value.toFixed(2)}× · {s.mfr_signal}
-                                    </div>
-                                    {s.execution_warning && (
-                                      <div style={{ fontSize: 10, color: C.amber, fontFamily: C.mono, marginTop: 2 }}>
-                                        Integrationsrisiko — kleiner Käufer, hoher SRR
-                                      </div>
-                                    )}
-                                  </div>
-                                  {s.ticker && (
-                                    <span style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.blue }}>{s.ticker}</span>
-                                  )}
-                                  <span style={{
-                                    fontSize: 11, padding: "2px 10px", borderRadius: 99, fontWeight: 600,
-                                    color: ratingColor(s.rating), background: ratingColor(s.rating) + "18",
-                                    border: `1px solid ${ratingColor(s.rating)}33`, fontFamily: C.mono,
-                                  }}>
-                                    {s.rating}
-                                  </span>
-                                </div>
+                              {/* SC02-MA-UNIFY-01 (S76): ScoringCard reaktiviert — zeigt
+                                  SRR/MFR/TechReadiness pro Buyer. TR variiert jetzt pro
+                                  Buyer (TR-SPLIT-01: intrinsisch konstant + relationaler
+                                  Anteil pro Buyer), daher showTR sinnvoll. */}
+                              {data.scorings.slice(0, 4).map((s, idx) => (
+                                <ScoringCard key={s.buyer_name} s={s} rank={idx + 1} showTR={true} />
                               ))}
                               {data.scorings.length > 4 && (
                                 <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, paddingLeft: 4 }}>
