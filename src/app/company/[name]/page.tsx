@@ -116,6 +116,7 @@ interface PeerCompany {
   funding_last_round?: string; ipo_status?: string; ipo_potential?: string;
   investment_path?: string; revenue_usd_mn?: number; description?: string;
   website?: string; ticker?: string; exchange?: string; stage_normalized?: string;
+  is_listed?: boolean;   // PEER-ISLISTED-FIELD-01: kanonische Quelle statt ipo_status-Ableitung
   positioning_note?: string;   // R-10: Claude-generiert, relativ zu Subject Company
   // Argo Scores
   composite_score?: number; rating?: string;
@@ -3754,7 +3755,7 @@ export default function CompanyDetailPage() {
                       </div>
                       {peers.map((p, idx) => {
                         const pathColor = PATH_COLORS[p.investment_path ?? ""] ?? C.t3;
-                        const isListed  = p.ipo_status === "listed";
+                        const isListed  = p.is_listed === true;
                         const rc        = p.rating ? ratingColor(p.rating) : null;
                         const hasScores = p.composite_score != null || p.financial_score != null || p.market_score != null;
 
