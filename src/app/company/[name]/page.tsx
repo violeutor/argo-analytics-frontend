@@ -171,6 +171,7 @@ interface TechReadinessDetail {
   overall: number; inputs_provided: boolean;
   factors: Record<string, number>; factor_weights: Record<string, number>;
   confidence?: string; // listed | auto_low | auto_medium | auto_high | user
+  relational_confidence?: string | null; // TR-RELATIONAL-CONFIDENCE-SURFACE-01: z.B. "auto_relational_mcap_mid" oder "..._sector_match"
 }
 interface ScoringDetail {
   buyer_name: string; ticker?: string;
@@ -697,7 +698,9 @@ function ScoringCard({ s, rank, showTR = true, onOpenTrModal }: { s: ScoringDeta
     ...(showTR ? [{
       label: "Tech Readiness",
       val: s.tech_readiness.overall.toFixed(2),
-      desc: trConfidenceLabel(s.tech_readiness.confidence),
+      // TR-RELATIONAL-CONFIDENCE-SURFACE-01: zeigt jetzt zusätzlich, ob der
+      // Sektor-Overlap-Bonus (S77) für diesen Buyer griff — vorher verworfen.
+      desc: trConfidenceLabel(s.tech_readiness.confidence) + (s.tech_readiness.relational_confidence?.includes("sector_match") ? " · Sektor-Match" : ""),
       color: trConfidenceColor(s.tech_readiness.confidence),
       pct: s.tech_readiness.overall,
     }] : []),
