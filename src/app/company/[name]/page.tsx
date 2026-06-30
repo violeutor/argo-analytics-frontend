@@ -649,7 +649,7 @@ function KpiTimelineModal({
   );
 }
 
-function ScoringCard({ s, rank, showTR = true }: { s: ScoringDetail; rank: number; showTR?: boolean }) {
+function ScoringCard({ s, rank, showTR = true, onOpenTrModal }: { s: ScoringDetail; rank: number; showTR?: boolean; onOpenTrModal?: () => void }) {
   const [open, setOpen] = useState(rank === 1);
   const rc = ratingColor(s.rating);
   const mc = mfrColor(s.mfr_signal);
@@ -707,16 +707,33 @@ function ScoringCard({ s, rank, showTR = true }: { s: ScoringDetail; rank: numbe
       {open && (
         <div style={{ padding: "0 20px 20px" }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${scoreTiles.length},1fr)`, gap: 10, marginBottom: 12 }}>
-            {scoreTiles.map(tile => (
-              <div key={tile.label} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px" }}>
-                <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{tile.label}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: tile.color }}>{tile.val}</div>
-                <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>{tile.desc}</div>
-                <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, marginTop: 8, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${tile.pct * 100}%`, background: tile.color, borderRadius: 99 }} />
+            {scoreTiles.map(tile => {
+              const isTR = tile.label === "Tech Readiness";
+              const clickable = isTR && !!onOpenTrModal;
+              return (
+                <div
+                  key={tile.label}
+                  onClick={clickable ? onOpenTrModal : undefined}
+                  title={isTR
+                    ? "TechReadiness: derselbe Wert wie im TechReadiness-Modus (Tab Scoring & Investmentprofil), hier ergänzt um den Buyer-Fit-Anteil dieses Käufers. Klicken öffnet den Override — wirkt company-weit auf alle Käufer-Proxys gleichzeitig, nicht nur auf diesen."
+                    : undefined}
+                  style={{
+                    background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: C.rMd, padding: "14px 16px",
+                    cursor: clickable ? "pointer" : "default",
+                  }}
+                >
+                  <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                    {tile.label}
+                    {clickable && <span style={{ color: C.teal }}>✎</span>}
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: C.display, color: tile.color }}>{tile.val}</div>
+                  <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>{tile.desc}</div>
+                  <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, marginTop: 8, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${tile.pct * 100}%`, background: tile.color, borderRadius: 99 }} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div style={{ background: rc + "0A", border: `1px solid ${rc}33`, borderRadius: C.rMd, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 11, color: C.t2, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".06em" }}>Gesamturteil</span>
@@ -956,6 +973,7 @@ function TrOverrideModal({
         </div>
         <div style={{ fontSize: 11, color: C.t3, lineHeight: 1.5, marginBottom: 18 }}>
           Gilt nur für deine Sicht auf diese Company — andere Nutzer sind davon nicht betroffen.
+          Wirkt company-weit auf den TechReadiness-Wert <strong>aller</strong> Käufer-Proxys gleichzeitig — unabhängig davon, von welcher Buyer-Karte aus du dieses Fenster geöffnet hast.
         </div>
 
         {/* Mode Toggle */}
@@ -4070,29 +4088,6 @@ export default function CompanyDetailPage() {
                   </Card>
                 </div>
 
-                {/* ETFs */}
-                {vd.etfs.length > 0 && (
-                  <Card>
-                    <SLabel text="Thematische ETFs" />
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {vd.etfs.map(etf => (
-                        <div key={etf.ticker} style={{
-                          padding: "6px 14px", borderRadius: C.rMd,
-                          background: C.purpleDim, border: `1px solid ${C.purple}33`,
-                          display: "flex", alignItems: "center", gap: 8,
-                        }}>
-                          <span style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700, color: C.purple }}>{etf.ticker}</span>
-                          <span style={{ fontSize: C.fsBody, color: C.t2 }}>{etf.name}</span>
-                          <div style={{ width: 30, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${etf.relevance * 100}%`, background: C.purple, borderRadius: 99 }} />
-                          </div>
-                          <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{Math.round(etf.relevance * 100)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-
                 {vd.enriched_at && (
                   <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textAlign: "right" }}>
                     Angereichert: {new Date(vd.enriched_at).toLocaleDateString("de-DE")}
@@ -4262,9 +4257,11 @@ export default function CompanyDetailPage() {
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`,
                     }}>
-                      <div>
-                        <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>TechReadiness-Modus</span>
-                        <div style={{ fontSize: 12, color: C.t1, marginTop: 2 }}>
+                      <div
+                        title="TechReadiness wird hier company-weit (intrinsischer Anteil im Auto-Modus) gesetzt und fließt zugleich in jeden Käufer-Proxy im Tab Investitionspfade ein (dort ergänzt um den Buyer-Fit-Anteil) — zwei Ansichten desselben Werts, kein getrennter Buyer-Override."
+                      >
+                        <span style={{ fontSize: 12, color: C.t1, fontFamily: C.mono }}>TechReadiness-Modus</span>
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
                           {trOverride?.tr_mode === "manual" ? "Manuell · eigene Einschätzung"
                             : trOverride?.tr_mode === "neutral" ? "Neutral · fix 0,5"
                             : "Auto · Stage-basiert"}
@@ -4654,7 +4651,12 @@ export default function CompanyDetailPage() {
                       background:   isHero ? pc + "06" : C.bgCard,
                     }}>
                       {/* Card Header */}
-                      <div style={{ padding: "13px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${C.border}` }}>
+                      <div
+                        style={{ padding: "13px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${C.border}` }}
+                        title={path.key === "etf" && !isListed
+                          ? "Themen-ETF für das Sektor-Umfeld dieser Company — die Company selbst ist (noch) NICHT im ETF enthalten, da sie nicht börsennotiert ist. Der Score misst Sektor-Fit/Diversifikationspotenzial, keine direkte Exposition zu dieser Company. Bei einem späteren Börsengang könnte sie potenziell in den ETF aufgenommen werden."
+                          : undefined}
+                      >
                         <div style={{ flex: 1 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: isHero ? pc : C.t1, fontFamily: C.display }}>
@@ -4706,7 +4708,7 @@ export default function CompanyDetailPage() {
                                   Buyer (TR-SPLIT-01: intrinsisch konstant + relationaler
                                   Anteil pro Buyer), daher showTR sinnvoll. */}
                               {data.scorings.slice(0, 4).map((s, idx) => (
-                                <ScoringCard key={s.buyer_name} s={s} rank={idx + 1} showTR={true} />
+                                <ScoringCard key={s.buyer_name} s={s} rank={idx + 1} showTR={true} onOpenTrModal={() => setTrModalOpen(true)} />
                               ))}
                               {data.scorings.length > 4 && (
                                 <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, paddingLeft: 4 }}>
