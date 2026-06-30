@@ -191,6 +191,16 @@ interface FundingMomentum {
   momentum_score?: number | null;
 }
 
+interface TargetValuation {
+  // FRONTEND-VALUATION-SSOT-DRIFT-01: ersetzt die vorher hier lokal
+  // berechnete STAGE_MULT-Tabelle — Wert kommt jetzt direkt aus
+  // valuation.py::compute_target_valuation() (Backend-SSOT).
+  value_usd_mn?: number | null;
+  method: "market_cap" | "funding_x_stage" | "none";
+  stage_mult?: number | null;
+  vertical_delta?: number | null;
+}
+
 interface CompanyDetail {
   id?: string; // FE-COMPANYID-01: Supabase company_id für Watchlist-API-Call
   name: string; category?: string; core_technology?: string;
@@ -207,6 +217,7 @@ interface CompanyDetail {
   funding_total_usd_mn?: number; funding_last_round?: string; funding_stage?: string;
   funding_rounds: FundingRoundItem[];
   funding_momentum?: FundingMomentum | null;
+  target_valuation?: TargetValuation | null;
   ownership: OwnershipItem[]; fundamentals: FundamentalsData;
   scorings: ScoringDetail[];
   ma_aggregate?: {
@@ -2965,13 +2976,15 @@ export default function CompanyDetailPage() {
                     const isDE = f.ba_found || f.fundamentals_source === "ba_bridge";
                     const isUS = f.fundamentals_source === "edgar" || (!isDE && f.fundamentals_source !== "none");
 
-                    // Shared: Est. Valuation Berechnung
-                    const STAGE_MULT: Record<string, number> = {
-                      pre_seed: 5.0, seed: 4.0, series_a: 3.5, series_b: 2.5,
-                      series_c: 2.0, series_d: 1.5, series_d_plus: 1.3, growth: 1.2,
-                    };
-                    const stageMult   = STAGE_MULT[data.funding_stage ?? ""] ?? 2.0;
-                    const estVal      = data.funding_total_usd_mn != null ? data.funding_total_usd_mn * stageMult : null;
+                    // FRONTEND-VALUATION-SSOT-DRIFT-01: Est. Valuation kommt jetzt
+                    // direkt aus dem Backend (valuation.py::compute_target_valuation()),
+                    // keine lokale STAGE_MULT-Tabelle mehr — die war gegen die
+                    // konsolidierte Backend-SSOT abweichend kalibriert (Frontend-alt-
+                    // Spalte aus VALUATION-SSOT-01, nie umgestellt).
+                    const stageMult   = data.target_valuation?.stage_mult ?? null;
+                    const estVal      = data.target_valuation?.method === "funding_x_stage"
+                                         ? data.target_valuation?.value_usd_mn ?? null
+                                         : null;
                     const stageLabels: Record<string,string> = {
                       pre_seed:"Pre-Seed", seed:"Seed", series_a:"Series A", series_b:"Series B",
                       series_c:"Series C", series_d:"Series D", series_d_plus:"Series D+", growth:"Growth", public:"Public",
@@ -3143,7 +3156,7 @@ export default function CompanyDetailPage() {
                             {estVal != null && (
                               <FundTile label="Est. Valuation"
                                 val={estVal >= 1000 ? `~$${(estVal/1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
-                                sub={`${stageMult}× Funding Total`} color={C.amber} />
+                                sub={stageMult != null ? `${stageMult}× Funding Total` : "Funding Total"} color={C.amber} />
                             )}
                             <FundTile label="Funding Total" val={fmtM(data.funding_total_usd_mn)} color={C.t1} />
                             <FundTile label="Stage" val={stageLabels[data.funding_stage ?? ""] ?? data.funding_stage ?? "—"} />
@@ -3204,7 +3217,7 @@ export default function CompanyDetailPage() {
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                               <FundTile label="Est. Valuation"
                                 val={estVal >= 1000 ? `~$${(estVal/1000).toFixed(1)}B` : `~$${estVal.toFixed(0)}M`}
-                                sub={`${stageMult}× Funding Total`} color={C.amber} />
+                                sub={stageMult != null ? `${stageMult}× Funding Total` : "Funding Total"} color={C.amber} />
                               <FundTile label="IPO-Wahrsch."
                                 val={data.ipo_probability_pct != null ? `${data.ipo_probability_pct}%` : "—"}
                                 sub={data.ipo_potential ?? undefined}
