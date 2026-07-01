@@ -25,6 +25,18 @@ export async function DELETE(
   return proxyRequest(request, params.path, "DELETE");
 }
 
+// TR-OVERRIDE-405-01: PUT war hier nie exportiert. Next.js App-Router-
+// Route-Handler beantworten jede nicht exportierte HTTP-Methode selbst
+// mit 405 — der Request verlässt Vercel dabei nie in Richtung Render
+// (bestätigt durch Vercel-Log "External APIs: No outgoing requests").
+// Exakt das Symptom: 405 im Frontend, aber kein Eintrag im Backend-Log.
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { path: string[] } }
+) {
+  return proxyRequest(request, params.path, "PUT");
+}
+
 async function proxyRequest(
   request: NextRequest,
   pathSegments: string[],
@@ -49,7 +61,11 @@ async function proxyRequest(
 
   const init: RequestInit = { method, headers };
 
-  if (method === "POST") {
+  // TR-OVERRIDE-405-01 Folgefund: Body wurde bisher nur bei POST weiter-
+  // gereicht. PUT braucht denselben Pfad — sonst kommt der Request zwar
+  // jetzt beim Backend an, aber ohne Body (Pydantic-Validierungsfehler
+  // als nächstes, stilles Symptom).
+  if (method === "POST" || method === "PUT") {
     init.body = await request.text();
   }
 
