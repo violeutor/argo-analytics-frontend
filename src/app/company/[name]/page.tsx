@@ -5,6 +5,161 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { C, FONT_IMPORT } from "@/lib/tokens";
 
+// ── ArgoLoader — Canvas-Ladeanimation (ersetzt argo-loader.mp4, S79) ───────────
+// Aus Argo_Loader.html (Claude-Design-Bundle) übernommene Zeichenlogik: ein Komet
+// umkreist eine körnige Kugel, mit ungleichmäßigem Tempo (langes Verweilen unten
+// links, schneller "Fling" oben — kein simples lineares Rotieren). orbitColor
+// default (#00C2D1) entspricht bereits C.teal, daher hart auf C.teal verdrahtet
+// statt eigenem Prop, um NICHT von tokens.ts zu divergieren.
+function ArgoLoader({ size = 180 }: { size?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const ctx = cv?.getContext("2d");
+    if (!cv || !ctx) return;
+
+    // Eased Orbit-Position f(p) + normierte Winkelgeschwindigkeit fv(p) vorab
+    // berechnen (720 Samples) — Geschwindigkeitsprofil: langes Dwell an der
+    // Loop-Naht (unten links), dann schneller Fling über die Mitte.
+    const N = 720;
+    const f = new Float32Array(N + 1);
+    const fv = new Float32Array(N + 1);
+    const v = new Float32Array(N + 1);
+    let vmax = 0;
+    for (let i = 0; i <= N; i++) {
+      const p = i / N;
+      const vv = 0.045 + Math.exp(-Math.pow((p - 0.5) / 0.17, 2));
+      v[i] = vv;
+      if (vv > vmax) vmax = vv;
+    }
+    let cum = 0;
+    f[0] = 0;
+    for (let i = 1; i <= N; i++) { cum += (v[i] + v[i - 1]) / 2; f[i] = cum; }
+    const tot = f[N];
+    for (let i = 0; i <= N; i++) { f[i] /= tot; fv[i] = v[i] / vmax; }
+
+    const durationSec = 1.2;
+    const orbitColor = C.teal;
+    const sphereColor = "#a9b0b8";
+    const grain = 0.7;
+
+    let noise: HTMLCanvasElement | null = null;
+    let noiseSize = 0;
+    let noiseTick = 0;
+
+    const makeNoise = (n: number) => {
+      const c = document.createElement("canvas");
+      c.width = n; c.height = n;
+      const nctx = c.getContext("2d")!;
+      const img = nctx.createImageData(n, n);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const val = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = val; d[i + 3] = 255;
+      }
+      nctx.putImageData(img, 0, 0);
+      return c;
+    };
+
+    const shade = (hex: string, m: number) => {
+      let h = (hex || "#b8b8b5").replace("#", "");
+      if (h.length === 3) h = h.split("").map(c => c + c).join("");
+      const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+      const cl = (x: number) => Math.max(0, Math.min(255, Math.round(x)));
+      return `rgb(${cl(r * m)},${cl(g * m)},${cl(b * m)})`;
+    };
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const pxW = Math.round(size * dpr);
+    cv.width = pxW; cv.height = pxW;
+    cv.style.width = size + "px"; cv.style.height = size + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const cx = size / 2, cy = size / 2;
+    const R = size * 0.215;
+    const orbitR = R * 1.62;
+    const headR = R * 0.16;
+    const Astart = (135 * Math.PI) / 180;
+    const t0 = performance.now();
+    let raf = 0;
+
+    const paint = (p: number) => {
+      ctx.clearRect(0, 0, size, size);
+
+      const xpos = p * N;
+      const i0 = Math.floor(xpos);
+      const fr = xpos - i0;
+      const i1 = Math.min(i0 + 1, N);
+      const fval = f[i0] + (f[i1] - f[i0]) * fr;
+      const fvval = fv[i0] + (fv[i1] - fv[i0]) * fr;
+
+      const Ahead = Astart + 2 * Math.PI * fval;
+      const tailSpan = 2.75 * fvval;
+
+      // Kugel
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+
+      const La = -Math.PI / 2 + 2 * Math.PI * p;
+      const lx = cx + Math.cos(La) * R * 0.5;
+      const ly = cy + Math.sin(La) * R * 0.5;
+      const g = ctx.createRadialGradient(lx, ly, R * 0.08, cx, cy, R * 1.5);
+      g.addColorStop(0, shade(sphereColor, 1.16));
+      g.addColorStop(0.55, sphereColor);
+      g.addColorStop(1, shade(sphereColor, 0.58));
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+
+      if (grain > 0) {
+        const nSize = Math.max(24, Math.round(R * 1.5));
+        if (noiseTick % 2 === 0 || !noise || noiseSize !== nSize) {
+          noise = makeNoise(nSize);
+          noiseSize = nSize;
+        }
+        noiseTick++;
+        ctx.globalAlpha = grain;
+        ctx.globalCompositeOperation = "overlay";
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(noise, cx - R, cy - R, 2 * R, 2 * R);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+      ctx.restore();
+
+      // Komet (Motion-Blur-Schweif + Kopf)
+      ctx.fillStyle = orbitColor;
+      const effSpan = Math.max(0, tailSpan - 0.48);
+      if (effSpan > 0.04) {
+        const K = 34;
+        for (let k = 0; k <= K; k++) {
+          const s = k / K;
+          const A = Ahead - effSpan * (1 - s);
+          const rr = headR * (0.84 + 0.16 * Math.min(1, s / 0.16));
+          const px = cx + Math.cos(A) * orbitR;
+          const py = cy + Math.sin(A) * orbitR;
+          ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(Ahead) * orbitR, cy + Math.sin(Ahead) * orbitR, headR, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    const loop = (now: number) => {
+      let p = (((now - t0) / 1000) / durationSec) % 1;
+      if (p < 0) p += 1;
+      paint(p);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    return () => cancelAnimationFrame(raf);
+  }, [size]);
+
+  return <canvas ref={canvasRef} style={{ display: "block" }} />;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ValueDriverEntry {
@@ -1826,9 +1981,7 @@ export default function CompanyDetailPage() {
             alignItems: "center", justifyContent: "center",
             minHeight: "60vh",
           }}>
-            <video autoPlay muted playsInline loop width={180} height={180} style={{ display: "block" }}>
-              <source src="/argo-loader.mp4" type="video/mp4" />
-            </video>
+            <ArgoLoader size={180} />
           </div>
         )}
 
