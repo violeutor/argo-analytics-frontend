@@ -1979,7 +1979,11 @@ export default function CompanyDetailPage() {
           <div style={{
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
-            minHeight: "60vh",
+            // Zentrierung auf den tatsächlich sichtbaren Viewport statt auf 60vh:
+            // Nav ist sticky mit fixer Höhe 52px, der umschließende Content-Wrapper
+            // trägt padding "1.5rem 2.5rem 4rem" (24px oben + 64px unten) — beides
+            // von der Centering-Box abziehen, sonst sitzt die Animation zu weit oben.
+            minHeight: "calc(100vh - 140px)",
           }}>
             <ArgoLoader size={180} />
           </div>
