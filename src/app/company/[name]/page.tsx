@@ -273,6 +273,7 @@ interface PeerCompany {
   website?: string; ticker?: string; exchange?: string; stage_normalized?: string;
   is_listed?: boolean;   // PEER-ISLISTED-FIELD-01: kanonische Quelle statt ipo_status-Ableitung
   positioning_note?: string;   // R-10: Claude-generiert, relativ zu Subject Company
+  relation?: "direct" | "adjacent" | "analog";   // PEER-RELATION-01: strukturierte Sektornähe
   // Argo Scores
   composite_score?: number; rating?: string;
   financial_score?: number; market_score?: number;
@@ -1338,6 +1339,8 @@ export default function CompanyDetailPage() {
   const [signalsLoading, setSignalsLoading]     = useState(false);
   const [peersData, setPeersData]               = useState<PeersResponse | null>(null);
   const [peersLoading, setPeersLoading]         = useState(false);
+  // PEER-TAB-REDESIGN-01: ausgewählter Peer für das Kontext-Panel (Tab 5)
+  const [selectedPeerId, setSelectedPeerId]     = useState<string | null>(null);
   // UX-PEER-01: Live Score-Polling für Peer-Karten
   const peerScorePollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const peerScorePollStart = useRef<number>(0);
@@ -3814,19 +3817,42 @@ export default function CompanyDetailPage() {
             const regionFlag = (r?: string | null) =>
               r === "US" ? "🇺🇸" : r === "DE" ? "🇩🇪" : r === "EU" ? "🇪🇺" : r === "UK" ? "🇬🇧" : "🌐";
 
-            // Inline-Score-Bar: 0–10 als Balken
-            const ScoreBar = ({ value, color }: { value?: number | null; color: string }) => {
-              if (value == null) return <span style={{ color: C.t3, fontSize: 11, fontFamily: C.mono }}>—</span>;
-              const pct = Math.min(100, (value / 10) * 100);
-              return (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <div style={{ width: 48, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontFamily: C.mono, color, fontWeight: 600 }}>{value.toFixed(1)}</span>
-                </div>
-              );
+            // PEER-RELATION-01: Sektornähe ist die primäre Sortierung, Stage
+            // sekundär. Kein räumliches Gruppieren mehr (Sessions davor) — bei
+            // real max. 5 Peers wirken eigene Abschnitte pro Relation eher
+            // fragmentiert als hilfreich. Sektornähe bleibt über Farbe/Badge
+            // pro Kachel UND die Sortierreihenfolge sichtbar.
+            const RELATION_LABEL: Record<string, string> = {
+              direct: "Direkt", adjacent: "Angrenzend", analog: "Analog",
             };
+            const RELATION_COLOR: Record<string, string> = {
+              direct: C.teal, adjacent: C.blue, analog: C.amber,
+            };
+            const relationOrder = (r?: string | null) =>
+              r === "direct" ? 0 : r === "adjacent" ? 1 : r === "analog" ? 2 : 3;
+            const sortedPeers = [...peers].sort((a, b) => {
+              const rDiff = relationOrder(a.relation) - relationOrder(b.relation);
+              if (rDiff !== 0) return rDiff;
+              return (stageOrder[a.stage_normalized ?? ""] ?? 99) - (stageOrder[b.stage_normalized ?? ""] ?? 99);
+            });
+
+            const selectedPeer = sortedPeers.find(p => p.id === selectedPeerId) ?? sortedPeers[0] ?? null;
+
+            // Subject-vs-Peer Vergleichszeile fürs Kontext-Panel — eigene, engere
+            // Frage als Block 1 (Subject vs. Peer-MEDIAN über alle Peers).
+            const CompareRow = ({ label, subject, peer, color }: { label: string; subject?: number | null; peer?: number | null; color: string }) => (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>{label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, fontFamily: C.mono, color: C.t2 }}>
+                    {subject != null ? subject.toFixed(1) : "—"} <span style={{ fontSize: 8, color: C.t3 }}>{data.name.length > 14 ? data.name.slice(0, 12) + "…" : data.name}</span>
+                  </span>
+                  <span style={{ fontSize: 12, fontFamily: C.mono, color, fontWeight: 600 }}>
+                    {peer != null ? peer.toFixed(1) : "—"} <span style={{ fontSize: 8, color: C.t3 }}>Peer</span>
+                  </span>
+                </div>
+              </div>
+            );
 
             return (
               <div>
@@ -3852,7 +3878,7 @@ export default function CompanyDetailPage() {
                       tooltip="Basiert auf dem besten Käufer-Match (Deal-Success = SRR × MFR × TechReadiness, je Buyer). Dieselbe Grundgröße wie der M&A-Score, nur auf den stärksten statt die Top-3 gemittelt — SC-02 fragt 'gibt es überhaupt eine starke Story', M&A-Score 'wie wahrscheinlich über die realistischsten Käufer'."
                     />
 
-                    {/* Block 1: Benchmark — gibt Kontext für alle Peer-Karten */}
+                    {/* Block 1: Benchmark — Subject vs. Peer-MEDIAN über alle Peers */}
                     {benchmark.length > 0 && (
                       <Card style={{ marginBottom: 12 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -3902,169 +3928,119 @@ export default function CompanyDetailPage() {
                       </Card>
                     )}
 
-                    {/* Block 2: Peer-Karten */}
-                    <Card style={{ padding: 0, overflow: "hidden", marginBottom: 12 }}>
-                      <div style={{ padding: "14px 20px 10px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    {/* Block 2: Kachelreihe (flexibel, relation-sortiert) + Kontext-Panel */}
+                    <Card style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                         <SLabel text={`Wettbewerber (${peers.length})`} />
                         <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
-                          Scores werden automatisch angereichert
+                          Sortiert nach Sektornähe · Stage sekundär
                         </span>
                       </div>
-                      {peers.map((p, idx) => {
-                        const pathColor = PATH_COLORS[p.investment_path ?? ""] ?? C.t3;
-                        const isListed  = p.is_listed === true;
-                        const rc        = p.rating ? ratingColor(p.rating) : null;
-                        const hasScores = p.composite_score != null || p.financial_score != null || p.market_score != null;
-
-                        return (
-                          <div key={p.id} style={{
-                            padding: "18px 20px",
-                            borderBottom: idx < peers.length - 1 ? `1px solid ${C.border}` : "none",
-                          }}>
-                            {/* Row 1: Name + Ticker + Funding-Betrag */}
-                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: C.t1, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                  <span>{regionFlag(p.region)} {p.name}</span>
-                                  {p.ticker && (
-                                    <span style={{ fontSize: 10, color: C.teal, fontFamily: C.mono, background: C.tealDim, border: `1px solid ${C.tealBorder}`, borderRadius: 4, padding: "1px 6px" }}>
-                                      {p.ticker}{p.exchange ? ` · ${p.exchange}` : ""}
-                                    </span>
-                                  )}
-                                  {rc && (
-                                    <span style={{ fontSize: 10, fontWeight: 700, fontFamily: C.mono, color: rc, background: rc + "18", border: `1px solid ${rc}33`, borderRadius: 4, padding: "1px 6px" }}>
-                                      {p.rating}
-                                    </span>
-                                  )}
-                                </div>
-                                {/* Badges */}
-                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
-                                  {p.stage_normalized && (
-                                    <span style={{
-                                      fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px",
-                                      color: stageColor(p.stage_normalized),
-                                      background: stageColor(p.stage_normalized) + "18",
-                                      border: `1px solid ${stageColor(p.stage_normalized)}33`,
-                                    }}>
-                                      {p.stage_normalized}
-                                    </span>
-                                  )}
-                                  {isListed && (
-                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: C.teal, background: C.tealDim, border: `1px solid ${C.tealBorder}` }}>Public</span>
-                                  )}
-                                  {p.investment_path && p.investment_path !== "Beobachten" && (
-                                    <span style={{ fontSize: 10, fontFamily: C.mono, borderRadius: 4, padding: "2px 7px", color: pathColor, background: pathColor + "18", border: `1px solid ${pathColor}33` }}>
-                                      {p.investment_path}
-                                    </span>
-                                  )}
-                                  {p.headquarters && (
-                                    <span style={{ fontSize: 10, color: C.t3, display: "flex", alignItems: "center", gap: 3 }}>
-                                      📍{p.headquarters}
-                                    </span>
-                                  )}
-                                  {p.founding_year && (
-                                    <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>Gegr. {p.founding_year}</span>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Funding + Analysieren */}
-                              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                                <div style={{ fontSize: 13, color: C.teal, fontFamily: C.mono, fontWeight: 600 }}>
-                                  {p.funding_total_usd_mn
-                                    ? p.funding_total_usd_mn >= 1000
-                                      ? `$${(p.funding_total_usd_mn / 1000).toFixed(1)}B`
-                                      : `$${p.funding_total_usd_mn.toFixed(0)}M`
-                                    : "—"}
-                                </div>
-                                {p.headcount && (
-                                  <div style={{ fontSize: 10, color: C.t3 }}>{p.headcount.toLocaleString("de-DE")} MA</div>
-                                )}
-                                <button
-                                  onClick={() => router.push(`/company/${encodeURIComponent(p.name)}`)}
-                                  style={{
-                                    fontSize: 10, color: C.teal, fontFamily: C.mono,
-                                    background: "none", border: `1px solid ${C.tealBorder}`,
-                                    borderRadius: 6, padding: "3px 10px", cursor: "pointer",
-                                  }}
-                                >
-                                  Analysieren →
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Positioning Note */}
-                            {p.positioning_note && (
-                              <div style={{
-                                padding: "8px 12px", marginBottom: 10,
-                                background: "rgba(0,212,160,0.05)",
-                                border: `1px solid ${C.tealBorder}`,
-                                borderLeft: `3px solid ${C.teal}`,
-                                borderRadius: `0 ${C.rSm} ${C.rSm} 0`,
-                                fontSize: C.fsBody, color: C.t1, lineHeight: 1.55,
-                              }}>
-                                {p.positioning_note}
-                              </div>
-                            )}
-
-                            {/* Description */}
-                            {p.description && !p.positioning_note && (
-                              <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>
-                                {p.description.slice(0, 180)}{p.description.length > 180 ? "…" : ""}
-                              </div>
-                            )}
-
-                            {/* Inline Score-Row — kein Modal */}
-                            <div style={{
-                              display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
-                              gap: 1, marginTop: 4,
-                              background: C.border,
-                              borderRadius: C.rSm, overflow: "hidden",
-                              border: `1px solid ${C.border}`,
-                            }}>
-                              {[
-                                { label: "Composite", value: p.composite_score, color: p.rating ? ratingColor(p.rating) : C.t2 },
-                                { label: "Financial",  value: p.financial_score,  color: C.blue },
-                                { label: "Market",     value: p.market_score,     color: C.teal },
-                              ].map((s, si) => (
-                                <div key={si} style={{
-                                  padding: "8px 10px", background: C.bgCard,
-                                  display: "flex", flexDirection: "column", gap: 5,
-                                }}>
-                                  <div style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, textTransform: "uppercase", letterSpacing: ".05em" }}>
-                                    {s.label}
-                                  </div>
-                                  <ScoreBar value={s.value} color={s.color} />
-                                </div>
-                              ))}
-                            </div>
-                            {!hasScores && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, justifyContent: "center" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14, alignItems: "start" }}>
+                        {/* Kachelreihe */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, minWidth: 0 }}>
+                          {sortedPeers.map(p => {
+                            const isSelected = selectedPeer?.id === p.id;
+                            const r = p.relation ? RELATION_LABEL[p.relation] : null;
+                            const rColor = p.relation ? RELATION_COLOR[p.relation] : C.t3;
+                            const hasScores = p.composite_score != null || p.financial_score != null || p.market_score != null;
+                            return (
+                              <div
+                                key={p.id}
+                                onClick={() => setSelectedPeerId(p.id)}
+                                style={{
+                                  background: C.bgCard,
+                                  border: `1px solid ${isSelected ? C.teal : C.border}`,
+                                  borderWidth: isSelected ? 2 : 1,
+                                  borderRadius: C.rSm, padding: "10px 12px", cursor: "pointer",
+                                  display: "flex", flexDirection: "column", gap: 5, minWidth: 0,
+                                }}
+                              >
                                 <span style={{
-                                  width: 6, height: 6, borderRadius: "50%",
-                                  background: C.amber, display: "inline-block",
-                                  animation: "argoPulse 1.4s ease-in-out infinite",
-                                }} />
-                                <span style={{ fontSize: 9, color: C.t3, fontFamily: C.mono }}>
-                                  Scores werden berechnet…
+                                  fontSize: 12, fontWeight: 600, color: C.t1, whiteSpace: "nowrap",
+                                  overflow: "hidden", textOverflow: "ellipsis",
+                                }}>
+                                  {regionFlag(p.region)} {p.name}
+                                </span>
+                                <span style={{
+                                  fontSize: 9, fontFamily: C.mono, borderRadius: 4, padding: "1px 6px", width: "fit-content",
+                                  color: rColor, background: rColor + "18", border: `1px solid ${rColor}33`,
+                                }}>
+                                  {r ?? "Unklassifiziert"}
+                                </span>
+                                {p.stage_normalized && (
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{p.stage_normalized}</span>
+                                )}
+                                {hasScores ? (
+                                  <span style={{ fontSize: 14, fontWeight: 600, color: p.rating ? ratingColor(p.rating) : C.t1 }}>
+                                    {p.composite_score != null ? p.composite_score.toFixed(1) : "—"}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 9, color: C.amber, display: "flex", alignItems: "center", gap: 4 }}>
+                                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.amber, animation: "argoPulse 1.4s ease-in-out infinite" }} />
+                                    Pending
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Kontext-Panel */}
+                        {selectedPeer && (
+                          <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: C.rSm, padding: "14px 16px", minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: C.t1 }}>
+                                {regionFlag(selectedPeer.region)} {selectedPeer.name}
+                              </span>
+                              {selectedPeer.relation && (
+                                <span style={{
+                                  fontSize: 9, fontFamily: C.mono, borderRadius: 4, padding: "1px 6px",
+                                  color: RELATION_COLOR[selectedPeer.relation], background: RELATION_COLOR[selectedPeer.relation] + "18",
+                                  border: `1px solid ${RELATION_COLOR[selectedPeer.relation]}33`,
+                                }}>
+                                  {RELATION_LABEL[selectedPeer.relation]}
+                                </span>
+                              )}
+                            </div>
+                            {selectedPeer.positioning_note && (
+                              <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.55, marginBottom: 12 }}>
+                                {selectedPeer.positioning_note}
+                              </div>
+                            )}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 10 }}>
+                              <CompareRow label="Composite" subject={data.scores?.composite_score} peer={selectedPeer.composite_score} color={selectedPeer.rating ? ratingColor(selectedPeer.rating) : C.t1} />
+                              <CompareRow label="Financial" subject={data.scores?.financial_score} peer={selectedPeer.financial_score} color={C.blue} />
+                              <CompareRow label="Market" subject={data.scores?.market_score} peer={selectedPeer.market_score} color={C.teal} />
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: C.t3 }}>Status</span>
+                                <span style={{ color: C.t1 }}>{selectedPeer.is_listed ? `Listed${selectedPeer.ticker ? " · " + selectedPeer.ticker : ""}` : "Private"}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: C.t3 }}>Funding</span>
+                                <span style={{ color: C.t1, fontFamily: C.mono }}>
+                                  {selectedPeer.funding_total_usd_mn
+                                    ? selectedPeer.funding_total_usd_mn >= 1000
+                                      ? `$${(selectedPeer.funding_total_usd_mn / 1000).toFixed(1)}B`
+                                      : `$${selectedPeer.funding_total_usd_mn.toFixed(0)}M`
+                                    : "—"}
                                 </span>
                               </div>
-                            )}
-
-                            {/* Website */}
-                            {p.website && (
-                              <div style={{ marginTop: 8 }}>
-                                <a
-                                  href={p.website.startsWith("http") ? p.website : `https://${p.website}`}
-                                  target="_blank" rel="noopener noreferrer"
-                                  style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, textDecoration: "none", opacity: 0.7 }}
-                                >
-                                  {p.website.replace(/^https?:\/\//, "")} →
-                                </a>
-                              </div>
-                            )}
+                            </div>
+                            <button
+                              onClick={() => router.push(`/company/${encodeURIComponent(selectedPeer.name)}`)}
+                              style={{
+                                marginTop: 12, width: "100%", fontSize: 10, color: C.teal, fontFamily: C.mono,
+                                background: "none", border: `1px solid ${C.tealBorder}`, borderRadius: 6, padding: "6px 0", cursor: "pointer",
+                              }}
+                            >
+                              Analysieren →
+                            </button>
                           </div>
-                        );
-                      })}
+                        )}
+                      </div>
                     </Card>
 
                     {/* Footer */}
