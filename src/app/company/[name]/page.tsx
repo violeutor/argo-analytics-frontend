@@ -3814,8 +3814,8 @@ export default function CompanyDetailPage() {
             };
             const stageColor = (s?: string | null) =>
               !s ? C.t3 : stageOrder[s] >= 6 ? C.teal : stageOrder[s] >= 3 ? C.blue : C.amber;
-            const regionFlag = (r?: string | null) =>
-              r === "US" ? "🇺🇸" : r === "DE" ? "🇩🇪" : r === "EU" ? "🇪🇺" : r === "UK" ? "🇬🇧" : "🌐";
+            // Kein Emoji-Einsatz irgendwo in der App — reines Text-Badge statt Flaggen-Emoji.
+            const regionLabel = (r?: string | null) => r || "—";
 
             // PEER-RELATION-01: Sektornähe ist die primäre Sortierung, Stage
             // sekundär. Kein räumliches Gruppieren mehr (Sessions davor) — bei
@@ -3840,19 +3840,31 @@ export default function CompanyDetailPage() {
 
             // Subject-vs-Peer Vergleichszeile fürs Kontext-Panel — eigene, engere
             // Frage als Block 1 (Subject vs. Peer-MEDIAN über alle Peers).
-            const CompareRow = ({ label, subject, peer, color }: { label: string; subject?: number | null; peer?: number | null; color: string }) => (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>{label}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, fontFamily: C.mono, color: C.t2 }}>
-                    {subject != null ? subject.toFixed(1) : "—"} <span style={{ fontSize: 8, color: C.t3 }}>{data.name.length > 14 ? data.name.slice(0, 12) + "…" : data.name}</span>
-                  </span>
-                  <span style={{ fontSize: 12, fontFamily: C.mono, color, fontWeight: 600 }}>
-                    {peer != null ? peer.toFixed(1) : "—"} <span style={{ fontSize: 8, color: C.t3 }}>Peer</span>
-                  </span>
+            // format: "score" (0-10, .toFixed(1)) oder "text" (bereits fertig formatiert)
+            const fmtFunding = (mn?: number | null) =>
+              mn == null ? null : mn >= 1000 ? `$${(mn / 1000).toFixed(1)}B` : `$${mn.toFixed(0)}M`;
+            const CompareRow = ({
+              label, subject, peer, color, format = "score",
+            }: {
+              label: string; subject?: number | string | null; peer?: number | string | null;
+              color: string; format?: "score" | "text";
+            }) => {
+              const fmt = (v?: number | string | null) =>
+                v == null ? "—" : format === "score" ? (v as number).toFixed(1) : String(v);
+              return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 11, color: C.t3, fontFamily: C.mono }}>{label}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, fontFamily: C.mono, color: C.t2 }}>
+                      {fmt(subject)} <span style={{ fontSize: 8, color: C.t3 }}>{data.name.length > 14 ? data.name.slice(0, 12) + "…" : data.name}</span>
+                    </span>
+                    <span style={{ fontSize: 12, fontFamily: C.mono, color, fontWeight: 600 }}>
+                      {fmt(peer)} <span style={{ fontSize: 8, color: C.t3 }}>Peer</span>
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
+              );
+            };
 
             return (
               <div>
@@ -3928,7 +3940,7 @@ export default function CompanyDetailPage() {
                       </Card>
                     )}
 
-                    {/* Block 2: Kachelreihe (flexibel, relation-sortiert) + Kontext-Panel */}
+                    {/* Block 2: Peer-Liste (links, vertikal) + Kontext-Panel (rechts) */}
                     <Card style={{ marginBottom: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                         <SLabel text={`Wettbewerber (${peers.length})`} />
@@ -3936,9 +3948,9 @@ export default function CompanyDetailPage() {
                           Sortiert nach Sektornähe · Stage sekundär
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14, alignItems: "start" }}>
-                        {/* Kachelreihe */}
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, minWidth: 0 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14, alignItems: "start" }}>
+                        {/* Peer-Liste: eine Zeile pro Peer, untereinander */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                           {sortedPeers.map(p => {
                             const isSelected = selectedPeer?.id === p.id;
                             const r = p.relation ? RELATION_LABEL[p.relation] : null;
@@ -3952,31 +3964,32 @@ export default function CompanyDetailPage() {
                                   background: C.bgCard,
                                   border: `1px solid ${isSelected ? C.teal : C.border}`,
                                   borderWidth: isSelected ? 2 : 1,
-                                  borderRadius: C.rSm, padding: "10px 12px", cursor: "pointer",
-                                  display: "flex", flexDirection: "column", gap: 5, minWidth: 0,
+                                  borderRadius: C.rSm, padding: "9px 12px", cursor: "pointer",
+                                  display: "flex", alignItems: "center", gap: 10, minWidth: 0,
                                 }}
                               >
                                 <span style={{
                                   fontSize: 12, fontWeight: 600, color: C.t1, whiteSpace: "nowrap",
-                                  overflow: "hidden", textOverflow: "ellipsis",
+                                  overflow: "hidden", textOverflow: "ellipsis", flex: "1 1 auto", minWidth: 0,
                                 }}>
-                                  {regionFlag(p.region)} {p.name}
+                                  {p.name}
                                 </span>
                                 <span style={{
-                                  fontSize: 9, fontFamily: C.mono, borderRadius: 4, padding: "1px 6px", width: "fit-content",
+                                  fontSize: 9, fontFamily: C.mono, borderRadius: 4, padding: "1px 6px", flexShrink: 0,
                                   color: rColor, background: rColor + "18", border: `1px solid ${rColor}33`,
                                 }}>
                                   {r ?? "Unklassifiziert"}
                                 </span>
                                 {p.stage_normalized && (
-                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono }}>{p.stage_normalized}</span>
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, flexShrink: 0 }}>{p.stage_normalized}</span>
                                 )}
+                                <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, flexShrink: 0, width: 22 }}>{regionLabel(p.region)}</span>
                                 {hasScores ? (
-                                  <span style={{ fontSize: 14, fontWeight: 600, color: p.rating ? ratingColor(p.rating) : C.t1 }}>
+                                  <span style={{ fontSize: 14, fontWeight: 600, color: p.rating ? ratingColor(p.rating) : C.t1, flexShrink: 0, width: 32, textAlign: "right" }}>
                                     {p.composite_score != null ? p.composite_score.toFixed(1) : "—"}
                                   </span>
                                 ) : (
-                                  <span style={{ fontSize: 9, color: C.amber, display: "flex", alignItems: "center", gap: 4 }}>
+                                  <span style={{ fontSize: 9, color: C.amber, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.amber, animation: "argoPulse 1.4s ease-in-out infinite" }} />
                                     Pending
                                   </span>
@@ -3986,12 +3999,12 @@ export default function CompanyDetailPage() {
                           })}
                         </div>
 
-                        {/* Kontext-Panel */}
+                        {/* Kontext-Panel: Subject fix, Peer dynamisch je nach Auswahl */}
                         {selectedPeer && (
                           <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: C.rSm, padding: "14px 16px", minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
                               <span style={{ fontSize: 14, fontWeight: 600, color: C.t1 }}>
-                                {regionFlag(selectedPeer.region)} {selectedPeer.name}
+                                {selectedPeer.name}
                               </span>
                               {selectedPeer.relation && (
                                 <span style={{
@@ -4008,26 +4021,15 @@ export default function CompanyDetailPage() {
                                 {selectedPeer.positioning_note}
                               </div>
                             )}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 10 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                               <CompareRow label="Composite" subject={data.scores?.composite_score} peer={selectedPeer.composite_score} color={selectedPeer.rating ? ratingColor(selectedPeer.rating) : C.t1} />
                               <CompareRow label="Financial" subject={data.scores?.financial_score} peer={selectedPeer.financial_score} color={C.blue} />
                               <CompareRow label="Market" subject={data.scores?.market_score} peer={selectedPeer.market_score} color={C.teal} />
+                              <CompareRow label="Funding" subject={fmtFunding(data.funding_total_usd_mn)} peer={fmtFunding(selectedPeer.funding_total_usd_mn)} color={C.t1} format="text" />
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span style={{ color: C.t3 }}>Status</span>
-                                <span style={{ color: C.t1 }}>{selectedPeer.is_listed ? `Listed${selectedPeer.ticker ? " · " + selectedPeer.ticker : ""}` : "Private"}</span>
-                              </div>
-                              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                <span style={{ color: C.t3 }}>Funding</span>
-                                <span style={{ color: C.t1, fontFamily: C.mono }}>
-                                  {selectedPeer.funding_total_usd_mn
-                                    ? selectedPeer.funding_total_usd_mn >= 1000
-                                      ? `$${(selectedPeer.funding_total_usd_mn / 1000).toFixed(1)}B`
-                                      : `$${selectedPeer.funding_total_usd_mn.toFixed(0)}M`
-                                    : "—"}
-                                </span>
-                              </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 8 }}>
+                              <span style={{ color: C.t3 }}>Status (Peer)</span>
+                              <span style={{ color: C.t1 }}>{selectedPeer.is_listed ? `Listed${selectedPeer.ticker ? " · " + selectedPeer.ticker : ""}` : "Private"}</span>
                             </div>
                             <button
                               onClick={() => router.push(`/company/${encodeURIComponent(selectedPeer.name)}`)}
