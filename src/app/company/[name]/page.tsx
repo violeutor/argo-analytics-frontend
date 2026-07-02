@@ -3813,7 +3813,17 @@ export default function CompanyDetailPage() {
               "Series C": 4, "Series D": 5, "Series D+": 6, "Growth": 7, "Public": 8,
             };
             const stageColor = (s?: string | null) =>
-              !s ? C.t3 : stageOrder[s] >= 6 ? C.teal : stageOrder[s] >= 3 ? C.blue : C.amber;
+              !s ? C.t3 : s === "Etabliert" ? C.t2 : stageOrder[s] >= 6 ? C.teal : stageOrder[s] >= 3 ? C.blue : C.amber;
+            // Fehlende Stage heißt nicht zwangsläufig "Daten fehlen" — Companies,
+            // die lange vor dem VC-Zeitalter gegründet wurden, haben schlicht
+            // keine Series A/B/etc. zu tracken. Ohne Kennzeichnung sieht das wie
+            // eine Lücke statt wie "trifft nicht zu". 20 Jahre ist ein bewusst
+            // grober, anpassbarer Cutoff — kein hartes Kriterium.
+            const displayStage = (p: PeerCompany) => {
+              if (p.stage_normalized) return p.stage_normalized;
+              if (p.founding_year && p.founding_year < new Date().getFullYear() - 20) return "Etabliert";
+              return null;
+            };
             // Kein Emoji-Einsatz irgendwo in der App — reines Text-Badge statt Flaggen-Emoji.
             const regionLabel = (r?: string | null) => r || "—";
 
@@ -3948,9 +3958,9 @@ export default function CompanyDetailPage() {
                           Sortiert nach Sektornähe · Stage sekundär
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14, alignItems: "start" }}>
-                        {/* Peer-Liste: eine Zeile pro Peer, untereinander */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14, alignItems: "stretch" }}>
+                        {/* Peer-Liste: eine Zeile pro Peer, untereinander, wächst anteilig auf volle Spaltenhöhe */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0, height: "100%" }}>
                           {sortedPeers.map(p => {
                             const isSelected = selectedPeer?.id === p.id;
                             const r = p.relation ? RELATION_LABEL[p.relation] : null;
@@ -3966,6 +3976,7 @@ export default function CompanyDetailPage() {
                                   borderWidth: isSelected ? 2 : 1,
                                   borderRadius: C.rSm, padding: "9px 12px", cursor: "pointer",
                                   display: "flex", alignItems: "center", gap: 10, minWidth: 0,
+                                  flex: "1 1 0",
                                 }}
                               >
                                 <span style={{
@@ -3980,8 +3991,8 @@ export default function CompanyDetailPage() {
                                 }}>
                                   {r ?? "Unklassifiziert"}
                                 </span>
-                                {p.stage_normalized && (
-                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, flexShrink: 0 }}>{p.stage_normalized}</span>
+                                {displayStage(p) && (
+                                  <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, flexShrink: 0 }}>{displayStage(p)}</span>
                                 )}
                                 <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, flexShrink: 0, width: 22 }}>{regionLabel(p.region)}</span>
                                 {hasScores ? (
