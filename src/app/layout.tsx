@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { C } from "@/lib/tokens";
+import { AuthProvider } from "@/lib/AuthProvider";
+import { NotificationsProvider } from "@/lib/NotificationsProvider";
+import TopNav from "@/components/TopNav";
 
 export const metadata: Metadata = {
   title: "Argo Analytics · Climate Tech Intelligence",
@@ -19,7 +22,15 @@ export default function RootLayout({
   return (
     <html lang="de">
       <body style={{ margin: 0, padding: 0, background: C.bg }}>
-        {children}
+        {/* S85: AuthProvider + NotificationsProvider + TopNav hier statt in
+            main.tsx — einziger Ort, der auf jeder Route mountet. Vorher waren
+            Nav/Bell nur auf "/" sichtbar (NOTIFICATION-BELL-MISSING-01). */}
+        <AuthProvider>
+          <NotificationsProvider>
+            <TopNav />
+            {children}
+          </NotificationsProvider>
+        </AuthProvider>
       </body>
     </html>
   );

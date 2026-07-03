@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { ROOT_VARS, FONT_IMPORT } from '@/lib/tokens';
 import MarketingLanding from '@/components/MarketingLanding';
 import LoginOnboarding from '@/components/LoginOnboarding';
+import { useAuth } from '@/lib/AuthProvider';
+import { useNotifications, type Notification } from '@/lib/NotificationsProvider';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -34,17 +35,9 @@ interface Buyer {
   market_cap?: number;
 }
 
-interface Notification {
-  id: string;
-  company_name: string;
-  event_type: string;
-  raw_title: string;
-  direction: string;   // 'positive' | 'negative' | 'neutral'
-  relevance_score: number;
-  event_date: string;
-  source_url?: string;
-  signal_category?: string;
-}
+// Notification-Interface + Helper (fetchNotifications, getSeenIds, markSeen)
+// leben jetzt in src/lib/NotificationsProvider.tsx (S85) — geteilt zwischen
+// TopNav (Bell) und dieser Datei (Stat-Strip-Zähler).
 
 // DISAMBIG-03: Entity-Resolution-Response (Backend /api/v1/resolve, Wikidata-first)
 interface ResolveCandidate {
@@ -109,6 +102,20 @@ const PATH_COLOR: Record<string, string> = {
   'Archiv': 'var(--red)',
 };
 
+// EXPLORE-SECTOR-DEEPLINK-01 (S85): geteilte Matching-Logik zwischen dem
+// Sektor-Grid (Zähl-Anzeige pro Kachel) und dem Explore-Filter nach Klick —
+// beide MÜSSEN dieselbe Regel benutzen, sonst zeigt die Kachel z.B. "12
+// Companies" an, aber der Filter danach liefert eine andere Zahl. Bewusst
+// simples Erstwort-Matching (kein exaktes Taxonomy-Lookup), unverändert aus
+// der bestehenden Kachel-Logik übernommen, nicht neu erfunden.
+function sectorKeyOf(name: string): string {
+  return name.toLowerCase().split(' ')[0];
+}
+function companyMatchesSector(c: { industry?: string; category?: string }, sectorName: string): boolean {
+  const key0 = sectorKeyOf(sectorName);
+  return !!(c.industry?.toLowerCase().includes(key0) || c.category?.toLowerCase().includes(key0));
+}
+
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
 async function fetchCompanies(): Promise<Company[]> {
@@ -120,33 +127,7 @@ async function fetchCompanies(): Promise<Company[]> {
   return res.json();
 }
 
-async function fetchNotifications(): Promise<Notification[]> {
-  // Session 55: Keine Namensliste mehr — Backend liefert global die neuesten
-  // Signals über alle Companies. Behebt 50er-alphabetisch-Cap + URL-Bombe.
-  try {
-    const params = new URLSearchParams();
-    params.set('days', '7');
-    params.set('min_score', '0.5');
-    const res = await fetch(`${BACKEND_PROXY}/api/v1/notifications?${params}`);
-    if (!res.ok) return [];
-    return res.json();
-  } catch { return []; }
-}
-
-const NOTIFICATION_LS_KEY = 'argo_notif_seen_v1';
-
-function getSeenIds(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(NOTIFICATION_LS_KEY) || '[]')); }
-  catch { return new Set(); }
-}
-
-function markSeen(ids: string[]): void {
-  try {
-    const seen = getSeenIds();
-    ids.forEach(id => seen.add(id));
-    localStorage.setItem(NOTIFICATION_LS_KEY, JSON.stringify(Array.from(seen)));
-  } catch {}
-}
+// fetchNotifications, getSeenIds, markSeen → NotificationsProvider (S85).
 
 
 
@@ -530,15 +511,11 @@ function HeroState({
         </div>
         <div className="sec-grid-board">
           {SECTORS.map((s) => {
-            const key0 = s.name.toLowerCase().split(' ')[0];
-            const cnt = companies.filter(c =>
-              c.industry?.toLowerCase().includes(key0) ||
-              c.category?.toLowerCase().includes(key0)
-            ).length;
+            const cnt = companies.filter(c => companyMatchesSector(c, s.name)).length;
             return (
               <div key={s.name} className="sec-cell"
                 style={{'--cc': s.cc} as React.CSSProperties}
-                onClick={() => router.push('/?tab=explore')}>
+                onClick={() => router.push(`/?tab=explore&sector=${encodeURIComponent(s.name)}`)}>
                 <div className="sec-top">
                   <span className="sec-dot" />
                   <span className="sec-arrow">→</span>
@@ -651,73 +628,11 @@ function HeroState({
 }
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-function LoginModal({ onClose }: { onClose: () => void }) {
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]       = useState<string | null>(null);
-  const [loading, setLoading]   = useState(false);
-
-  const handleSubmit = async () => {
-    setLoading(true); setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setError(error.message); setLoading(false); }
-    else onClose();
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-    }} onClick={onClose}>
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border-md)',
-        borderRadius: 14, padding: '28px 32px', width: 360,
-        boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 18, color: 'var(--t1)', marginBottom: 6 }}>
-          Anmelden
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 22 }}>
-          Argo Analytics · Investment Intelligence
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <input
-            type="email" placeholder="E-Mail" value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            style={{
-              background: 'var(--bg)', border: '1px solid var(--border-md)',
-              borderRadius: 8, padding: '9px 12px', color: 'var(--t1)',
-              fontSize: 13, fontFamily: 'var(--font-b)', outline: 'none',
-            }}
-          />
-          <input
-            type="password" placeholder="Passwort" value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            style={{
-              background: 'var(--bg)', border: '1px solid var(--border-md)',
-              borderRadius: 8, padding: '9px 12px', color: 'var(--t1)',
-              fontSize: 13, fontFamily: 'var(--font-b)', outline: 'none',
-            }}
-          />
-          {error && (
-            <div style={{ fontSize: 12, color: 'var(--red)', padding: '6px 10px', background: 'var(--red-bg)', borderRadius: 6 }}>
-              {error}
-            </div>
-          )}
-          <button
-            onClick={handleSubmit} disabled={loading}
-            className="btn-primary"
-            style={{ marginTop: 4, opacity: loading ? 0.6 : 1 }}
-          >
-            {loading ? 'Anmelden…' : 'Anmelden'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// LoginModal (in-app Re-Login-Modal) entfernt (S85) — der einzige Trigger
+// dafür war der "Anmelden"-Button im alten Nav-Header, der mit der
+// TopNav-Extraktion wegfällt (siehe TopNav.tsx-Kommentar: dieser Zweig war
+// durch Gate/PageContent-Struktur bereits faktisch unerreichbar, jetzt auch
+// strukturell entfernt). Echter Login-Einstieg bleibt Gate → LoginOnboarding.
 
 // ─── Watchlist ───────────────────────────────────────────────────────────────
 
@@ -897,17 +812,15 @@ type NavTab = 'research' | 'watchlist' | 'explore';
 function PageContent() {
   const router = useRouter();
   const searchParamsMain = useSearchParams();
-  const [navTab, setNavTab] = useState<NavTab>(
-    (searchParamsMain?.get("tab") as NavTab) ?? "research"
-  );
+  // S85: navTab ist jetzt reiner URL-Derivat statt eigenem State — Tab-Klicks
+  // laufen über TopNav (router.push('/?tab=...')), main.tsx liest nur mit.
+  const navTab = (searchParamsMain?.get("tab") as NavTab) ?? "research";
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  // AUTH-01: Supabase session
-  const [session, setSession] = useState<any>(null);
-  const [loginOpen, setLoginOpen] = useState(false);
+  // notifications/seenIds/notifOpen/userMenuOpen/session/loginOpen entfernt
+  // (S85) — Notifications + Session jetzt aus geteilten Contexts, Bell-UI-State
+  // lebt komplett in TopNav.
+  const { session } = useAuth();
+  const { notifications } = useNotifications();
   // WATCHLIST-01: company_ids aus Backend-Watchlist
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
   // EXPLORE-01: personalisierter Feed
@@ -918,16 +831,15 @@ function PageContent() {
 
   useEffect(() => {
     fetchCompanies().then(setCompanies);
-    setSeenIds(getSeenIds());
-    // AUTH-01: aktuelle Session laden + Listener
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (!s) setWatchlistIds(new Set());
-      setExploreData(null); // bei Login/Logout Feed neu laden (personalisiert)
-    });
-    return () => subscription.unsubscribe();
   }, []);
+
+  // S85: vorher Teil des lokalen onAuthStateChange-Listeners (jetzt in
+  // AuthProvider zentralisiert) — Reaktion auf Session-Wechsel bleibt hier,
+  // nur die Quelle (Supabase-Subscription) ist jetzt zentral.
+  useEffect(() => {
+    if (!session) setWatchlistIds(new Set());
+    setExploreData(null); // bei Login/Logout Feed neu laden (personalisiert)
+  }, [session]);
 
   // Watchlist-IDs beim Tab-Wechsel laden (lazy — nur wenn Tab geöffnet wird)
   useEffect(() => {
@@ -956,54 +868,9 @@ function PageContent() {
       .finally(() => setExploreLoading(false));
   }, [navTab, exploreData, session]);
 
-  // ── Notification Refresh-Logik ───────────────────────────────────────────────
-  // Strategie: visibilitychange (min 15min Cooldown) + 30min Interval
-  const notifLastFetch = useRef<number>(0);
-  const NOTIF_COOLDOWN = 15 * 60 * 1000;   // 15 Minuten
-  const NOTIF_INTERVAL = 30 * 60 * 1000;   // 30 Minuten
-
-  const refreshNotifications = useCallback(() => {
-    const now = Date.now();
-    if (now - notifLastFetch.current < NOTIF_COOLDOWN) return;
-    notifLastFetch.current = now;
-    fetchNotifications().then(setNotifications);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Initialer Load beim Mount — Notifications sind global, nicht companies-abhängig
-  useEffect(() => {
-    notifLastFetch.current = 0;   // erstes Laden immer
-    refreshNotifications();
-  }, [refreshNotifications]);
-
-  // visibilitychange — Refresh wenn Tab wieder aktiv wird
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refreshNotifications();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refreshNotifications]);
-
-  // 30-Minuten-Interval als Backstop
-  useEffect(() => {
-    const id = window.setInterval(() => refreshNotifications(), NOTIF_INTERVAL);
-    return () => window.clearInterval(id);
-  }, [refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const unreadCount = notifications.filter(n => !seenIds.has(n.id)).length;
-
-  const handleOpenNotif = () => setNotifOpen(o => !o);
-
-  const handleRefreshNotif = () => {
-    notifLastFetch.current = 0;   // Cooldown überspringen
-    refreshNotifications();
-  };
-
-  const handleMarkAllRead = () => {
-    const ids = notifications.map(n => n.id);
-    markSeen(ids);
-    setSeenIds(getSeenIds());
-  };
+  // Notification-Refresh-Logik (Poll/Cooldown/visibilitychange) + Bell-Handler
+  // → NotificationsProvider (S85). notifications.length wird unten im
+  // Stat-Strip weiterverwendet, alles andere lebt jetzt in TopNav.
 
   const handleSelectCompany = useCallback((company: Company) => {
     router.push(`/company/${encodeURIComponent(company.name)}?from=watchlist&back=/`);
@@ -1021,22 +888,12 @@ function PageContent() {
         *{box-sizing:border-box;margin:0;padding:0}
         :root{${ROOT_VARS} --violet:#A78BFA;--rose:#F472B6;--indigo:#818CF8;--teal-g:#2DD4BF;}
         body{background:var(--bg);color:var(--t1);font-family:var(--font-b);font-size:14px;min-height:100vh}
-
-        /* ── Nav (Redesign S59) ── */
-        nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 2rem;height:64px;border-bottom:1px solid var(--border);background:rgba(13,17,23,0.85);backdrop-filter:blur(14px);position:sticky;top:0;z-index:100}
-        .nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
-        .nav-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--teal),var(--blue));border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-weight:900;font-size:14px;color:#0D1117;box-shadow:0 0 14px rgba(0,194,209,0.28)}
-        .nav-logo-text{font-family:var(--font-d);font-weight:800;font-size:17px;letter-spacing:-0.02em;color:var(--t1)}
-        .nav-logo-sub{font-size:10px;color:var(--t3);font-family:var(--font-m);letter-spacing:.05em;margin-top:3px;text-transform:uppercase}
-        .nav-tabs{display:flex;justify-self:center}
-        .nav-tab{padding:0 14px;height:64px;border:none;background:none;font-size:14px;font-weight:600;color:var(--t2);cursor:pointer;transition:color .2s;font-family:var(--font-b);letter-spacing:normal;text-transform:none;position:relative}
-        .nav-tab.active{color:var(--t1)}
-        .nav-tab.active::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;background:var(--teal);box-shadow:0 0 10px var(--teal)}
-        .nav-tab:not(.active):hover{color:var(--t1)}
-        .nav-user-av{width:30px;height:30px;border-radius:50%;background:var(--bg-hover);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal);font-family:var(--font-m);cursor:pointer}
-        .nav-bell{width:36px;height:36px;border-radius:9px;background:var(--bg-card);border:1px solid var(--border);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:all .2s}
-        .nav-bell:hover{border-color:var(--border-md);color:var(--t1)}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+        /* Nav-CSS (.nav-*, nav{}, @keyframes pulse) → TopNav.tsx (S85).
+           :root/body/FONT_IMPORT bewusst hier redundant gehalten (identische
+           Werte wie in TopNav) statt entfernt — main.tsx' eigene Klassen
+           unten (Tabellen, Explore-Cards, Stat-Strip) hängen selbst noch an
+           denselben CSS-Vars, doppelte :root-Deklaration ist wirkungslos,
+           kein Verhaltensunterschied. */
 
         /* ── Background Grid ── */
         .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,194,209,0.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,194,209,0.045) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 110% 85% at 50% 0%,#000 55%,transparent 100%)}
@@ -1284,257 +1141,6 @@ function PageContent() {
         .td-mono{font-size:13px;color:var(--t2)}
       `}</style>
 
-      {/* ── Nav ── */}
-      <nav>
-        <div className="nav-logo" onClick={() => setNavTab('research')}>
-          <div className="nav-logo-icon">A</div>
-          <div>
-            <div className="nav-logo-text">Argo Analytics</div>
-            <div className="nav-logo-sub">Investment Intelligence</div>
-          </div>
-        </div>
-        <div className="nav-tabs">
-          <button
-            className={`nav-tab${navTab === 'research' ? ' active' : ''}`}
-            onClick={() => setNavTab('research')}
-          >
-            Research
-          </button>
-          <button
-            className={`nav-tab${navTab === 'watchlist' ? ' active' : ''}`}
-            onClick={() => setNavTab('watchlist')}
-          >
-            Watchlist
-          </button>
-          <button
-            className={`nav-tab${navTab === 'explore' ? ' active' : ''}`}
-            onClick={() => setNavTab('explore')}
-          >
-            Explore
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'end' }}>
-          {/* Bell */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={handleOpenNotif}
-              className="nav-bell"
-              title="Notifications"
-            >
-              🔔
-              {unreadCount > 0 && (
-                <span style={{
-                  position: 'absolute', top: -5, right: -5,
-                  minWidth: 17, height: 17, padding: '0 4px',
-                  background: 'var(--red)', color: '#fff',
-                  borderRadius: 9, fontSize: 10, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'var(--font-m)',
-                }}>
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-
-            {/* Dropdown Panel */}
-            {notifOpen && (
-              <div style={{
-                position: 'absolute', top: 42, right: 0, width: 360,
-                background: 'var(--bg-card)', border: '1px solid var(--border-md)',
-                borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                zIndex: 200, overflow: 'hidden',
-              }}>
-                {/* Header */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px', borderBottom: '1px solid var(--border)',
-                }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)' }}>
-                    Signals · Watchlist
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button
-                      onClick={handleRefreshNotif}
-                      title="Jetzt aktualisieren"
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 13, color: 'var(--t3)', padding: 0, lineHeight: 1,
-                      }}
-                    >
-                      ⟳
-                    </button>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={handleMarkAllRead}
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          fontSize: 11, color: 'var(--teal)', padding: 0,
-                        }}
-                      >
-                        Alle gelesen
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* List */}
-                <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                  {notifications.length === 0 ? (
-                    <div style={{
-                      padding: '2rem', textAlign: 'center',
-                      fontSize: 12, color: 'var(--t3)',
-                    }}>
-                      Keine neuen Signals
-                    </div>
-                  ) : (
-                    notifications.slice(0, 20).map(n => {
-                      const seen   = seenIds.has(n.id);
-                      const dotCol = n.direction === 'positive' ? 'var(--teal)'
-                                   : n.direction === 'negative' ? 'var(--red)'
-                                   : 'var(--t3)';
-                      // NOTIF-01: Signal-Kategorie als lesbares Label
-                      const catLabels: Record<string, string> = {
-                        funding: 'Finanzierung', partnership: 'Partnerschaft', ipo_progress: 'IPO',
-                        market_growth: 'Marktwachstum', patent: 'Patent/IP', investor_entry: 'Investor',
-                        regulatory: 'Regulatorik', negative_earnings: 'Earnings',
-                        supply_chain: 'Lieferkette', insider_selling: 'Insider-Verkauf',
-                        insider_buying: 'Insider-Kauf', customer_concentration: 'Kundenkonzentration',
-                        filing: 'Transparenz', ownership_entry: 'Ownership', general_news: 'News',
-                      };
-                      const catLabel = n.signal_category ? (catLabels[n.signal_category] ?? n.signal_category) : null;
-                      return (
-                        <div
-                          key={n.id}
-                          onClick={() => {
-                            markSeen([n.id]);
-                            setSeenIds(getSeenIds());
-                            setNotifOpen(false);
-                            setNavTab('research');
-                            router.push(`/company/${encodeURIComponent(n.company_name)}?from=signal&back=/`);
-                          }}
-                          style={{
-                            padding: '9px 14px',
-                            borderBottom: '1px solid var(--border)',
-                            background: seen ? 'transparent' : 'rgba(0,212,160,0.03)',
-                            cursor: 'pointer',
-                            display: 'flex', gap: 10, alignItems: 'flex-start',
-                          }}
-                        >
-                          <div style={{
-                            width: 6, height: 6, borderRadius: '50%',
-                            background: dotCol, marginTop: 5, flexShrink: 0,
-                          }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: 11, fontWeight: 600, color: 'var(--t2)',
-                              marginBottom: 2,
-                            }}>
-                              {n.company_name}
-                              {!seen && (
-                                <span style={{
-                                  marginLeft: 6, background: 'var(--teal)',
-                                  color: '#0D1117', borderRadius: 99,
-                                  fontSize: 9, fontWeight: 700, padding: '1px 5px',
-                                }}>NEU</span>
-                              )}
-                              {catLabel && (
-                                <span style={{
-                                  marginLeft: 6, background: 'var(--bg-hover)',
-                                  color: 'var(--t3)', borderRadius: 99,
-                                  fontSize: 9, fontWeight: 600, padding: '1px 5px',
-                                }}>{catLabel}</span>
-                              )}
-                            </div>
-                            <div style={{
-                              fontSize: 12, color: 'var(--t1)',
-                              overflow: 'hidden', textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {n.raw_title}
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>
-                              {n.event_date} · {n.event_type.replace(/_/g, ' ')}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {notifications.length > 20 && (
-                  <div style={{
-                    padding: '8px 14px', textAlign: 'center',
-                    fontSize: 11, color: 'var(--t3)', borderTop: '1px solid var(--border)',
-                  }}>
-                    + {notifications.length - 20} weitere · Watchlist öffnen
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* User: Avatar (eingeloggt) oder Anmelden-Button */}
-          {session ? (
-            <div style={{ position: 'relative' }}>
-              <div
-                className="nav-user-av"
-                title="Konto"
-                onClick={() => setUserMenuOpen(o => !o)}
-              >
-                {(session.user?.email?.[0] ?? 'U').toUpperCase()}
-              </div>
-              {userMenuOpen && (
-                <>
-                  {/* Klick-außerhalb-Schließer */}
-                  <div
-                    onClick={() => setUserMenuOpen(false)}
-                    style={{ position: 'fixed', inset: 0, zIndex: 190 }}
-                  />
-                  <div style={{
-                    position: 'absolute', top: 42, right: 0, width: 240, zIndex: 200,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-md)',
-                    borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden',
-                  }}>
-                    <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'var(--font-m)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>
-                        Angemeldet als
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--t1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {session.user?.email}
-                      </div>
-                    </div>
-                    <div
-                      onClick={() => { setUserMenuOpen(false); supabase.auth.signOut(); }}
-                      style={{
-                        padding: '11px 14px', cursor: 'pointer', fontSize: 13,
-                        color: 'var(--t2)', transition: 'background .1s, color .1s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--t1)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t2)'; }}
-                    >
-                      Abmelden
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setLoginOpen(true)}
-              style={{
-                background: 'var(--teal)', color: 'var(--bg)',
-                border: 'none', borderRadius: 8, padding: '7px 16px',
-                fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-b)',
-                cursor: 'pointer', transition: 'all .2s',
-              }}
-            >
-              Anmelden
-            </button>
-          )}
-        </div>
-      </nav>
-
       {/* ── Research Page ── */}
       {navTab === 'research' && (
         <HeroState companies={companies} onSelect={handleSelectCompany} notifications={notifications} />
@@ -1553,7 +1159,18 @@ function PageContent() {
         </div>
       )}
       {/* ── Explore Page ── */}
-      {navTab === 'explore' && (
+      {navTab === 'explore' && (() => {
+        // EXPLORE-SECTOR-DEEPLINK-01 (S85): Filter kommt aus der URL (vom
+        // Sektor-Grid im Research-Tab gesetzt), nicht aus eigenem State —
+        // konsistent mit dem navTab-Muster oben, ein Zurück-Klick oder
+        // direkter Link mit ?sector=... funktioniert dadurch automatisch.
+        const sectorFilter = searchParamsMain?.get('sector') ?? null;
+        const allExploreCompanies = exploreData?.companies ?? [];
+        const filteredExploreCompanies = sectorFilter
+          ? allExploreCompanies.filter((c: any) => companyMatchesSector(c, sectorFilter))
+          : allExploreCompanies;
+
+        return (
         <div className="r-page">
           <div className="bg-grid" />
           <div className="r-wrap" style={{ paddingTop: '2.5rem' }}>
@@ -1584,11 +1201,39 @@ function PageContent() {
                   <div style={{ marginTop: 10, fontSize: 12, color: 'var(--t3)', fontFamily: 'var(--font-m)' }}>
                     {exploreData.total} Companies · {exploreData.sector_keys?.join(', ')}
                   </div>
+                  {sectorFilter && (
+                    <div
+                      onClick={() => router.push('/?tab=explore')}
+                      style={{
+                        marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 7,
+                        background: 'var(--bg-hover)', border: '1px solid var(--border-md)',
+                        borderRadius: 99, padding: '5px 8px 5px 14px', cursor: 'pointer',
+                        fontSize: 12, color: 'var(--t1)', fontFamily: 'var(--font-m)',
+                      }}
+                      title="Filter entfernen"
+                    >
+                      Sektor: {sectorFilter}
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%', background: 'var(--bg-card)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--t3)',
+                      }}>✕</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Card Grid */}
-                <div className="ex-card-grid">
-                  {exploreData.companies.map((c: any, i: number) => {
+                {filteredExploreCompanies.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '4rem 0' }}>
+                    <div style={{ fontSize: 14, color: 'var(--t1)', marginBottom: 6 }}>
+                      Keine Companies im Sektor „{sectorFilter}“
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                      Andere Sektoren im Research-Tab durchsuchen oder Filter entfernen.
+                    </div>
+                  </div>
+                ) : (
+                  /* Card Grid */
+                  <div className="ex-card-grid">
+                  {filteredExploreCompanies.map((c: any, i: number) => {
                     const isPrimary = i === 0;
                     const accentColors = ['var(--teal)','var(--emerald)','var(--indigo)','var(--teal)','var(--emerald)','var(--violet)'];
                     const cc = accentColors[i % accentColors.length];
@@ -1651,13 +1296,15 @@ function PageContent() {
                     );
                   })}
                 </div>
+                )}
               </>
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
       {/* AUTH-01: Login Modal */}
-      {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
+      {/* LoginModal-Render entfernt (S85) — Komponente existiert nicht mehr, s. Kommentar oben. */}
     </>
   );
 }
@@ -1666,18 +1313,16 @@ function PageContent() {
 // Ausgeloggt → öffentliche MarketingLanding (Request Access + Login).
 // Login-Button → LoginOnboarding als vollständige Seite (kein Modal).
 // Nach Login + Onboarding → PageContent. Kein Overlay übereinander.
+// S85: eigener Supabase-Listener entfernt — session kommt jetzt aus
+// AuthProvider (layout.tsx), letzte von 3 migrierten Duplikaten (main.tsx
+// hatte vorher zwei eigene, TopNav wäre die dritte gewesen).
 function Gate() {
-  const [session, setSession] = useState<any>(undefined); // undefined = Auth-Check läuft
+  const { session } = useAuth(); // undefined = Auth-Check läuft, null = ausgeloggt
   const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (!s) setShowLogin(false); // Logout → zurück auf Landing
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    if (!session) setShowLogin(false); // Logout → zurück auf Landing
+  }, [session]);
 
   if (session === undefined) return null; // kurzer Auth-Check (lokal, schnell)
 
