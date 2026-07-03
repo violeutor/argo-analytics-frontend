@@ -822,6 +822,9 @@ function ScoringCard({ s, rank, showTR = true, onOpenTrModal }: { s: ScoringDeta
   const [open, setOpen] = useState(rank === 1);
   const rc = ratingColor(s.rating);
   const mc = mfrColor(s.mfr_signal);
+  // COMPANY-TILE-NAVIGATION-AUDIT-01 (S85): eigener Router-Hook, da ScoringCard
+  // eine Top-Level-Komponente ist, kein Prop-Drilling von CompanyDetailPage aus.
+  const router = useRouter();
 
   const trConfidenceLabel = (conf?: string) => {
     if (conf === "user")        return "✓ User-Input";
@@ -873,6 +876,17 @@ function ScoringCard({ s, rank, showTR = true, onOpenTrModal }: { s: ScoringDeta
           </div>
           <div style={{ fontSize: 11, color: C.t2, marginTop: 3 }}>{s.buyer_name} · {s.srr_category}</div>
         </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); router.push(`/company/${encodeURIComponent(s.buyer_name)}`); }}
+          title="Zur Company-Seite des Käufers"
+          style={{
+            width: 26, height: 26, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "none", border: `1px solid ${C.tealBorder}`, borderRadius: 6, color: C.teal,
+            fontSize: 13, cursor: "pointer", lineHeight: 1,
+          }}
+        >
+          ↗
+        </button>
         <span style={{ fontSize: 12, padding: "5px 14px", borderRadius: 99, fontFamily: C.mono, fontWeight: 600, color: rc, background: rc + "18", border: `1px solid ${rc}33` }}>{s.rating}</span>
       </div>
       {open && (
@@ -4113,12 +4127,19 @@ export default function CompanyDetailPage() {
               const accent = isEnabler ? C.blue : C.teal;
               const accentDim = isEnabler ? C.blueDim : C.tealDim;
               return (
-                <div key={entry.ticker} style={{
-                  padding: "15px 17px", borderRadius: C.rMd,
-                  background: "rgba(255,255,255,0.025)",
-                  border: `1px solid ${C.border}`,
-                  display: "flex", flexDirection: "column", gap: 10,
-                }}>
+                <div
+                  key={entry.ticker}
+                  onClick={() => router.push(`/company/${encodeURIComponent(entry.name)}`)}
+                  style={{
+                    padding: "15px 17px", borderRadius: C.rMd,
+                    background: "rgba(255,255,255,0.025)",
+                    border: `1px solid ${C.border}`,
+                    display: "flex", flexDirection: "column", gap: 10,
+                    cursor: "pointer", transition: "border-color .15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.borderMd)}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.border)}
+                >
 
                   {/* Row 1: Ticker + Name + Kurs */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
