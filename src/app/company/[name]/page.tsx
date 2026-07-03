@@ -1942,52 +1942,14 @@ export default function CompanyDetailPage() {
         @keyframes argoPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }
       `}</style>
 
-      {/* Nav — NAV-RESULTSTATE-01: Grid 1fr/auto/1fr, Tab-Gruppe mittig */}
-      <nav style={{
-        display: "grid", gridTemplateColumns: "1fr auto 1fr",
-        alignItems: "center",
-        padding: "0 2rem", height: 52, borderBottom: `1px solid ${C.border}`,
-        background: "rgba(13,15,18,0.97)", position: "sticky", top: 0, zIndex: 100,
-      }}>
-        {/* Left: Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => router.push("/")}>
-          <div style={{ width: 28, height: 28, background: C.teal, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: C.display, fontWeight: 700, fontSize: 13, color: C.bg }}>A</div>
-          <div>
-            <div style={{ fontFamily: C.display, fontWeight: 600, fontSize: 15, color: C.t1 }}>Argo Analytics</div>
-            <div style={{ fontSize: 10, color: C.t3, letterSpacing: ".04em" }}>Investment Intelligence</div>
-          </div>
-        </div>
-        {/* Center: Tab-Gruppe — navigiert zurück zur Landing Page */}
-        <div style={{ display: "flex", alignItems: "center", justifySelf: "center" }}>
-          {(["research", "watchlist", "explore"] as const).map((tab) => {
-            const label = tab === "research" ? "Research" : tab === "watchlist" ? "Watchlist" : "Explore";
-            const isActive = fromPage === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => router.push(`/?tab=${tab}`)}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  padding: "0 18px", height: 52,
-                  fontSize: 13, fontFamily: C.display, fontWeight: isActive ? 600 : 400,
-                  color: isActive ? C.t1 : C.t3,
-                  borderBottom: isActive ? `2px solid ${C.teal}` : "2px solid transparent",
-                  transition: "color .15s, border-color .15s",
-                }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.t2; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.t3; }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {/* Right: Status (User-Badge folgt mit AUTH-TEST-01) */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.t3, justifySelf: "end" }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} />
-          Live · Research
-        </div>
-      </nav>
+      {/* Nav (NAV-RESULTSTATE-01) entfernt (S85-Folgefix) — dupliziert jetzt
+          TopNav aus layout.tsx (Logo/Tabs/Bell/Avatar, rendert global auf
+          jeder Route inkl. dieser Seite). Ein Unterschied bleibt bewusst
+          verloren: NAV-RESULTSTATE-01 hob den Tab hervor, von dem der User
+          kam (fromPage-Vergleich) — TopNav zeigt hier keinen aktiven Tab
+          (siehe TopNav-Kommentar: activeTab ist null außerhalb von "/").
+          Kleinerer Komfortverlust, aber die zwei Nav-Bars nebeneinander
+          waren das eigentliche Problem. */}
 
       {/* Content */}
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "1.5rem 2.5rem 4rem" }}>
@@ -1997,10 +1959,12 @@ export default function CompanyDetailPage() {
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
             // Zentrierung auf den tatsächlich sichtbaren Viewport statt auf 60vh:
-            // Nav ist sticky mit fixer Höhe 52px, der umschließende Content-Wrapper
-            // trägt padding "1.5rem 2.5rem 4rem" (24px oben + 64px unten) — beides
-            // von der Centering-Box abziehen, sonst sitzt die Animation zu weit oben.
-            minHeight: "calc(100vh - 140px)",
+            // TopNav (layout.tsx, S85) ist sticky mit fixer Höhe 64px (vorher:
+            // lokale Nav hier, 52px — beim Entfernen mit angepasst), der
+            // umschließende Content-Wrapper trägt padding "1.5rem 2.5rem 4rem"
+            // (24px oben + 64px unten) — beides von der Centering-Box abziehen,
+            // sonst sitzt die Animation zu weit oben.
+            minHeight: "calc(100vh - 152px)",
           }}>
             <ArgoLoader size={180} />
           </div>
