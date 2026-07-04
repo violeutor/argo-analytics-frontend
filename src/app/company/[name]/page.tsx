@@ -4260,10 +4260,20 @@ export default function CompanyDetailPage() {
 
             // Sub-Score-Dimensionen in Radar-Reihenfolge (oben → im Uhrzeigersinn)
             // SC-10: compound_risk_score bevorzugen wenn verfügbar (algorithmisch, 6D)
+            // FRONTEND-COMPOSITE-STRATEGIC-01: strategic_score (SC-02) entfernt.
+            // COMPOSITE-DEFINITION-01 (S81) hat SC-02 backend-seitig aus dem
+            // Composite genommen — dieses Array speiste aber weiterhin sowohl die
+            // Balkenliste direkt unter der "Composite Score"-Headline als auch das
+            // Radar-Hexagon, beides visuell als "das sind die Composite-Bestandteile"
+            // lesbar. SC-02 speist ausschließlich M&A Score + Buyer Fit (bereits
+            // korrekt im Peer-Tab mit eigenem Tooltip verortet, Zeile ~3876) — hier
+            // war es die falsche Nachbarschaft, kein Rechenfehler. Ohne Strategic
+            // bleiben exakt die 5 echten Composite-Komponenten übrig (Financial/
+            // Market/Risk-inv/Ownership/Value Driver) — Radar wird zum Pentagon,
+            // bildet 1:1 ab, was tatsächlich in die Zahl einfließt.
             const hasCompoundRisk = sc.compound_risk_score != null;
             const SUB_SCORES = [
               { key: "market_score",        label: "Market",    color: C.teal   },
-              { key: "strategic_score",     label: "Strategic", color: C.blue   },
               { key: "financial_score",     label: "Financial", color: C.purple },
               { key: hasCompoundRisk ? "compound_risk_score" : "risk_score",
                                             label: hasCompoundRisk ? "Risk 6D" : "Risk",
@@ -4304,7 +4314,7 @@ export default function CompanyDetailPage() {
 
             // ── Radar SVG ──────────────────────────────────────────────────
             const W = 280, H = 280, cx = 140, cy = 140, R = 92;
-            const N = 6;
+            const N = SUB_SCORES.length;   // FRONTEND-COMPOSITE-STRATEGIC-01: dynamisch statt hartkodiert 6 (jetzt 5)
             const aOff = -Math.PI / 2; // start top
 
             const getP = (i: number, r: number) => ({
@@ -4434,7 +4444,7 @@ export default function CompanyDetailPage() {
 
                   {/* Radar Chart */}
                   <Card>
-                    <SLabel text="Score-Profil · 6 Dimensionen" />
+                    <SLabel text={`Score-Profil · ${SUB_SCORES.length} Dimensionen`} />
                     <div style={{ display: "flex", justifyContent: "center" }}>
                       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
                         {/* Grid polygons */}
