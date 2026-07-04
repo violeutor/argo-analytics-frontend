@@ -411,6 +411,12 @@ interface CompanyScores {
   rating?: string;          // 'A' | 'B' | 'C' | 'D'
   confidence?: string;
   computed_at?: string;
+  // SC-12 (SUBSCORE-COMPOSITION-AUDIT-01, S88): fließt vom Backend
+  // (scores_result = sc_result.to_dict()) längst durch, war im Frontend
+  // bisher nirgends typisiert/konsumiert. Struktur: {input_key: {feld: wert}},
+  // input_key je Subscore s. score_calculator.py::compute_all_scores()
+  // (financial/market/risk/ownership/value_driver/compound_risk/…).
+  score_inputs?: Record<string, Record<string, unknown>>;
 }
 
 // ── Design tokens (Mockup v2) ─────────────────────────────────────────────────
@@ -1240,6 +1246,101 @@ function TrOverrideModal({
   );
 }
 
+// SUBSCORE-COMPOSITION-AUDIT-01 (S88): Klick-Drilldown pro Composite-Baustein.
+// Nutzt SC-12 (score_inputs) — fließt vom Backend längst durch (scores_result
+// = sc_result.to_dict() in company_detail.py), war im Frontend bisher
+// ungenutzt. Reine Anzeige, kein Fetch — Daten sind schon im data.scores-Payload.
+const INPUT_KEY_LABELS: Record<string, string> = {
+  revenue_usd_mn: "Umsatz (USD Mio.)", ebitda_margin: "EBITDA-Marge (%)",
+  revenue_cagr: "Umsatz-CAGR (%)", funding_stage: "Funding Stage",
+  momentum_score: "Momentum-Score", rounds_count: "Anzahl Runden",
+  days_since_last_round: "Tage seit letzter Runde",
+  avg_months_between_rounds: "Ø Monate zwischen Runden",
+  round_size_growth_pct: "Rundengröße-Wachstum (%)",
+  last_round_amount_usd_mn: "Letzte Runde (USD Mio.)",
+  headcount_cagr_pct: "Headcount-CAGR (%)", headcount_bonus_pts: "Headcount-Bonus (Pkt.)",
+  cagr_pct: "Markt-CAGR (%)", competition_score: "Wettbewerbsdichte",
+  segments_count: "Marktsegmente (Anzahl)", drivers_count: "Wachstumstreiber (Anzahl)",
+  transparency: "Transparenz-Tier", avg_investor_tier: "Ø Investoren-Tier",
+  investor_count: "Investoren (Anzahl)", investor_modifier: "Investoren-Modifier",
+  driver_count: "Value Drivers (Anzahl)", avg_dependency_level_pts: "Ø Dependency-Level (Pkt.-Anteil)",
+  enabler_count_scored: "Enabler mit Dependency-Level", strong_positions: "Marktführer-Positionen",
+  market_risk: "Markt-Risiko", financials_risk: "Financials-Risiko", strategy_risk: "Strategie-Risiko",
+  operations_risk: "Operations-Risiko", technology_risk: "Technology-Risiko",
+  political_risk: "Political-Risiko", governance_risk: "Governance-Risiko",
+  market_conf: "Markt-Konfidenz", financials_conf: "Financials-Konfidenz",
+  strategy_conf: "Strategie-Konfidenz", operations_conf: "Operations-Konfidenz",
+  technology_conf: "Technology-Konfidenz", political_conf: "Political-Konfidenz",
+  governance_conf: "Governance-Konfidenz",
+};
+
+const fmtInputValue = (v: unknown): string => {
+  if (v == null) return "—";
+  if (typeof v === "boolean") return v ? "Ja" : "Nein";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(2);
+  return String(v);
+};
+
+// Titel fürs Modal — gerendert außerhalb des Tab-7-Scopes (Modal-Overlay liegt
+// am Ende des Haupt-Returns), daher eigene Konstante statt SUB_SCORES-Closure.
+const SUB_SCORE_TITLES: Record<string, string> = {
+  financial: "Financial (SC-01)", market: "Market (SC-03)",
+  compound_risk: "Risk (SC-10)", ownership: "Ownership (SC-08)",
+  value_driver: "Value Driver (SC-09)",
+};
+
+function SubscoreDetailModal({
+  title, inputs, onClose,
+}: {
+  title: string;
+  inputs: Record<string, unknown> | undefined;
+  onClose: () => void;
+}) {
+  const entries = Object.entries(inputs ?? {});
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.65)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.bgCard, border: `1px solid ${C.borderMd}`,
+          borderRadius: C.rLg, padding: "22px 26px", width: "100%", maxWidth: 440,
+          maxHeight: "80vh", overflowY: "auto",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{title} — Zusammensetzung</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.t3, fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 2 }}>✕</button>
+        </div>
+        {entries.length === 0 ? (
+          <div style={{ fontSize: 11, color: C.t3, fontStyle: "italic" }}>
+            Keine Detail-Inputs verfügbar — Score basiert vermutlich auf einem Fallback-Pfad ohne Einzelkomponenten.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {entries.map(([key, val]) => (
+              <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11.5, borderBottom: `1px solid ${C.border}`, paddingBottom: 6 }}>
+                <span style={{ color: C.t3, fontFamily: C.mono }}>{INPUT_KEY_LABELS[key] ?? key}</span>
+                <span style={{ color: C.t1, fontFamily: C.mono, textAlign: "right" }}>{fmtInputValue(val)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 9, color: C.t3, marginTop: 14, lineHeight: 1.4, fontStyle: "italic" }}>
+          Rohe Formel-Inputs (SC-12) — keine redaktionelle Aufbereitung. Bei "Risk"-Bausteinen: höherer Wert = mehr Risiko, im Composite invertiert eingerechnet (10 − Wert).
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const API_BASE = "/api/backend";
@@ -1348,6 +1449,8 @@ export default function CompanyDetailPage() {
   // TR-MODAL-01
   const [trOverride, setTrOverride] = useState<TrOverrideData | null>(null);
   const [trModalOpen, setTrModalOpen] = useState(false);
+  // SUBSCORE-COMPOSITION-AUDIT-01 (S88): Klick-Modal pro Composite-Baustein
+  const [openSubscore, setOpenSubscore] = useState<string | null>(null);
   const [sigFilter, setSigFilter]               = useState<string>("all");
   const [signalsData, setSignalsData]           = useState<SignalsData | null>(null);
   const [signalsLoading, setSignalsLoading]     = useState(false);
@@ -4165,11 +4268,18 @@ export default function CompanyDetailPage() {
                   {/* Row 3: Signal-Chips + Relevance */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
                     {isEnabler ? (<>
-                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                      <span
+                        title={
+                          entry.dependency_level === "critical" || entry.dependency_level === "high"
+                            ? "Doppel-Perspektive: zählt hier (Value Drivers) als strukturelle Stärke im Value Driver Score (SC-09) — dieselbe Einstufung erhöht gleichzeitig das Operations-Risiko im Tab Potenziale & Risiken (SC-10). Beides ist bewusst so — tiefe Integration ist Stärke UND Single-Source-Fragilität zugleich."
+                            : "Zählt als Stärke im Value Driver Score (SC-09). Bei critical/high-Einstufungen zusätzlich als Operations-Risiko im Tab Potenziale & Risiken (SC-10) berücksichtigt."
+                        }
+                        style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono, cursor: "help",
                         color: depColor(entry.dependency_level), background: depColor(entry.dependency_level) + "18",
                         border: `1px solid ${depColor(entry.dependency_level)}33`,
                       }}>
                         {depLabel(entry.dependency_level)}
+                        {(entry.dependency_level === "critical" || entry.dependency_level === "high") && " ↔"}
                       </span>
                       <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
                         color: mktColor(entry.market_position), background: mktColor(entry.market_position) + "18",
@@ -4178,11 +4288,18 @@ export default function CompanyDetailPage() {
                         {mktLabel(entry.market_position)}
                       </span>
                     </>) : (<>
-                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
+                      <span
+                        title={
+                          entry.exposure_level === "high"
+                            ? "Doppel-Perspektive: zählt hier als Driver-Count im Value Driver Score (SC-09) — dieselbe hohe Exposure erhöht gleichzeitig die Operations-Opportunity im Tab Potenziale & Risiken (SC-10, nicht Risiko: ein reichweitenstarker Abnehmer ist dort ein Chancen-Signal)."
+                            : "Zählt als Driver-Count im Value Driver Score (SC-09)."
+                        }
+                        style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono, cursor: "help",
                         color: expColor(entry.exposure_level), background: expColor(entry.exposure_level) + "18",
                         border: `1px solid ${expColor(entry.exposure_level)}33`,
                       }}>
                         Exposure {expLabel(entry.exposure_level)}
+                        {entry.exposure_level === "high" && " ↔"}
                       </span>
                       <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, fontFamily: C.mono,
                         color: giColor(entry.grows_independently), background: giColor(entry.grows_independently) + "18",
@@ -4259,7 +4376,12 @@ export default function CompanyDetailPage() {
             );
 
             // Sub-Score-Dimensionen in Radar-Reihenfolge (oben → im Uhrzeigersinn)
-            // SC-10: compound_risk_score bevorzugen wenn verfügbar (algorithmisch, 6D)
+            // SUBSCORE-COMPOSITION-AUDIT-01 (S88): SC-04 (risk_score) ist raus aus
+            // dem Composite (score_calculator.py::compute_composite_score liest
+            // jetzt ausschließlich compound_risk_score) — die bisherige
+            // hasCompoundRisk-Fallback-Weiche auf risk_score wäre jetzt irreführend
+            // (würde einen Wert zeigen, der real nicht mehr in die Zahl einfließt).
+            // Fest auf SC-10 verdrahtet, kein Fallback mehr.
             // FRONTEND-COMPOSITE-STRATEGIC-01: strategic_score (SC-02) entfernt.
             // COMPOSITE-DEFINITION-01 (S81) hat SC-02 backend-seitig aus dem
             // Composite genommen — dieses Array speiste aber weiterhin sowohl die
@@ -4271,15 +4393,14 @@ export default function CompanyDetailPage() {
             // bleiben exakt die 5 echten Composite-Komponenten übrig (Financial/
             // Market/Risk-inv/Ownership/Value Driver) — Radar wird zum Pentagon,
             // bildet 1:1 ab, was tatsächlich in die Zahl einfließt.
-            const hasCompoundRisk = sc.compound_risk_score != null;
+            // inputKey: Schlüssel in data.scores.score_inputs (SC-12) für das
+            // Klick-Modal — s. SubscoreDetailModal.
             const SUB_SCORES = [
-              { key: "market_score",        label: "Market",    color: C.teal   },
-              { key: "financial_score",     label: "Financial", color: C.purple },
-              { key: hasCompoundRisk ? "compound_risk_score" : "risk_score",
-                                            label: hasCompoundRisk ? "Risk 6D" : "Risk",
-                                                                color: C.red    },
-              { key: "ownership_score",     label: "Ownership", color: C.amber  },
-              { key: "value_driver_score",  label: "Val.Driver",color: C.teal   },
+              { key: "market_score",         label: "Market",     color: C.teal,   inputKey: "market"        },
+              { key: "financial_score",      label: "Financial",  color: C.purple, inputKey: "financial"     },
+              { key: "compound_risk_score",  label: "Risk (SC-10)", color: C.red,  inputKey: "compound_risk" },
+              { key: "ownership_score",      label: "Ownership",  color: C.amber,  inputKey: "ownership"     },
+              { key: "value_driver_score",   label: "Val.Driver", color: C.teal,   inputKey: "value_driver"  },
             ];
 
             const PATH_SCORES = [
@@ -4340,62 +4461,53 @@ export default function CompanyDetailPage() {
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-                {/* ── Row 1: Hero Path + Composite ── */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {/* ── Row 1: Composite (volle Breite) ── */}
+                {/* Hero-Investitionspfad-Kachel entfernt (Andreas, S88): redundant
+                    zur Path-Score-Vergleich-Karte direkt darunter UND zum
+                    Investitionspfade-Tab (Tab 8) — drei Stellen zeigten dieselbe
+                    Kernaussage. derive_rating() (SC-13) nutzt hero_score UND
+                    composite_score als Tiebreaker (Backend, score_calculator.py) —
+                    ohne jede Hero-Referenz wäre das Rating für einen Analysten
+                    nicht mehr nachvollziehbar (z. B. starker Composite, schwacher
+                    Hero-Path → Rating kommt trotzdem aus Composite). Deshalb als
+                    kompakte Referenz im Composite-Header erhalten, keine eigene Kachel.
+                */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
 
-                  {/* Hero Path Card */}
+                  {/* Composite + Sub-Score Bars, klickbar für Detail-Modal */}
                   <Card>
-                    <SLabel text="Hero Investitionspfad" />
-                    <div style={{ textAlign: "center", padding: "10px 0 6px" }}>
-                      <div style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, letterSpacing: ".08em", marginBottom: 8 }}>
-                        STÄRKSTER PFAD
-                      </div>
-                      <div style={{ fontSize: 26, fontWeight: 700, color: scoreColor(heroScore), fontFamily: C.display, lineHeight: 1 }}>
-                        {heroLabel}
-                      </div>
-                      {heroScore != null && (
-                        <div style={{ fontSize: 36, fontWeight: 700, color: scoreColor(heroScore), fontFamily: C.mono, marginTop: 6 }}>
-                          {heroScore.toFixed(1)}
-                          <span style={{ fontSize: 14, color: C.t3, fontWeight: 400 }}>/10</span>
-                        </div>
-                      )}
-                      <div style={{ marginTop: 12 }}>
-                        <span style={{
-                          fontSize: 13, padding: "5px 20px", borderRadius: 99, fontWeight: 700,
-                          color: ratingColor(heroRating),
-                          background: ratingColor(heroRating) + "18",
-                          border: `1px solid ${ratingColor(heroRating)}33`,
-                          fontFamily: C.mono,
-                        }}>
-                          {heroRating}
-                        </span>
-                      </div>
-                    </div>
-                    {sc.computed_at && (
-                      <div style={{ marginTop: 14, fontSize: 9, color: C.t3, fontFamily: C.mono, textAlign: "center" }}>
-                        Berechnet: {new Date(sc.computed_at).toLocaleDateString("de-DE")}
-                        {sc.confidence && <span> · Konfidenz: {sc.confidence}</span>}
-                      </div>
-                    )}
-                  </Card>
-
-                  {/* Composite + Sub-Score Bars */}
-                  <Card>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
                       <SLabel text="Composite Score" />
-                      <span style={{ fontSize: 26, fontWeight: 700, fontFamily: C.mono, color: scoreColor(composite) }}>
-                        {composite != null ? composite.toFixed(1) : "—"}
-                      </span>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontSize: 26, fontWeight: 700, fontFamily: C.mono, color: scoreColor(composite) }}>
+                          {composite != null ? composite.toFixed(1) : "—"}
+                        </span>
+                        <div
+                          title={`Rating-Tiebreaker: Hero-Path "${heroLabel}" (${heroScore != null ? heroScore.toFixed(1) : "—"}/10) vs. Composite — der höhere der beiden Werte bestimmt das Rating, wenn sie mehr als 1,5 Punkte auseinanderliegen (s. Tab Investitionspfade für Details).`}
+                          style={{ fontSize: 9, color: C.t3, fontFamily: C.mono, marginTop: 2, cursor: "help" }}
+                        >
+                          Rating <span style={{ color: ratingColor(heroRating), fontWeight: 700 }}>{heroRating}</span>
+                          {" "}· Hero {heroLabel} ({heroScore != null ? heroScore.toFixed(1) : "—"})
+                        </div>
+                      </div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {SUB_SCORES.map(s => {
                         const v = scVal(s.key as keyof CompanyScores);
-                        const isRisk = s.key === "risk_score";
+                        const isRisk = s.key === "compound_risk_score";
                         const barColor = isRisk
                           ? (v >= 7 ? C.red : v >= 4 ? C.amber : C.teal)
                           : scoreColor(v);
+                        const hasDetail = !!(sc.score_inputs && sc.score_inputs[s.inputKey]);
                         return (
-                          <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div
+                            key={s.key}
+                            onClick={() => setOpenSubscore(s.inputKey)}
+                            title={hasDetail ? "Klicken für Zusammensetzung" : "Keine Detail-Inputs verfügbar"}
+                            style={{ display: "flex", alignItems: "center", gap: 8, cursor: hasDetail ? "pointer" : "default", padding: "2px 0", borderRadius: 4 }}
+                            onMouseEnter={e => hasDetail && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                          >
                             <span style={{ fontSize: 10, color: C.t3, fontFamily: C.mono, minWidth: 80 }}>
                               {s.label}{isRisk && " ↓"}
                             </span>
@@ -4409,6 +4521,15 @@ export default function CompanyDetailPage() {
                         );
                       })}
                     </div>
+                    <div style={{ fontSize: 9, color: C.t3, marginTop: 8, fontStyle: "italic" }}>
+                      ↓ = im Composite invertiert (10 − Wert) · Balken zeigt Rohwert, nicht den invertierten Composite-Beitrag · Gewichte werden bei fehlenden Subscores automatisch normalisiert, s. Detail-Modal.
+                    </div>
+                    {sc.computed_at && (
+                      <div style={{ marginTop: 4, fontSize: 9, color: C.t3, fontFamily: C.mono }}>
+                        Berechnet: {new Date(sc.computed_at).toLocaleDateString("de-DE")}
+                        {sc.confidence && <span> · Konfidenz: {sc.confidence}</span>}
+                      </div>
+                    )}
 
                     {/* TR-MODAL-01: Pro-User TechReadiness-Override */}
                     <div style={{
@@ -4416,7 +4537,7 @@ export default function CompanyDetailPage() {
                       marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`,
                     }}>
                       <div
-                        title="TechReadiness wird hier company-weit (intrinsischer Anteil im Auto-Modus) gesetzt und fließt zugleich in jeden Käufer-Proxy im Tab Investitionspfade ein (dort ergänzt um den Buyer-Fit-Anteil) — zwei Ansichten desselben Werts, kein getrennter Buyer-Override."
+                        title="TechReadiness wird hier company-weit (intrinsischer Anteil im Auto-Modus) gesetzt und fließt zugleich in jeden Käufer-Proxy im Tab Investitionspfade ein (dort ergänzt um den Buyer-Fit-Anteil) — zwei Ansichten desselben Werts, kein getrennter Buyer-Override. Seit S88 zusätzlich Teil der Risk (SC-10) → Composite-Kette über die Technology-Dimension."
                       >
                         <span style={{ fontSize: 12, color: C.t1, fontFamily: C.mono }}>TechReadiness-Modus</span>
                         <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
@@ -5227,6 +5348,15 @@ export default function CompanyDetailPage() {
               current={trOverride}
               onClose={() => setTrModalOpen(false)}
               onSaved={refetchAfterTrSave}
+            />
+          )}
+
+          {/* SUBSCORE-COMPOSITION-AUDIT-01 (S88): Klick-Drilldown pro Composite-Baustein */}
+          {openSubscore && (
+            <SubscoreDetailModal
+              title={SUB_SCORE_TITLES[openSubscore] ?? openSubscore}
+              inputs={data.scores?.score_inputs?.[openSubscore] as Record<string, unknown> | undefined}
+              onClose={() => setOpenSubscore(null)}
             />
           )}
 
