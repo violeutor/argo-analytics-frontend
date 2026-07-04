@@ -3634,6 +3634,11 @@ export default function CompanyDetailPage() {
               { id: "political",  oppCats: ["regulatory_positive", "subsidy", "policy_support"], rskCats: ["regulatory_intervention", "policy_risk", "sanctions"] },
               { id: "technology", oppCats: ["patent", "new_product", "tech_milestone"],          rskCats: ["ip_risk", "tech_obsolescence"] },
               { id: "operations", oppCats: ["headcount_growth", "revenue_per_fte", "insider_buying"],  rskCats: ["supply_chain", "customer_concentration", "filing", "insider_selling"] },
+              // SUBSCORE-COMPOSITION-AUDIT-01 (S88): Governance-Dimension, migriert
+              // aus SC-04. rskCats bewusst leer — Governance-Risiko speist sich aus
+              // ownership_entries-Bekanntheit (compute_dimension_risks), nicht aus
+              // signals-Events; kein passender signal_category existiert dafür.
+              { id: "governance", oppCats: ["ownership_entry"], rskCats: [] },
             ];
 
             const ScoreBadge = ({ score, side }: { score: number; side: "opp" | "rsk" }) => {
@@ -3748,7 +3753,7 @@ export default function CompanyDetailPage() {
                 <TabScoreBar
                   label="Compound Risk Score"
                   score={data.scores?.compound_risk_score}
-                  tooltip="SC-10: Algorithmischer Compound Risk aus 6 Dimensionen (Market, Financials, Strategy, Political, Technology, Operations). Confidence-gewichtet — Dimensionen ohne Datenbasis dämpfen den Score statt ihn aufzublasen."
+                  tooltip="SC-10: Algorithmischer Compound Risk aus 7 Dimensionen (Market, Financials, Strategy, Political, Technology, Operations, Governance). Confidence-gewichtet — Dimensionen ohne Datenbasis dämpfen den Score statt ihn aufzublasen."
                 />
 
                 {/* Hero Score — Composite */}
