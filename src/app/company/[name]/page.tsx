@@ -396,7 +396,6 @@ interface CompanyScores {
   financial_score?: number;
   strategic_score?: number;
   market_score?: number;
-  risk_score?: number;
   ownership_score?: number;
   value_driver_score?: number;
   ipo_score?: number;
