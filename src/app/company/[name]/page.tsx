@@ -1415,7 +1415,19 @@ export default function CompanyDetailPage() {
   const [sessionResolved, setSessionResolved] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setSessionResolved(true); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => { setSession(s); setSessionResolved(true); });
+    // AUTH-SESSION-DOUBLEFIRE-01: onAuthStateChange feuert beim Subscriben zusätzlich
+    // sofort einmal mit event="INITIAL_SESSION" — parallel zum getSession()-Call oben.
+    // Wenn beide Aufrufe ein Session-Objekt mit unterschiedlichem access_token liefern
+    // (z. B. Refresh dazwischen), ändert sich die Dependency im Haupt-Fetch-Effekt und
+    // der komplette Ladeblock (Basis-Fetch + alle Tab-Endpoints) feuert ein zweites Mal
+    // — vermutliche Ursache von FRONTEND-DOUBLEFETCH-01. INITIAL_SESSION wird hier
+    // ignoriert (getSession() deckt den initialen Ladefall bereits ab); echte Events
+    // (SIGNED_IN/OUT, TOKEN_REFRESHED, USER_UPDATED) lösen weiterhin aus.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "INITIAL_SESSION") return;
+      setSession(s);
+      setSessionResolved(true);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -1531,44 +1543,50 @@ export default function CompanyDetailPage() {
     if (!sessionResolved) return;
     if (!session?.access_token) { setError("auth_required"); setLoading(false); return; }
 
-    // 1) Basis-Fetch (blocking — alles andere hängt davon ab)
+    // PERF-WATERFALL-01: Basis-Fetch und die unabhängigen Endpoints parallel starten.
+    // Vorher liefen /ownership, /signals, /peers, /assessments, /value-drivers,
+    // /tr-override erst NACH der Basis-Antwort los, obwohl sie ausschließlich am
+    // `name`-Routenparameter hängen (der schon vor dem Basis-Fetch bekannt ist) —
+    // künstlicher Wasserfall, Gesamtladezeit war Basis + Rest statt max(Basis, Rest).
+    // Einzige echte Abhängigkeit von der Basis-Antwort ist /kpi-timeseries (braucht d.id),
+    // die bleibt hinter dem Basis-Fetch.
+    setOwnershipLoading(true);
+    setSignalsLoading(true);
+    setPeersLoading(true);
+    setAssessmentsLoading(true);
+
+    Promise.allSettled([
+      _f("/ownership").then(od  => od  && setOwnershipData(od)),
+      _f("/signals").then(sd    => sd  && setSignalsData(sd)),
+      _f("/peers").then(pd => {
+        if (!pd) return;
+        setPeersData(pd);
+        // Explizit zählen — Dependency-Array bleibt sauber
+        setPendingScoreCount((pd.peers ?? []).filter((p: PeerCompany) => p.composite_score == null).length);
+      }),
+      _f("/assessments").then(ad => {
+        if (ad) setAssessmentsData(ad);
+        else setAssessmentsData({ _error: "failed" });
+      }),
+      _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
+      _f("/tr-override").then(td => td && setTrOverride(td)),   // TR-MODAL-01
+    ]).finally(() => {
+      setOwnershipLoading(false);
+      setSignalsLoading(false);
+      setPeersLoading(false);
+      setAssessmentsLoading(false);
+    });
+
+    // 1) Basis-Fetch — nur noch für Company-Kerndaten + kpi-timeseries (braucht d.id)
     fetch(_companyUrl, { headers: { Authorization: `Bearer ${session.access_token}` } })
       .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(d => {
         setData(d);
 
-        // 2) Alle weiteren Endpoints parallel — kein lazy loading mehr
-        setOwnershipLoading(true);
-        setSignalsLoading(true);
-        setPeersLoading(true);
-        setAssessmentsLoading(true);
-
-        Promise.allSettled([
-          _f("/ownership").then(od  => od  && setOwnershipData(od)),
-          _f("/signals").then(sd    => sd  && setSignalsData(sd)),
-          _f("/peers").then(pd => {
-            if (!pd) return;
-            setPeersData(pd);
-            // Explizit zählen — Dependency-Array bleibt sauber
-            setPendingScoreCount((pd.peers ?? []).filter((p: PeerCompany) => p.composite_score == null).length);
-          }),
-          _f("/assessments").then(ad => {
-            if (ad) setAssessmentsData(ad);
-            else setAssessmentsData({ _error: "failed" });
-          }),
-          _f("/value-drivers").then(vd => vd && setValueDriversData(vd)),
-          _f("/tr-override").then(td => td && setTrOverride(td)),   // TR-MODAL-01
-          // FE-COMPANYID-01: company_id erst senden wenn definiert — sonst Name-Fallback.
-          // d.id war undefined weil CompanyDetailResponse kein id-Feld hatte (jetzt gefixt).
-          // Guard bleibt als Defense-in-Depth: verhindert ?company_id=undefined → 400.
-          _f(`/kpi-timeseries?${d.id ? `company_id=${encodeURIComponent(d.id)}` : `name=${encodeURIComponent(d.name)}`}`).then(kd => setKpiData(kd?.metrics ?? {})),
-          Promise.resolve(), // Watchlist-Status in eigenem Effect (session-abhängig, siehe unten)
-        ]).finally(() => {
-          setOwnershipLoading(false);
-          setSignalsLoading(false);
-          setPeersLoading(false);
-          setAssessmentsLoading(false);
-        });
+        // FE-COMPANYID-01: company_id erst senden wenn definiert — sonst Name-Fallback.
+        // d.id war undefined weil CompanyDetailResponse kein id-Feld hatte (jetzt gefixt).
+        // Guard bleibt als Defense-in-Depth: verhindert ?company_id=undefined → 400.
+        _f(`/kpi-timeseries?${d.id ? `company_id=${encodeURIComponent(d.id)}` : `name=${encodeURIComponent(d.name)}`}`).then(kd => setKpiData(kd?.metrics ?? {}));
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
