@@ -2636,9 +2636,6 @@ export default function CompanyDetailPage() {
                           </div>
                           <div style={{ width: 8, height: 8, borderRadius: "50%", background: compColor(md.competition_score), flexShrink: 0 }} />
                         </div>
-                        {md.competition_note && (
-                          <div style={{ fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>{md.competition_note}</div>
-                        )}
                         {md.sam_note && (
                           <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: C.rMd, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: C.fsBody, color: C.t2, lineHeight: 1.55 }}>
                             {md.sam_note.replace(/^SAM\s*=\s*[^×]+×[^=]+=\s*\$[\d.]+B\.?\s*/i, "")}
